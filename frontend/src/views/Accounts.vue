@@ -18,9 +18,10 @@
         <template #default="{ row }">{{ row.last_check_at || '-' }}</template>
       </el-table-column>
       <el-table-column prop="remark" label="备注" />
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column label="操作" width="320" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="checkOne(row)" :loading="row._checking">检查</el-button>
+          <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" @click="openBind(row)">绑定代理</el-button>
           <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
         </template>
@@ -71,6 +72,23 @@
       </template>
     </el-dialog>
 
+    <!-- 编辑账号（别名/区域/备注，不涉及密钥） -->
+    <el-dialog v-model="editVisible" title="编辑账号" width="480px">
+      <el-form :model="editForm" label-width="80px">
+        <el-form-item label="别名"><el-input v-model="editForm.name" placeholder="如 香港-01" /></el-form-item>
+        <el-form-item label="区域">
+          <el-select v-model="editForm.region" style="width:100%">
+            <el-option v-for="r in REGIONS" :key="r" :value="r" :label="r" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="editForm.remark" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitEdit" :loading="editSubmitting">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 绑定代理 -->
     <el-dialog v-model="bindVisible" title="绑定代理（一账号一代理）" width="420px">
       <el-select v-model="bindProxyId" placeholder="选择代理（清空=解绑）" clearable style="width:100%">
@@ -87,7 +105,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listAccounts, createAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies } from '../api/client.js'
+import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies } from '../api/client.js'
 
 const REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
 const STATUS = {
@@ -111,6 +129,12 @@ const binding = ref(false)
 const bindProxyId = ref(null)
 const bindAccount = ref(null)
 const form = ref({ name: '', tenancy_ocid: '', user_ocid: '', fingerprint: '', private_key: '', region: 'ap-seoul-1', remark: '' })
+
+// ---------- 编辑账号（别名/区域/备注） ----------
+const editVisible = ref(false)
+const editSubmitting = ref(false)
+const editId = ref(null)
+const editForm = ref({ name: '', region: '', remark: '' })
 
 // ---------- 配置文件导入（纯前端解析，零后端改动） ----------
 const createTab = ref('manual')
@@ -179,8 +203,32 @@ const submitCreate = async () => {
   }
 }
 
-const remove = async (row) => {
+const openEdit = (row) => {
+  editId.value = row.id
+  editForm.value = { name: row.name || '', region: row.region || '', remark: row.remark || '' }
+  editVisible.value = true
+}
+
+const submitEdit = async () => {
+  if (!editForm.value.name.trim()) return ElMessage.error('别名不能为空')
+  editSubmitting.value = true
   try {
+    await updateAccount(editId.value, {
+      name: editForm.value.name.trim(),
+      region: editForm.value.region,
+      remark: editForm.value.remark,
+    })
+    ElMessage.success('已保存')
+    editVisible.value = false
+    load()
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+const remove = async (row) => {  try {
     await ElMessageBox.confirm(`删除账号「${row.name}」？`, '确认', { type: 'warning' })
     await deleteAccount(row.id)
     ElMessage.success('已删除')

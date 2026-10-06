@@ -14,7 +14,7 @@
       <el-table-column prop="region" label="区域" width="140" />
       <el-table-column prop="shape" label="Shape" width="180" />
       <el-table-column label="配置" width="130">
-        <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span></template>
+        <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span><span style="color:#909399"> · 间隔{{ row.interval_seconds || 60 }}s</span></template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -65,6 +65,15 @@
         <el-form-item label="抢机数量">
           <el-input-number v-model="form.target_count" :min="1" :max="100" style="width: 160px" />
           <span style="color: #909399; font-size: 12px; margin-left: 8px">同一账号连续抢 N 台（每台实例名自动加序号）</span>
+        </el-form-item>
+        <el-form-item label="抢机间隔">
+          <el-button-group style="margin-right: 8px">
+            <el-button size="small" :type="form.interval_seconds === 30 ? 'primary' : ''" @click="form.interval_seconds = 30">30s</el-button>
+            <el-button size="small" :type="form.interval_seconds === 60 ? 'primary' : ''" @click="form.interval_seconds = 60">60s</el-button>
+            <el-button size="small" :type="form.interval_seconds === 300 ? 'primary' : ''" @click="form.interval_seconds = 300">300s</el-button>
+          </el-button-group>
+          <el-input-number v-model="form.interval_seconds" :min="5" :max="3600" style="width: 130px" />
+          <span style="color: #909399; font-size: 12px; margin-left: 8px">秒（无可用容量时的重试间隔）</span>
         </el-form-item>
 
         <!-- 分组3：实例配置 -->
@@ -208,7 +217,7 @@ const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
   availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
-  target_count: 1,
+  target_count: 1, interval_seconds: 60,
 })
 
 // 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
@@ -394,7 +403,7 @@ const openCreate = async () => {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
     availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
-    target_count: 1,
+    target_count: 1, interval_seconds: 60,
   })
   clearOciOptions()
   try {
