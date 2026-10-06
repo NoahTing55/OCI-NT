@@ -19,8 +19,15 @@
 git clone https://github.com/NoahTing55/OCI-NT.git /opt/oci--nt
 cd /opt/oci--nt
 cp .env.example .env   # 填写 MASTER_KEY 等（见下方配置说明）
-docker compose up --build -d
+
+# 登录 GHCR 拉取预构建镜像（只需一次；PAT 在 GitHub Settings → Developer settings → Personal access tokens 申请，需 read:packages 权限）
+echo <你的PAT> | docker login ghcr.io -u NoahTing55 --password-stdin
+
+docker compose pull    # 拉取最新镜像，无需本地构建
+docker compose up -d
 ```
+
+以后更新：`git pull && docker compose pull && docker compose up -d`，不用重新构建。
 
 只暴露 **8035** 一个端口（安全组/防火墙放行 8035 即可）：
 

@@ -23,6 +23,8 @@ services:
   # 打包前端，第二阶段 Python 运行 FastAPI 并直接托管前端静态文件；
   # VPS 上只暴露 8035：/ 打开面板，/api 走接口，/docs 看文档
   api:
+    # 优先用 GHCR 预构建镜像（GitHub Actions 自动构建推送）；本地没有镜像时可用 --build 自行构建
+    image: ghcr.io/noahting55/oci-nt:latest
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -38,6 +40,7 @@ services:
   # Celery worker：批量开机/关机/重启/终止等耗时任务走这里；
   # APScheduler 定时检查（存活/代理测速）仍在 api 进程内
   worker:
+    image: ghcr.io/noahting55/oci-nt:latest
     build:
       context: .
       dockerfile: backend/Dockerfile
