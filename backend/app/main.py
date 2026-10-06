@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import accounts, auth, batch, batch_create, cloudflare, health, instances, network, oci_options, proxies, sniper
+from app.api import accounts, auth, batch, cloudflare, health, instances, network, oci_options, proxies, sniper
 from app.api import settings as settings_api
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
@@ -17,7 +17,6 @@ from app.core.deps import SessionLocal, engine, get_current_operator
 from app.core.security import hash_password
 from app.models.models import Base, Operator
 from app.workers.scheduler import start_scheduler
-from app.workers.batch_create import batch_create_manager
 from app.workers.sniper import sniper_manager
 
 logging.basicConfig(level=logging.INFO)
@@ -51,9 +50,7 @@ async def lifespan(app: FastAPI):
     _seed_admin()
     start_scheduler()
     await sniper_manager.start()
-    await batch_create_manager.start()
     yield
-    await batch_create_manager.stop()
     await sniper_manager.stop()
     logger.info("服务关闭")
 
@@ -85,7 +82,6 @@ app.include_router(instances.router, prefix="/api/instances", tags=["实例运�
 app.include_router(cloudflare.router, prefix="/api/cloudflare", tags=["Cloudflare"], dependencies=auth_dep)
 app.include_router(oci_options.router, prefix="/api/oci-options", tags=["OCI 选项查询"], dependencies=auth_dep)
 app.include_router(sniper.router, prefix="/api/sniper", tags=["抢机任务"], dependencies=auth_dep)
-app.include_router(batch_create.router, prefix="/api/batch-create", tags=["批量创建实例"], dependencies=auth_dep)
 app.include_router(settings_api.router, prefix="/api/settings", tags=["系统设置"], dependencies=auth_dep)
 
 

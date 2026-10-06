@@ -60,17 +60,6 @@ export const getOciSubnets = (params) =>
 export const getOciCompartments = (params) =>
   api.get('/oci-options/compartments', { params }).then((r) => r.data)
 
-// 批量创建实例
-export const getShapePresets = () => api.get('/batch-create/shape-presets').then((r) => r.data)
-export const createBatchCreateTask = (data) => api.post('/batch-create', data).then((r) => r.data)
-export const listBatchCreateTasks = () => api.get('/batch-create').then((r) => r.data)
-export const getBatchCreateTask = (id) => api.get(`/batch-create/${id}`).then((r) => r.data)
-export const cancelBatchCreateTask = (id) => api.post(`/batch-create/${id}/cancel`).then((r) => r.data)
-export const deleteBatchCreateTask = (id) => api.delete(`/batch-create/${id}`).then((r) => r.data)
-export const listBatchCreateTemplates = () => api.get('/batch-create/templates').then((r) => r.data)
-export const createBatchCreateTemplate = (data) => api.post('/batch-create/templates', data).then((r) => r.data)
-export const deleteBatchCreateTemplate = (id) => api.delete(`/batch-create/templates/${id}`).then((r) => r.data)
-
 // 系统设置
 export const getSettings = () => api.get('/settings').then((r) => r.data)
 export const updateSettings = (data) => api.put('/settings', data).then((r) => r.data)
