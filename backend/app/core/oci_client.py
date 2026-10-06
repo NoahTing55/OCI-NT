@@ -384,6 +384,110 @@ class OciClient:
             {"ingressSecurityRules": ingress_rules},
         )
 
+    # ---------------- 账号信息（对标 OCI-Start OciClassLoader） ----------------
+    # OCI-Start 真实逻辑（OciClassLoader.java:110-185）：
+    # 1. 注册时间：GET /20160918/compartments/{tenancyId} 取 timeCreated（根 compartment）
+    # 2. 账号类型：根 compartment timeCreated 是否超 1 个月 +
+    #    shapes 里是否有 AMD E3/E4/E5（VM.Standard3.Flex / VM.Standard.E4.Flex /
+    #    VM.Standard.E5.Flex）且 memoryInGBs > 1.0
+    #    - 能开大内存 AMD + 超 1 个月 → upgraded（升级号）
+    #    - 能开大内存 AMD + 不超 1 个月 → trial（试用号）
+    #    - 不能 → free（免费号）
+    _PAID_AMD_SHAPES = frozenset({
+        "vm.standard3.flex",
+        "vm.standard.e4.flex",
+        "vm.standard.e5.flex",
+    })
+
+    async def get_compartment(self, compartment_id: str) -> dict | None:
+        """GET /20160918/compartments/{id}：取 compartment 详情（含 timeCreated）。失败返回 None。"""
+        try:
+            resp = await self.request("GET", "identity", f"/20160918/compartments/{compartment_id}")
+            if resp.status_code == 200:
+                return resp.json()
+            logger.debug("查 compartment 失败：HTTP %s", resp.status_code)
+        except Exception as e:
+            logger.debug("查 compartment 异常：%s", str(e)[:100])
+        return None
+
+    async def list_shapes(self, compartment_id: str) -> list:
+        """GET /20160918/shapes?compartmentId={id}：列出可用 shape。失败返回 []。"""
+        try:
+            resp = await self.request(
+                "GET", "iaas",
+                f"/20160918/shapes?compartmentId={compartment_id}&limit=100",
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data if isinstance(data, list) else data.get("items", [])
+            logger.debug("查 shapes 失败：HTTP %s", resp.status_code)
+        except Exception as e:
+            logger.debug("查 shapes 异常：%s", str(e)[:100])
+        return []
+
+    @staticmethod
+    def _parse_ocid_time(ts: str | None) -> "datetime | None":
+        """解析 OCI 返回的 ISO8601 时间（如 2024-03-15T10:30:00.000Z）。失败返回 None。"""
+        if not ts:
+            return None
+        try:
+            from datetime import datetime
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    @staticmethod
+    def _is_older_than_one_month(dt: "datetime | None") -> bool:
+        """判断时间是否超过 1 个月前。None 返回 False。"""
+        if not dt:
+            return False
+        from datetime import datetime, timedelta
+        return dt < datetime.utcnow() - timedelta(days=30)
+
+    @classmethod
+    def _can_create_large_amd(cls, shapes: list) -> bool:
+        """检查 shapes 里是否有付费 AMD（E3/E4/E5）且 memoryInGBs > 1.0。"""
+        for s in shapes:
+            name = str(s.get("shape", "")).lower()
+            if name in cls._PAID_AMD_SHAPES:
+                try:
+                    if float(s.get("memoryInGBs") or 0) > 1.0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+        return False
+
+    async def get_account_info(self) -> dict:
+        """按 OCI-Start 真实方法识别账号信息。
+
+        返回 {"registered_at": datetime|None, "account_type": "free"|"trial"|"upgraded"|None}。
+        任何失败返回空值，不抛异常。
+        """
+        result: dict = {"registered_at": None, "account_type": None}
+        try:
+            # 根 compartment 的 ID 就是 tenancy OCID
+            comp = await self.get_compartment(self.tenancy_ocid)
+            if not comp:
+                return result
+            registered_at = self._parse_ocid_time(comp.get("timeCreated"))
+            result["registered_at"] = registered_at
+            is_old = self._is_older_than_one_month(registered_at)
+
+            shapes = await self.list_shapes(self.tenancy_ocid)
+            can_amd = self._can_create_large_amd(shapes)
+
+            if can_amd and is_old:
+                result["account_type"] = "upgraded"
+            elif can_amd:
+                result["account_type"] = "trial"
+            else:
+                result["account_type"] = "free"
+            logger.info("账号信息识别：type=%s, registered_at=%s",
+                        result["account_type"], result["registered_at"])
+        except Exception as e:
+            logger.debug("识别账号信息异常：%s", str(e)[:100])
+        return result
+
     # ---------------- 账号类型（订阅） ----------------
     async def get_tenancy_home_region(self) -> str | None:
         """查 tenancy 的 home region（GET /20160918/tenancies/{id} 返回 homeRegionKey）。"""
