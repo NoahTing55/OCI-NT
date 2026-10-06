@@ -228,6 +228,25 @@ with TestClient(app) as client:
     finally:
         db.close()
 
+    # ---------- 4. 抢机间隔（interval_seconds） ----------
+    # 默认值 60
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id))
+    check("建任务不传 interval → 默认 60", r.status_code == 200 and r.json().get("interval_seconds") == 60, r.text[:120])
+    task_iv = r.json()["id"]
+    # 删除该任务以免影响后续（paused/pending 可删）
+    client.delete(f"/api/sniper/{task_iv}")
+
+    # 自定义 300
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, interval_seconds=300))
+    check("建任务 interval_seconds=300 → 透出", r.status_code == 200 and r.json().get("interval_seconds") == 300, r.text[:120])
+    client.delete(f"/api/sniper/{r.json()['id']}")
+
+    # 非法值 → 422
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, interval_seconds=4))
+    check("interval_seconds=4 → 422", r.status_code == 422)
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, interval_seconds=3601))
+    check("interval_seconds=3601 → 422", r.status_code == 422)
+
 print()
 print("共 %d 项：通过 %d，失败 %d" % (len(PASS) + len(FAIL), len(PASS), len(FAIL)))
 if FAIL:

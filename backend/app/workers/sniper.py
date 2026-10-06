@@ -314,6 +314,7 @@ class SniperManager:
                 "display_name": task.display_name
                 or "snipe-%d-%s" % (task.id, datetime.utcnow().strftime("%Y%m%d%H%M")),
                 "target_count": max(1, task.target_count or 1),
+                "interval_seconds": max(5, task.interval_seconds or 60),  # 无容量重试间隔（秒）
                 "compartment": compartment_of(account),
                 "root_password": task.root_password or "",
             }
@@ -444,7 +445,8 @@ class SniperManager:
                     continue
                 if kind == "no_capacity":
                     unknown_streak = 0
-                    delay = random.uniform(3, 8)
+                    # 用户可配的抢机间隔 + 小抖动，避免多任务同步重试
+                    delay = cfg["interval_seconds"] + random.uniform(0, 5)
                     self._log(task_id, "info", "暂无可用容量，%.1f 秒后重试" % delay)
                     await self._sleep(task_id, delay)
                     continue
