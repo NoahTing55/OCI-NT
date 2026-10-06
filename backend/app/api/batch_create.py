@@ -97,9 +97,8 @@ async def create_task(data: BatchCreateTaskIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="retry_mode 只能是 direct（单次）或 retry（失败重试）")
     if not data.name_prefix.strip():
         raise HTTPException(status_code=400, detail="命名前缀不能为空")
-    for field, label in (("image_ocid", "镜像"), ("subnet_ocid", "子网"), ("availability_domain", "可用域")):
-        if not getattr(data, field):
-            raise HTTPException(status_code=400, detail="%s OCID 不能为空（任务级默认，配错会导致 400 空转）" % label)
+    # 任务级默认 OCID 允许为空（前端第 1 步可跳过）；改为按账号校验：
+    # 每个已选账号的有效值（本行覆盖或任务级默认）都不能为空。
     # 账号去重（保持原顺序）
     seen, account_rows = set(), []
     for row in data.accounts:
@@ -116,6 +115,15 @@ async def create_task(data: BatchCreateTaskIn, db: Session = Depends(get_db)):
         if not acc:
             raise HTTPException(status_code=404, detail="账号 #%d 不存在" % row.account_id)
         accounts[row.account_id] = acc
+    for row in account_rows:
+        acc = accounts[row.account_id]
+        for field, label in (("image_ocid", "镜像"), ("subnet_ocid", "子网"),
+                             ("availability_domain", "可用域")):
+            effective = (getattr(row, field, "") or "").strip() or (getattr(data, field, "") or "").strip()
+            if not effective:
+                raise HTTPException(
+                    status_code=400,
+                    detail="账号「%s」缺少%s（请在第 1 步填默认值，或在第 2 步该账号行单独填写）" % (acc.name, label))
 
     prefix = data.name_prefix.strip()
     task = BatchCreateTask(

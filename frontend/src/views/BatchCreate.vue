@@ -76,9 +76,9 @@
               <el-radio value="retry">失败重试（retry，按抢机引擎的错误分类与退避）</el-radio>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="默认镜像 OCID" required><el-input v-model="form.image_ocid" placeholder="ocid1.image.oc1...." /></el-form-item>
-          <el-form-item label="默认子网 OCID" required><el-input v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." /></el-form-item>
-          <el-form-item label="默认可用域" required><el-input v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" /></el-form-item>
+          <el-form-item label="默认镜像 OCID"><el-input v-model="form.image_ocid" placeholder="ocid1.image.oc1...." /><template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template></el-form-item>
+          <el-form-item label="默认子网 OCID"><el-input v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." /><template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template></el-form-item>
+          <el-form-item label="默认可用域"><el-input v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" /><template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template></el-form-item>
           <el-form-item label="配置模板">
             <el-button @click="saveAsTemplate">保存当前为模板</el-button>
             <el-button @click="tplVisible = true">从模板载入</el-button>
@@ -250,9 +250,7 @@ const openWizard = async () => {
 
 const toStep1 = () => {
   if (!form.value.name_prefix.trim()) return ElMessage.error('命名前缀不能为空')
-  if (!form.value.image_ocid || !form.value.subnet_ocid || !form.value.availability_domain) {
-    return ElMessage.error('默认镜像 / 子网 / 可用域不能为空')
-  }
+  // 第 1 步的三个 OCID 允许为空：可在第 2 步按账号单独填写，提交时再按账号校验
   step.value = 1
 }
 
@@ -270,6 +268,15 @@ const applyToAll = () => {
 
 const submit = async () => {
   if (!selected.value.length) return ElMessage.error('至少选择一个账号')
+  // 按账号校验：每个已选账号的有效值（本行覆盖或第 1 步默认值）都不能为空
+  const labels = { image_ocid: '镜像', subnet_ocid: '子网', availability_domain: '可用域' }
+  for (const r of selected.value) {
+    for (const f of ['image_ocid', 'subnet_ocid', 'availability_domain']) {
+      if (!((r[f] || '').trim() || (form.value[f] || '').trim())) {
+        return ElMessage.error(`账号「${r.name}」缺少${labels[f]}，请在第 1 步填默认值或在本行单独填写`)
+      }
+    }
+  }
   creating.value = true
   try {
     const detail = await createBatchCreateTask({

@@ -1,6 +1,7 @@
 <template>
   <div>
     <el-button type="primary" @click="createVisible = true">新建代理</el-button>
+    <el-button @click="batchVisible = true">批量导入</el-button>
     <div style="font-size:12px;color:#909399;margin-top:8px">单API单代理：一个代理同一时间最多被一个账号绑定；socks5 会以 socks5h 方式使用，DNS 也走代理防泄漏</div>
 
     <el-table :data="proxies" v-loading="loading" style="margin-top: 12px" border>
@@ -46,6 +47,34 @@
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
         <el-button type="primary" @click="submitCreate" :loading="submitting">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量导入 -->
+    <el-dialog v-model="batchVisible" title="批量导入代理" width="640px">
+      <el-input v-model="batchText" type="textarea" :rows="8" placeholder="每行一个，支持：&#10;socks5://user:pass@host:port&#10;http://host:port&#10;host:port:user:pass&#10;host:port（默认 socks5）&#10;# 开头为注释，会跳过" />
+      <div style="margin: 8px 0; font-size:12px;color:#909399">
+        端口缺省：socks5→1080，http/https→8080；名称自动生成 proxy-1、proxy-2…
+      </div>
+      <el-button @click="parseBatch">解析预览</el-button>
+      <el-table :data="batchList" style="margin-top:8px" border max-height="260">
+        <el-table-column prop="name" label="名称" width="100" />
+        <el-table-column prop="scheme" label="类型" width="80" />
+        <el-table-column label="地址" width="200">
+          <template #default="{ row }">{{ row.host }}:{{ row.port }}</template>
+        </el-table-column>
+        <el-table-column prop="username" label="用户名" width="110" />
+        <el-table-column prop="error" label="解析结果">
+          <template #default="{ row }">
+            <span v-if="row.error" style="color:#f56c6c">{{ row.error }}</span>
+            <span v-else style="color:#67c23a">就绪</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="batchVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitBatch" :loading="batchSubmitting"
+          :disabled="!batchList.some((r) => !r.error)">确认导入</el-button>
       </template>
     </el-dialog>
   </div>
@@ -97,6 +126,74 @@ const remove = async (row) => {
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('删除失败：' + (e.response?.data?.detail || e.message))
   }
+}
+
+// ---------- 批量导入 ----------
+const batchVisible = ref(false)
+const batchText = ref('')
+const batchList = ref([])
+const batchSubmitting = ref(false)
+const DEFAULT_PORT = { socks5: 1080, http: 8080, https: 8080 }
+
+// 解析单行，返回 {name,scheme,host,port,username,password} 或 {error}
+const parseLine = (line, idx) => {
+  const name = `proxy-${idx + 1}`
+  let scheme = 'socks5', host = '', port = 0, username = '', password = ''
+  const urlm = line.match(/^(socks5|http|https):\/\/(.*)$/i)
+  if (urlm) {
+    scheme = urlm[1].toLowerCase()
+    let rest = urlm[2]
+    const at = rest.lastIndexOf('@')
+    if (at >= 0) {
+      const auth = rest.slice(0, at).split(':')
+      username = decodeURIComponent(auth[0] || '')
+      password = decodeURIComponent(auth.slice(1).join(':'))
+      rest = rest.slice(at + 1)
+    }
+    const hp = rest.split(':')
+    host = hp[0]
+    port = parseInt(hp[1] || '', 10) || 0
+  } else {
+    const parts = line.split(':')
+    host = parts[0] || ''
+    port = parseInt(parts[1] || '', 10) || 0
+    username = parts[2] || ''
+    password = parts.slice(3).join(':')
+  }
+  if (!host) return { error: '缺少 host' }
+  if (!port) port = DEFAULT_PORT[scheme] || 1080
+  if (port < 1 || port > 65535) return { error: '端口非法' }
+  return { name, scheme, host, port, username, password, remark: '批量导入' }
+}
+
+const parseBatch = () => {
+  const lines = batchText.value.split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+  if (!lines.length) return ElMessage.error('没有可解析的行')
+  batchList.value = lines.map((l, i) => parseLine(l, i))
+  const ok = batchList.value.filter((r) => !r.error).length
+  ElMessage.info(`解析出 ${lines.length} 行，可导入 ${ok} 个`)
+}
+
+const submitBatch = async () => {
+  const rows = batchList.value.filter((r) => !r.error)
+  if (!rows.length) return
+  batchSubmitting.value = true
+  let ok = 0, fail = 0
+  for (const r of rows) {
+    try {
+      await createProxy({ name: r.name, scheme: r.scheme, host: r.host, port: r.port,
+        username: r.username, password: r.password, remark: r.remark })
+      ok++
+    } catch (e) { fail++ }
+  }
+  batchSubmitting.value = false
+  batchVisible.value = false
+  batchText.value = ''
+  batchList.value = []
+  load()
+  ElMessage.success(`批量导入完成：成功 ${ok} 个，失败 ${fail} 个`)
 }
 
 onMounted(load)

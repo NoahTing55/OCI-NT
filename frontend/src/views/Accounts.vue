@@ -29,6 +29,8 @@
 
     <!-- 新建账号 -->
     <el-dialog v-model="createVisible" title="新建账号" width="560px">
+      <el-tabs v-model="createTab">
+        <el-tab-pane label="手动填写" name="manual">
       <el-form :model="form" label-width="110px">
         <el-form-item label="别名"><el-input v-model="form.name" placeholder="如 香港-01" /></el-form-item>
         <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
@@ -45,6 +47,24 @@
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
+        </el-tab-pane>
+        <el-tab-pane label="配置文件导入" name="import">
+          <el-form label-width="110px">
+            <el-form-item label="config 内容">
+              <el-input v-model="importForm.config" type="textarea" :rows="7"
+                placeholder="粘贴 ~/.oci/config 内容，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
+            </el-form-item>
+            <el-form-item label="私钥 PEM">
+              <el-input v-model="importForm.privateKey" type="textarea" :rows="5"
+                placeholder="-----BEGIN PRIVATE KEY-----" show-password />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="parseConfig">解析并填入</el-button>
+              <span style="font-size:12px;color:#909399;margin-left:8px">解析 [DEFAULT] 段的 user / fingerprint / tenancy / region</span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+      </el-tabs>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
         <el-button type="primary" @click="submitCreate" :loading="submitting">保存</el-button>
@@ -91,6 +111,45 @@ const binding = ref(false)
 const bindProxyId = ref(null)
 const bindAccount = ref(null)
 const form = ref({ name: '', tenancy_ocid: '', user_ocid: '', fingerprint: '', private_key: '', region: 'ap-seoul-1', remark: '' })
+
+// ---------- 配置文件导入（纯前端解析，零后端改动） ----------
+const createTab = ref('manual')
+const importForm = ref({ config: '', privateKey: '' })
+
+// 简单 ini 解析：取 [DEFAULT]（无段头时按整段）中的 key=value
+const parseConfig = () => {
+  const text = importForm.value.config.trim()
+  if (!text) return ElMessage.error('请先粘贴 ~/.oci/config 内容')
+  const kv = {}
+  let inDefault = !/^\s*\[/m.test(text) // 无段头则整段视为 DEFAULT
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (!t || t.startsWith('#') || t.startsWith(';')) continue
+    const sec = t.match(/^\[(.+)\]$/)
+    if (sec) { inDefault = sec[1].trim().toUpperCase() === 'DEFAULT'; continue }
+    if (!inDefault) continue
+    const m = t.match(/^([^=]+?)\s*=\s*(.+?)\s*$/)
+    if (m) kv[m[1].trim().toLowerCase()] = m[2].trim()
+  }
+  const missing = ['user', 'fingerprint', 'tenancy'].filter((k) => !kv[k])
+  if (missing.length) return ElMessage.error('解析失败，缺少字段：' + missing.join('、'))
+  form.value.user_ocid = kv.user
+  form.value.fingerprint = kv.fingerprint
+  form.value.tenancy_ocid = kv.tenancy
+  if (kv.region) {
+    // region 可能是 ap-seoul-1 或 oc1.ap-seoul-1 格式，取最后一段
+    const r = kv.region.split('.').pop()
+    form.value.region = REGIONS.includes(r) ? r : kv.region
+  }
+  if (importForm.value.privateKey.trim()) {
+    form.value.private_key = importForm.value.privateKey.trim()
+  }
+  if (!form.value.name && kv.tenancy) {
+    form.value.name = 'oci-' + kv.tenancy.replace(/[^a-zA-Z0-9]/g, '').slice(-6)
+  }
+  createTab.value = 'manual'
+  ElMessage.success('已解析并填入，请检查后保存')
+}
 
 const load = async () => {
   loading.value = true
