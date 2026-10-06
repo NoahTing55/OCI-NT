@@ -26,6 +26,10 @@ TEMPLATES = [
      "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24},
     {"name": "免费 AMD 1C1G",
      "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
+    {"name": "E5 2C12G",
+     "shape": "VM.Standard.E5.Flex", "ocpus": 2, "memory_gb": 12},
+    {"name": "E5 4C24G",
+     "shape": "VM.Standard.E5.Flex", "ocpus": 4, "memory_gb": 24},
 ]
 
 STATUS_TEXT = {
@@ -50,6 +54,8 @@ def _to_out(task: SnipeTask, account_name: str = "") -> SnipeTaskOut:
         attempts=task.attempts,
         last_error=task.last_error or "",
         instance_ocid=task.instance_ocid or "",
+        target_count=task.target_count or 1,
+        success_count=task.success_count or 0,
         root_password=task.root_password or "",
         started_at=task.started_at,
         finished_at=task.finished_at,
@@ -101,6 +107,7 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
         availability_domain=data.availability_domain,
         display_name=data.display_name or "",
         root_password=data.root_password or "",
+        target_count=data.target_count,
         status="pending",
     )
     db.add(task)
