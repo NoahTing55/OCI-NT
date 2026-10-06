@@ -111,7 +111,7 @@
               <el-select v-if="refSubnetOptions.length" v-model="form.subnet_ocid" filterable allow-create
                 placeholder="选择或手动输入子网 OCID" style="flex: 1">
                 <el-option v-for="o in refSubnetOptions" :key="o.ocid" :value="o.ocid"
-                  :label="`${o.display_name}（${o.vcn_name} ${o.cidr}）`" />
+                  :label="`[${o.compartment_name || '未知'}] ${o.display_name}（${o.vcn_name} ${o.cidr}）`" />
               </el-select>
               <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
               <el-button :loading="refFetching.subnet" @click="fetchRefSubnets">获取</el-button>
@@ -359,12 +359,9 @@ const fetchRefSubnets = async () => {
   if (!p) return
   refFetching.value.subnet = true
   try {
-    // 带上选中的 compartment（用户 VCN 可能建在子 compartment 里）
-    refSubnetOptions.value = await getOciSubnets({
-      ...p,
-      compartment_id: refCompartment.value || undefined,
-    })
-    if (!refSubnetOptions.value.length) ElMessage.warning('该 compartment 下未找到子网')
+    // 不传 compartment：后端自动搜整个 tenancy 树，一键找出所有子网
+    refSubnetOptions.value = await getOciSubnets({ ...p })
+    if (!refSubnetOptions.value.length) ElMessage.warning('整个 tenancy 下都未找到子网，请先在 OCI 控制台创建 VCN/子网')
   } catch (e) {
     ElMessage.error('获取子网失败：' + (e.response?.data?.detail || e.message))
   } finally {

@@ -142,33 +142,57 @@ async def list_subnets(
     compartment_id: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    """子网列表：先查 VCN，再逐个 VCN 查子网，带上 VCN 名和 CIDR 方便辨认。
-    compartment_id 为空时沿用账号默认 compartment（用户 VCN 可能建在子 compartment）。"""
+    """子网列表：compartment_id 传了就只查该 compartment；为空则自动搜整个
+    tenancy 树（用户 VCN 经常建在子 compartment 里），结果带 compartment 名、
+    VCN 名和 CIDR 方便辨认。单个 compartment 查不到就跳过，不中断整体。"""
     account = _get_account(db, account_id)
-    comp = compartment_id.strip() or compartment_of(account)
     client = _build_client(account, region)
     try:
-        vcn_resp = await client.request(
-            "GET", "iaas", f"/20160918/vcns?compartmentId={comp}&limit=50"
-        )
-        _check_ok(vcn_resp, "VCN")
-        vcns = vcn_resp.json()
+        # 确定要搜索的 compartment 范围
+        if compartment_id.strip():
+            comp_ids = [(compartment_id.strip(), "")]
+        else:
+            comp_ids = [(account.tenancy_ocid, "根 compartment")]
+            try:
+                comp_resp = await client.request(
+                    "GET", "identity",
+                    f"/20160918/compartments?compartmentId={account.tenancy_ocid}"
+                    "&compartmentIdInSubtree=true&accessLevel=ACCESSIBLE&limit=100",
+                )
+                if comp_resp.status_code < 300:
+                    for c in comp_resp.json():
+                        cid = c.get("id", "")
+                        if cid and cid != account.tenancy_ocid:
+                            comp_ids.append((cid, c.get("displayName", "") or c.get("name", "")))
+            except Exception:
+                pass  # compartment 列表查不到就只搜根，不影响主流程
         result = []
-        for vcn in vcns:
-            vcn_id = vcn.get("id", "")
-            vcn_name = vcn.get("displayName", "")
-            sub_resp = await client.request(
-                "GET", "iaas",
-                f"/20160918/subnets?compartmentId={comp}&vcnId={vcn_id}&limit=100",
-            )
-            _check_ok(sub_resp, "子网")
-            for s in sub_resp.json():
-                result.append({
-                    "ocid": s.get("id", ""),
-                    "display_name": s.get("displayName", ""),
-                    "vcn_name": vcn_name,
-                    "cidr": s.get("cidrBlock", ""),
-                })
+        for comp, comp_name in comp_ids:
+            try:
+                vcn_resp = await client.request(
+                    "GET", "iaas", f"/20160918/vcns?compartmentId={comp}&limit=50"
+                )
+                if vcn_resp.status_code >= 300:
+                    continue
+                for vcn in vcn_resp.json():
+                    vcn_id = vcn.get("id", "")
+                    vcn_name = vcn.get("displayName", "")
+                    sub_resp = await client.request(
+                        "GET", "iaas",
+                        f"/20160918/subnets?compartmentId={comp}&vcnId={vcn_id}&limit=100",
+                    )
+                    if sub_resp.status_code >= 300:
+                        continue
+                    for s in sub_resp.json():
+                        result.append({
+                            "ocid": s.get("id", ""),
+                            "display_name": s.get("displayName", ""),
+                            "vcn_name": vcn_name,
+                            "cidr": s.get("cidrBlock", ""),
+                            "compartment_name": comp_name,
+                        })
+            except Exception:
+                continue  # 某个 compartment 出错就跳过
         return result
     finally:
         await client.aclose()
