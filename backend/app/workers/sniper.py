@@ -312,7 +312,7 @@ class SniperManager:
                 "subnet_ocid": task.subnet_ocid,
                 "ad": task.availability_domain,
                 "display_name": task.display_name
-                or "snipe-%d-%s" % (task.id, datetime.utcnow().strftime("%Y%m%d%H%M")),
+                or "Oracle-%d-%s" % (task.id, datetime.utcnow().strftime("%Y%m%d%H%M")),
                 "target_count": max(1, task.target_count or 1),
                 "interval_seconds": max(5, task.interval_seconds or 60),  # 无容量重试间隔（秒）
                 "compartment": compartment_of(account),

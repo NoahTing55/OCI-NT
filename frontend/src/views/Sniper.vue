@@ -68,7 +68,7 @@
           <span style="color: #909399; font-size: 12px; margin-left: 8px">同一账号连续抢 N 台（每台实例名自动加序号）</span>
         </el-form-item>
         <el-form-item label="抢机间隔">
-          <el-button-group style="margin-right: 8px">
+          <el-button-group class="interval-btns" style="margin-right: 8px">
             <el-button size="small" :type="form.interval_seconds === 30 ? 'primary' : ''" @click="form.interval_seconds = 30">30s</el-button>
             <el-button size="small" :type="form.interval_seconds === 60 ? 'primary' : ''" @click="form.interval_seconds = 60">60s</el-button>
             <el-button size="small" :type="form.interval_seconds === 300 ? 'primary' : ''" @click="form.interval_seconds = 300">300s</el-button>
@@ -136,7 +136,7 @@
               </div>
               <template #extra><span style="color:#909399;font-size:12px">留空则任务启动时自动创建网络（有则复用、无则创建）</span></template>
             </el-form-item>
-            <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 snipe-{id}-时间（多台自动加序号）" /></el-form-item>
+            <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 Oracle-{id}-时间（多台自动加序号）" /></el-form-item>
             <el-form-item label="Root 密码">
               <div style="display: flex; gap: 8px; width: 100%">
                 <el-input v-model="form.root_password" placeholder="留空则自动生成随机密码" style="flex: 1" show-password />
@@ -549,52 +549,93 @@ onUnmounted(stopLogPoll)
 </script>
 
 <style scoped>
-/* 场景模板卡片：OCI-Start 式可视化选择 */
+/* ========== 新建抢机任务对话框美化 ========== */
+/* 对话框头部 / 内容 / 底部 */
+:deep(.el-dialog__header) {
+  padding: 18px 24px 14px;
+  margin-right: 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+:deep(.el-dialog__title) {
+  font-weight: 600;
+}
+:deep(.el-dialog__body) {
+  padding: 20px 24px 8px;
+}
+:deep(.el-dialog__footer) {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+/* 表单项统一间距，输入框圆角 */
+:deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+:deep(.el-input__wrapper) {
+  border-radius: 6px;
+}
 /* 表单分组标题 */
 .form-group-title {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
-  margin: 4px 0 12px;
-  padding-left: 8px;
+  margin: 20px 0 14px;
+  padding-left: 10px;
   border-left: 3px solid var(--el-color-primary);
+  line-height: 1.4;
 }
-.tpl-cards {
-  display: flex;
-  gap: 12px;
+.el-form > .form-group-title:first-child {
+  margin-top: 0;
 }
-/* 4 卡片时用 2×2 网格 */
+/* 模板卡片：2×2 网格 */
 .tpl-cards-4 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-.tpl-cards-4 .tpl-card {
-  flex: none;
-}
 .tpl-card {
-  flex: 1;
+  position: relative;
   border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  padding: 12px 14px;
+  border-radius: 10px;
+  padding: 14px 16px;
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
   background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s, transform 0.2s;
 }
 .tpl-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
   border-color: var(--el-color-primary-light-5);
 }
 .tpl-card.active {
   border-color: var(--el-color-primary);
   background-color: var(--el-color-primary-light-9);
-  box-shadow: 0 0 0 1px var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary), 0 4px 14px rgba(64, 158, 255, 0.15);
+}
+/* 选中卡片右上角打勾 */
+.tpl-card.active::after {
+  content: "✓";
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tpl-card-name {
+  display: flex;
+  align-items: center;
   font-size: 15px;
   font-weight: 600;
   color: #303133;
   margin-bottom: 6px;
+  padding-right: 24px;
 }
 .tpl-card.active .tpl-card-name {
   color: var(--el-color-primary);
@@ -603,5 +644,17 @@ onUnmounted(stopLogPoll)
   font-size: 12px;
   color: #909399;
   line-height: 1.6;
+}
+/* 抢机间隔快捷按钮：选中态加粗更明显 */
+.interval-btns .el-button--primary {
+  font-weight: 600;
+}
+/* 高级选项折叠区 */
+:deep(.el-collapse) {
+  border-top: none;
+}
+:deep(.el-collapse-item__header) {
+  font-size: 13px;
+  color: #606266;
 }
 </style>
