@@ -82,7 +82,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="参考区域">
-            <el-input v-model="refRegion" placeholder="选择参考账号后自动填入，可手动改" @change="clearRefOptions" />
+            <el-input v-model="refRegion" placeholder="选择参考账号后自动填入，可手动改" @change="onRefRegionChange" />
           </el-form-item>
           <el-form-item label="Compartment">
             <div style="display: flex; gap: 8px; width: 100%">
@@ -94,17 +94,19 @@
               <el-button :loading="refFetching.comp" @click="fetchRefComps">获取</el-button>
             </div>
           </el-form-item>
-          <el-form-item label="默认镜像 OCID">
+          <el-form-item label="默认镜像">
             <div style="display: flex; gap: 8px; width: 100%">
-              <el-select v-if="refImageOptions.length" v-model="form.image_ocid" filterable allow-create
-                placeholder="选择或手动输入镜像 OCID" style="flex: 1">
-                <el-option v-for="o in refImageOptions" :key="o.ocid" :value="o.ocid"
-                  :label="`${o.display_name}（${o.operating_system}）`" />
+              <el-select v-model="refImageOs" placeholder="操作系统" style="flex: 1"
+                :loading="refFetching.image" @change="onRefImageOsChange">
+                <el-option v-for="os in refImageOsList" :key="os" :value="os" :label="os" />
               </el-select>
-              <el-input v-else v-model="form.image_ocid" placeholder="ocid1.image.oc1...." style="flex: 1" />
-              <el-button :loading="refFetching.image" @click="fetchRefImages">获取</el-button>
+              <el-select v-model="form.image_ocid" filterable allow-create
+                placeholder="系统版本（可直接粘贴 OCID）" style="flex: 1">
+                <el-option v-for="v in refImageVersionList" :key="v.ocid" :value="v.ocid"
+                  :label="v.operating_system_version" />
+              </el-select>
             </div>
-            <template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template>
+            <template #extra><span style="color:#909399;font-size:12px">按所选 shape 架构自动拉取；可留空，在第 2 步按账号单独填写</span></template>
           </el-form-item>
           <el-form-item label="默认子网 OCID">
             <div style="display: flex; gap: 8px; width: 100%">
@@ -116,7 +118,7 @@
               <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
               <el-button :loading="refFetching.subnet" @click="fetchRefSubnets">获取</el-button>
             </div>
-            <template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template>
+            <template #extra><span style="color:#909399;font-size:12px">可留空：启动时按账号自动创建网络（有则复用、无则创建）；也可在第 2 步按账号单独填写</span></template>
           </el-form-item>
           <el-form-item label="默认可用域">
             <div style="display: flex; gap: 8px; width: 100%">
@@ -128,6 +130,13 @@
               <el-button :loading="refFetching.ad" @click="fetchRefAds">获取</el-button>
             </div>
             <template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template>
+          </el-form-item>
+          <el-form-item label="Root 密码">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-input v-model="form.root_password" placeholder="留空则每台实例独立生成随机密码" style="flex: 1" show-password />
+              <el-button @click="form.root_password = randomPassword()">随机</el-button>
+            </div>
+            <template #extra><span style="color:#909399;font-size:12px">通过 cloud-init 在开机时设置，TG 通知会带上每台的密码</span></template>
           </el-form-item>
           <el-form-item label="配置模板">
             <el-button @click="saveAsTemplate">保存当前为模板</el-button>
@@ -242,7 +251,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAccounts,
@@ -284,8 +293,16 @@ const shapePresets = ref([])
 const form = ref({
   name: '', shape: 'VM.Standard.E5.Flex', ocpus: 2, memory_gb: 16,
   count_per_account: 1, name_prefix: 'e5', retry_mode: 'direct',
-  image_ocid: '', subnet_ocid: '', availability_domain: '',
+  image_ocid: '', subnet_ocid: '', availability_domain: '', root_password: '',
 })
+
+// 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
+const randomPassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  const arr = new Uint32Array(12)
+  crypto.getRandomValues(arr)
+  return Array.from(arr, (x) => chars[x % chars.length]).join('')
+}
 const accountRows = ref([])
 const selected = ref([])
 const selChange = (rows) => { selected.value = rows }
@@ -295,23 +312,45 @@ const refAccountId = ref(null)
 const refRegion = ref('')
 const refCompartment = ref('')
 const refAdOptions = ref([])
-const refImageOptions = ref([])
 const refSubnetOptions = ref([])
 const refCompOptions = ref([])
 const refFetching = ref({ ad: false, image: false, subnet: false, comp: false })
 
+// 默认镜像两级下拉：操作系统 → 系统版本
+const refImageOs = ref('')
+const refImageOsList = ref([])
+const refImageVersionMap = ref({})
+const refImageVersionList = computed(() => refImageVersionMap.value[refImageOs.value] || [])
+
+// shape 决定架构：A1 → ARM，E2/E5/E4 → AMD
+const refShapeArch = computed(() => {
+  const s = (form.value.shape || '').toUpperCase()
+  if (s.includes('A1')) return 'arm'
+  if (s.includes('E2') || s.includes('E5') || s.includes('E4')) return 'amd'
+  return ''
+})
+
 const clearRefOptions = () => {
   refAdOptions.value = []
-  refImageOptions.value = []
   refSubnetOptions.value = []
   refCompOptions.value = []
+  refImageOs.value = ''
+  refImageOsList.value = []
+  refImageVersionMap.value = {}
 }
 
-// 选参考账号后自动带出该账号的默认区域，之前拉取的选项失效清空
+// 参考区域手改后选项失效清空，镜像自动重拉
+const onRefRegionChange = () => {
+  clearRefOptions()
+  fetchRefImages()
+}
+
+// 选参考账号后自动带出该账号的默认区域，之前拉取的选项失效清空，镜像自动重拉
 const onRefAccountChange = () => {
   const a = accountRows.value.find((x) => x.account_id === refAccountId.value)
   refRegion.value = (a && a.defaultRegion) || ''
   clearRefOptions()
+  fetchRefImages()
 }
 
 const needRefAccountRegion = () => {
@@ -342,17 +381,47 @@ const fetchRefAds = async () => {
 
 const fetchRefImages = async () => {
   const p = needRefAccountRegion()
-  if (!p) return
+  const arch = refShapeArch.value
+  if (!p || !arch) {
+    refImageOs.value = ''
+    refImageOsList.value = []
+    refImageVersionMap.value = {}
+    return
+  }
   refFetching.value.image = true
   try {
-    refImageOptions.value = await getOciImages(p)
-    if (!refImageOptions.value.length) ElMessage.warning('该区域未返回平台镜像')
+    const list = await getOciImages({ ...p, arch })
+    const map = {}
+    for (const it of list) {
+      const os = it.operating_system || '其他'
+      ;(map[os] = map[os] || []).push(it)
+    }
+    refImageOsList.value = Object.keys(map)
+    refImageVersionMap.value = map
+    if (refImageOsList.value.length) {
+      refImageOs.value = refImageOsList.value[0]
+      onRefImageOsChange()
+    } else {
+      refImageOs.value = ''
+      ElMessage.warning('该区域未返回该架构的平台镜像')
+    }
   } catch (e) {
     ElMessage.error('获取镜像失败：' + (e.response?.data?.detail || e.message))
   } finally {
     refFetching.value.image = false
   }
 }
+
+// 切换操作系统后自动选中该 OS 的第一个版本
+const onRefImageOsChange = () => {
+  const vers = refImageVersionMap.value[refImageOs.value] || []
+  form.value.image_ocid = vers.length ? vers[0].ocid : ''
+}
+
+// shape 变化导致架构变化时重拉镜像
+watch(refShapeArch, () => {
+  if (refAccountId.value) fetchRefImages()
+})
 
 const fetchRefSubnets = async () => {
   const p = needRefAccountRegion()
@@ -426,9 +495,9 @@ const applyToAll = () => {
 const submit = async () => {
   if (!selected.value.length) return ElMessage.error('至少选择一个账号')
   // 按账号校验：每个已选账号的有效值（本行覆盖或第 1 步默认值）都不能为空
-  const labels = { image_ocid: '镜像', subnet_ocid: '子网', availability_domain: '可用域' }
+  const labels = { image_ocid: '镜像', availability_domain: '可用域' }
   for (const r of selected.value) {
-    for (const f of ['image_ocid', 'subnet_ocid', 'availability_domain']) {
+    for (const f of ['image_ocid', 'availability_domain']) {
       if (!((r[f] || '').trim() || (form.value[f] || '').trim())) {
         return ElMessage.error(`账号「${r.name}」缺少${labels[f]}，请在第 1 步填默认值或在本行单独填写`)
       }
