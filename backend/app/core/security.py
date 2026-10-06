@@ -21,7 +21,10 @@ def _get_fernet() -> Fernet:
     key = settings.MASTER_KEY.strip()
     if not key:
         raise RuntimeError("MASTER_KEY 未配置：请在 .env 中设置（用 Fernet.generate_key() 生成）")
-    return Fernet(key.encode("utf-8"))
+    try:
+        return Fernet(key.encode("utf-8"))
+    except Exception as e:
+        raise RuntimeError(f"MASTER_KEY 非法：必须是 Fernet.generate_key() 生成的 key（32 字节 url-safe base64），请检查 .env") from e
 
 
 def encrypt_text(plain: str) -> str:
