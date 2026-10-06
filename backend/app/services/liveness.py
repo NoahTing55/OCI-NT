@@ -120,6 +120,8 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     return {
         "account_id": account.id,
         "name": account.name,
+        "region": account.region,
+        "account_type": account.account_type,
         "status": new_status,
         "status_code": status_code,
         "message": message,
