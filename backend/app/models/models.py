@@ -83,6 +83,7 @@ class SnipeTask(Base):
     subnet_ocid = Column(String(255), default="")  # createVnicDetails.subnetId
     availability_domain = Column(String(255), default="")
     display_name = Column(String(128), default="")  # 新实例显示名，空则自动生成
+    root_password = Column(String(128), default="")  # cloud-init 设置的 root 密码（明文，参考 OCI-Start）
     status = Column(String(32), default="pending")  # pending / running / paused / success / stopped / failed
     attempts = Column(Integer, default=0)
     last_error = Column(Text, default="")
@@ -249,6 +250,8 @@ class BatchCreateItem(Base):
     subnet_ocid = Column(String(255), default="")
     availability_domain = Column(String(255), default="")
     display_name = Column(String(128), default="")
+    root_password = Column(String(128), default="")  # 本实例的 root 密码（明文，空则 worker 生成）
+    public_ip = Column(String(64), default="")  # 创建成功后回填的公网 IP（TG 通知用）
     status = Column(String(32), default="pending")  # pending / running / success / failed / cancelled
     instance_ocid = Column(String(255), default="")
     attempts = Column(Integer, default=0)

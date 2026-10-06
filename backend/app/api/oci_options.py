@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.oci_client import OciClient
-from app.core.oci_factory import build_client_for_account, compartment_of
+from app.core.oci_factory import build_client_for_account
 from app.models.models import Account
+from app.schemas.schemas import EnsureNetworkIn
+from app.services import network_ensure
 
 router = APIRouter()
 
@@ -74,14 +76,19 @@ async def list_availability_domains(
 async def list_platform_images(
     account_id: int = Query(...),
     region: str = Query(""),
+    arch: str = Query("", description="按架构过滤：arm / amd，空则不过滤"),
     db: Session = Depends(get_db),
 ):
-    """平台镜像列表：服务端按 operatingSystem 精确过滤（之前无排序随机取 50
-    再前端过滤，平台镜像可能根本不在里面），Ubuntu 在前，各取最新 10 个。"""
+    """平台镜像列表（OCI-Start listImagesByShape 思路）：服务端按 operatingSystem
+    精确过滤，从 displayName 判断架构（含 aarch64/ampere → ARM，否则 AMD），
+    按 os+版本+架构去重保留 timeCreated 最新的，arch 非空则按架构过滤。
+    返回 [{ocid, operating_system, operating_system_version, architecture, display_name}]，
+    按 os、版本排序，前端做「操作系统 → 系统版本」两级下拉。"""
     account = _get_account(db, account_id)
     client = _build_client(account, region)
     try:
-        result = []
+        # (os, version, arch) -> item；查询已按 timeCreated 倒序，首次出现即最新
+        seen: dict[tuple[str, str, str], dict] = {}
         for os_name in ("Canonical Ubuntu", "Oracle Linux"):
             qs = (
                 f"compartmentId={account.tenancy_ocid}"
@@ -94,11 +101,26 @@ async def list_platform_images(
                 # 官方平台镜像：compartmentId 为 null
                 if i.get("compartmentId"):
                     continue
-                result.append({
-                    "ocid": i.get("id", ""),
-                    "display_name": i.get("displayName", ""),
-                    "operating_system": i.get("operatingSystem", ""),
-                })
+                disp = i.get("displayName", "") or ""
+                low = disp.lower()
+                architecture = "ARM" if ("aarch64" in low or "ampere" in low) else "AMD"
+                key = (i.get("operatingSystem", "") or "",
+                       i.get("operatingSystemVersion", "") or "",
+                       architecture)
+                if key not in seen:
+                    seen[key] = {
+                        "ocid": i.get("id", ""),
+                        "operating_system": i.get("operatingSystem", ""),
+                        "operating_system_version": i.get("operatingSystemVersion", ""),
+                        "architecture": architecture,
+                        "display_name": disp,
+                    }
+        arch_filter = (arch or "").strip().lower()
+        result = [
+            item for item in seen.values()
+            if arch_filter not in ("arm", "amd") or item["architecture"].lower() == arch_filter
+        ]
+        result.sort(key=lambda x: (x["operating_system"], x["operating_system_version"]))
         return result
     finally:
         await client.aclose()
@@ -196,3 +218,20 @@ async def list_subnets(
         return result
     finally:
         await client.aclose()
+
+
+@router.post("/ensure-network")
+async def ensure_network(data: EnsureNetworkIn, db: Session = Depends(get_db)):
+    """一键建网：按「有则复用、无则创建」备好 VCN→IG→路由→子网，返回子网 OCID。
+
+    核心逻辑在 services/network_ensure.py（worker 直接调函数，不走 HTTP），
+    这里只是薄封装。JWT 鉴权由路由注册统一处理。
+    创建资源较慢，前端/调用方请把超时设到 120 秒。
+    """
+    account = _get_account(db, data.account_id)
+    return await network_ensure.ensure_network(
+        account,
+        region=data.region,
+        availability_domain=data.availability_domain,
+        compartment_id=data.compartment_id,
+    )

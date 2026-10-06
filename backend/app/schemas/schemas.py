@@ -225,6 +225,14 @@ class DomainBindingOut(BaseModel):
 
 
 # ---------------- 抢机任务 ----------------
+class EnsureNetworkIn(BaseModel):
+    """一键建网请求：按「有则复用、无则创建」备好 VCN→IG→路由→子网。"""
+    account_id: int
+    region: str = ""
+    availability_domain: str = Field(default="", description="为空则取该区域第一个可用域")
+    compartment_id: str = Field(default="", description="为空则用 tenancy OCID（根 compartment）")
+
+
 class SnipeTaskCreate(BaseModel):
     account_id: int
     region: str
@@ -232,9 +240,10 @@ class SnipeTaskCreate(BaseModel):
     ocpus: float = Field(default=4, gt=0)
     memory_gb: float = Field(default=24, gt=0)
     image_ocid: str = Field(..., description="sourceDetails.imageId")
-    subnet_ocid: str = Field(..., description="createVnicDetails.subnetId")
+    subnet_ocid: str = Field(default="", description="createVnicDetails.subnetId；为空则任务启动时自动建网")
     availability_domain: str
     display_name: str = Field(default="", max_length=128)
+    root_password: str = Field(default="", max_length=128, description="root 密码；为空则 worker 自动生成随机密码")
 
 
 class SnipeTaskOut(BaseModel):
@@ -255,6 +264,7 @@ class SnipeTaskOut(BaseModel):
     attempts: int = 0
     last_error: str = ""
     instance_ocid: str = ""
+    root_password: str = ""
     started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime | None = None
@@ -298,6 +308,7 @@ class BatchCreateTaskIn(BaseModel):
     image_ocid: str = Field(default="", description="任务级默认镜像，账号行可覆盖")
     subnet_ocid: str = Field(default="", description="任务级默认子网，账号行可覆盖")
     availability_domain: str = Field(default="", description="任务级默认可用域，账号行可覆盖")
+    root_password: str = Field(default="", max_length=128, description="root 密码；为空则每台实例独立生成随机密码")
     accounts: list[BatchCreateAccountIn] = Field(..., min_length=1)
 
 
@@ -312,6 +323,8 @@ class BatchCreateItemOut(BaseModel):
     display_name: str
     status: str
     instance_ocid: str = ""
+    root_password: str = ""
+    public_ip: str = ""
     attempts: int = 0
     last_error: str = ""
     created_at: datetime | None = None
