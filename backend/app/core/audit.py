@@ -64,6 +64,8 @@ ACTION_MAP = {
     ("DELETE", "/api/batch-create/templates/{template_id}"): "batch_create.template_delete",
     ("POST", "/api/batch-create/{task_id}/cancel"): "batch_create.cancel",
     ("DELETE", "/api/batch-create/{task_id}"): "batch_create.delete",
+    ("PUT", "/api/settings"): "settings.update",
+    ("POST", "/api/settings/test-telegram"): "settings.test_telegram",
     ("POST", "/api/auth/init"): "auth.init",
     ("POST", "/api/auth/change-password"): "auth.change_password",
     ("POST", "/api/auth/totp/setup"): "auth.totp_setup",

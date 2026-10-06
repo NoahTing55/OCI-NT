@@ -21,6 +21,7 @@
           <el-menu-item index="/sniper">抢机任务</el-menu-item>
           <el-menu-item index="/batch-create">批量创建</el-menu-item>
           <el-menu-item index="/security">安全设置</el-menu-item>
+          <el-menu-item index="/settings">系统设置</el-menu-item>
         </el-menu>
       </el-aside>
       <el-main>

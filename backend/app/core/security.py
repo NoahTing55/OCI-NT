@@ -70,8 +70,16 @@ def _jwt_key() -> str:
 
 
 def create_access_token(username: str, expires_minutes: int | None = None) -> str:
-    """签发 JWT，sub=用户名。"""
-    minutes = expires_minutes if expires_minutes is not None else settings.JWT_EXPIRE_MINUTES
+    """签发 JWT，sub=用户名。
+
+    有效期默认读网页设置 JWT_EXPIRE_MINUTES（DB > 环境变量 > 默认 720 分钟），
+    只影响新签发的 Token。延迟导入 settings 服务，避免循环导入。
+    """
+    if expires_minutes is None:
+        from app.services.settings import get_setting
+
+        expires_minutes = int(get_setting("JWT_EXPIRE_MINUTES"))
+    minutes = expires_minutes
     payload = {"sub": username, "exp": int(time.time()) + minutes * 60}
     return jwt.encode(payload, _jwt_key(), algorithm="HS256")
 

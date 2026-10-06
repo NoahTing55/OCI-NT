@@ -24,7 +24,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core import telegram
 from app.core.audit import log_operation
-from app.core.config import settings
+from app.services.settings import get_setting
 from app.core.deps import SessionLocal
 from app.core.oci_factory import build_client_for_account, compartment_of
 from app.models.models import Account, SnipeLog, SnipeTask
@@ -529,7 +529,7 @@ class SniperManager:
         while True:
             try:
                 await asyncio.sleep(3600)
-                cutoff = datetime.utcnow() - timedelta(days=settings.SNIPE_LOG_RETENTION_DAYS)
+                cutoff = datetime.utcnow() - timedelta(days=int(get_setting("SNIPE_LOG_RETENTION_DAYS")))
                 db = SessionLocal()
                 try:
                     n = db.query(SnipeLog).filter(SnipeLog.created_at < cutoff).delete(synchronize_session=False)

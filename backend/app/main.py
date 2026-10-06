@@ -1,12 +1,16 @@
 """FastAPI 入口。"""
 import logging
+import os
 
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api import accounts, auth, batch, batch_create, cloudflare, health, instances, network, proxies, sniper
+from app.api import settings as settings_api
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
 from app.core.deps import SessionLocal, engine, get_current_operator
@@ -56,6 +60,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
+# CORS：单端口部署后生产环境是同源的（/、/api、/docs 都在 8035），不需要 CORS；
+# 保留此中间件仅供本地前后端分离开发（vite dev 在 5173、后端在 8000）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -79,8 +85,56 @@ app.include_router(instances.router, prefix="/api/instances", tags=["实例运�
 app.include_router(cloudflare.router, prefix="/api/cloudflare", tags=["Cloudflare"], dependencies=auth_dep)
 app.include_router(sniper.router, prefix="/api/sniper", tags=["抢机任务"], dependencies=auth_dep)
 app.include_router(batch_create.router, prefix="/api/batch-create", tags=["批量创建实例"], dependencies=auth_dep)
+app.include_router(settings_api.router, prefix="/api/settings", tags=["系统设置"], dependencies=auth_dep)
 
 
 @app.get("/api/ping")
 def ping():
     return {"ok": True, "app": settings.APP_NAME}
+
+
+# ============ 单端口部署：FastAPI 直接托管前端构建产物 ============
+# 挂载顺序至关重要：必须放在所有 /api 路由（含 /docs、/openapi.json，FastAPI
+# 在构造时已注册）之后。Starlette 按注册顺序匹配，未命中接口的请求才会落到
+# 下面的静态资源与 SPA fallback，不会吞掉任何接口。
+# 前端用相对路径 /api 调接口（见 frontend/src/api/client.js），同源无跨域问题。
+# STATIC_DIR 可用环境变量覆盖（默认 /app/static，由 Dockerfile 第二阶段拷入）；
+# 本地开发没有该目录时仅提供 API 服务（前端用 npm run dev 的 5173）。
+STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
+_INDEX_HTML = os.path.join(STATIC_DIR, "index.html")
+
+if os.path.isfile(_INDEX_HTML):
+    _assets_dir = os.path.join(STATIC_DIR, "assets")
+    if os.path.isdir(_assets_dir):
+        # /assets/* 精确前缀挂载：JS/CSS 等静态资源
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def _serve_index():
+        """面板首页。"""
+        return FileResponse(_INDEX_HTML)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa_fallback(full_path: str):
+        """SPA fallback：前端路由（/sniper、/login 等）全部回 index.html 让前端接管。
+
+        /api/*、/docs、/openapi.json 在前面已注册，按顺序优先匹配，到这里
+        说明都没命中，不会吞掉接口。
+        """
+        # /api 前缀但前面没匹配上 → 明确返回 JSON 404，别回 HTML（方便调接口时排查）
+        if full_path == "api" or full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "接口不存在"})
+        # 静态目录下真实存在的文件（如 favicon.ico）直接返回；normpath + 前缀
+        # 校验防路径穿越（/.../.. 之类一律回 index.html）
+        candidate = os.path.normpath(os.path.join(STATIC_DIR, full_path))
+        if (
+            full_path
+            and candidate.startswith(STATIC_DIR + os.sep)
+            and os.path.isfile(candidate)
+        ):
+            return FileResponse(candidate)
+        return FileResponse(_INDEX_HTML)
+
+    logger.info("已托管前端静态文件：%s", STATIC_DIR)
+else:
+    logger.warning("未找到前端构建产物 %s，仅提供 API 服务（本地开发请用 npm run dev）", _INDEX_HTML)

@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 
-from app.core.config import settings
+from app.services.settings import get_setting
 from app.core.oci_factory import build_client_for_account, compartment_of
 from app.core.redis_client import get_redis, get_sync_redis
 from app.models.models import Account
@@ -94,12 +94,12 @@ def _cache_key(account_ids: list, filters: dict) -> str:
 async def fetch_all_instances_cached(accounts: list, filters: dict | None = None) -> tuple:
     """带 Redis 缓存的聚合查询。
 
-    filters 参与 key 计算（如 account_id/region/state）。TTL 取
-    settings.INSTANCE_CACHE_TTL，<=0 则关闭缓存。Redis 不可用时降级为直接查询，
-    绝不因缓存报错影响主流程。
+    filters 参与 key 计算（如 account_id/region/state）。TTL 取网页设置
+    INSTANCE_CACHE_TTL（DB > 环境变量 > 默认 60），<=0 则关闭缓存。
+    Redis 不可用时降级为直接查询，绝不因缓存报错影响主流程。
     """
     filters = filters or {}
-    ttl = settings.INSTANCE_CACHE_TTL
+    ttl = int(get_setting("INSTANCE_CACHE_TTL"))
     if ttl <= 0 or not accounts:
         return await fetch_all_instances(accounts)
 

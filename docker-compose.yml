@@ -19,30 +19,28 @@ services:
     volumes:
       - redisdata:/data
 
+  # 单端口部署：api 镜像是多阶段构建（backend/Dockerfile），第一阶段用 node
+  # 打包前端，第二阶段 Python 运行 FastAPI 并直接托管前端静态文件；
+  # VPS 上只暴露 8035：/ 打开面板，/api 走接口，/docs 看文档
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     env_file: .env
     ports:
-      - "8000:8000"
+      - "8035:8035"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    environment:
-      VITE_API_TARGET: http://api:8000
-    depends_on:
-      - api
-
   # Celery worker：批量开机/关机/重启/终止等耗时任务走这里；
   # APScheduler 定时检查（存活/代理测速）仍在 api 进程内
   worker:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     env_file: .env
     command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=4
     depends_on:

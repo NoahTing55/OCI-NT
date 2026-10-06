@@ -16,27 +16,34 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
 
     # Telegram Bot（通知渠道只保留 TG）
+    # 可 Web 化：网页系统设置（DB）> 本环境变量；Token 入库 Fernet 加密
     TG_BOT_TOKEN: str = ""
     TG_CHAT_ID: str = ""
 
+    # 可 Web 化：网页改后定时任务自动重排；DB > 本环境变量
     # 全量存活检查间隔（分钟）
     CHECK_INTERVAL_MINUTES: int = 360
 
+    # 可 Web 化：网页改后定时任务自动重排；DB > 本环境变量
     # 代理测速间隔（分钟）
     PROXY_SPEEDTEST_MINUTES: int = 30
 
+    # 可 Web 化：DB > 本环境变量
     # 抢机日志保留天数（SnipeLog 定期清理只保留近 N 天）
     SNIPE_LOG_RETENTION_DAYS: int = 7
 
-    # CORS 允许的前端地址（本地开发用；docker 内走 vite 代理，不需要 CORS）
+    # CORS 允许的前端地址。单端口部署后生产环境是同源的（都在 8035），不需要 CORS；
+    # 保留此配置仅供本地前后端分离开发（vite dev 在 5173、后端在 8000）
     CORS_ORIGINS: str = "http://localhost:5173"
 
     # 登录鉴权
-    JWT_SECRET_KEY: str = ""  # 为空则用 MASTER_KEY；建议单独设置
+    JWT_SECRET_KEY: str = ""  # 为空则用 MASTER_KEY；建议单独设置（启动必需项，不可 Web 化）
+    # 可 Web 化：DB > 本环境变量；只影响新签发的 Token
     JWT_EXPIRE_MINUTES: int = 720  # Token 有效期（分钟），默认 12 小时
     ADMIN_USERNAME: str = ""  # 首次启动时若无任何账号则自动创建管理员
     ADMIN_PASSWORD: str = ""  # 创建后请立即登录改密码
 
+    # 可 Web 化：DB > 本环境变量；改后即时生效
     # 实例列表 Redis 缓存 TTL（秒），0 为关闭缓存
     INSTANCE_CACHE_TTL: int = 60
 

@@ -284,3 +284,20 @@ class BatchCreateTemplate(Base):
     remark = Column(String(255), default="")
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
+
+
+class SystemSetting(Base):
+    """系统设置（Web 可配项，见 services/settings.py 的 WEB_SETTINGS）。
+
+    - key：设置键（主键）；
+    - value_encrypted：SECRET_KEYS 中的键用 Fernet 加密存储，其余明文；
+    - is_secret：敏感项（Token 类），API 返回时只给"已设置/未设置"，不回明文。
+    读取优先级：DB 中的值 > 环境变量 > 代码默认值。
+    """
+
+    __tablename__ = "system_settings"
+
+    key = Column(String(64), primary_key=True)
+    value_encrypted = Column(Text, default="")
+    is_secret = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now)

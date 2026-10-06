@@ -43,6 +43,26 @@
 
 - 临时公网 IP 更换待真实账号做 API 探针验证（`POST /api/network/ephemeral-ip/probe` 已返回探针计划）
 
+## 系统设置（Web 化）
+
+大部分配置不用再 SSH 改 `.env`，在网页「系统设置」里改，保存后即时生效（定时任务间隔会自动重排，无需重启）。
+
+**网页可配（`GET/PUT /api/settings`，需登录）：**
+
+| 分组 | 设置项 | 说明 |
+|---|---|---|
+| Telegram 通知 | `TG_BOT_TOKEN`（加密存储） | Bot Token，留空回退环境变量 |
+| Telegram 通知 | `TG_CHAT_ID` | 接收通知的聊天 ID |
+| 定时任务 | `CHECK_INTERVAL_MINUTES` | 存活检查间隔（分钟），默认 360 |
+| 定时任务 | `PROXY_SPEEDTEST_MINUTES` | 代理测速间隔（分钟），默认 30 |
+| 定时任务 | `SNIPE_LOG_RETENTION_DAYS` | 抢机日志保留天数，默认 7 |
+| 缓存 | `INSTANCE_CACHE_TTL` | 实例列表 Redis 缓存秒数，0 关闭，默认 60 |
+| 登录安全 | `JWT_EXPIRE_MINUTES` | JWT 有效期（分钟），默认 720，只影响新签发的 Token |
+
+读取优先级：**DB（网页设置）> 环境变量 > 代码默认值**。`TG_BOT_TOKEN` 入库前 Fernet 加密，API 永不返回明文；`POST /api/settings/test-telegram` 可发一条测试消息验证。
+
+**必须保留 `.env`（启动前就需要，DB 不可用）：** `MASTER_KEY`（加密主密钥，丢了所有加密数据无法解密）、`DATABASE_URL` / `REDIS_URL`（数据库连接）、`JWT_SECRET_KEY`（无则回退 `MASTER_KEY`）、`ADMIN_USERNAME` / `ADMIN_PASSWORD`（仅首次初始化管理员用）。
+
 ## M4 已实现（收尾加固）
 
 - **登录鉴权**：`POST /api/auth/login`（JWT，12 小时有效期）；`POST /api/auth/init` 初始化首个管理员（表非空自动关闭）；首次启动也可用 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 环境变量自动创建；除 `/api/auth/*` 与 `/api/ping` 外全部接口要求 Bearer JWT；前端登录页（TOTP 用户两步：先密码，返回 `totp_required` 再输动态码）、路由守卫、401 自动回登录页
@@ -61,19 +81,24 @@ cd backend
 alembic upgrade head   # 0001_m2 是幂等的：只建缺失的表、只加缺失的列，不破坏已有数据
 ```
 
-## Docker 一键运行
+## Docker 一键运行（单端口部署）
 
 ```bash
 cd oci-panel
 cp .env.example .env
 # 编辑 .env，至少填写 MASTER_KEY（生成方法见 .env.example 注释）
-docker compose up --build
+# 如需网页改不动的配置（MASTER_KEY/数据库/初始管理员），也在 .env 里填好
+docker compose up --build -d
 ```
 
-- 前端：http://localhost:5173
-- 后端 API 文档：http://localhost:8000/docs
+只暴露 **8035** 一个端口（VPS 安全组/防火墙只需放行 8035）：
 
-## 本地开发运行
+- 面板：http://服务器IP:8035（本地就是 http://localhost:8035）
+- 后端 API 文档：http://服务器IP:8035/docs
+
+说明：api 镜像是多阶段构建（`backend/Dockerfile`）——第一阶段用 node:20 打包前端（`npm run build`），第二阶段 Python 运行 FastAPI 并直接托管 `dist` 产物；`/` 打开面板、`/api/*` 走接口、`/docs` 看文档，同源无跨域。前端不再独立跑 dev server。
+
+## 本地开发运行（前后端分离，仅开发调试用）
 
 ```bash
 # 1. 起 postgres 和 redis
@@ -84,22 +109,24 @@ cd backend
 pip install -r requirements.txt
 cp ../.env.example ../.env   # 按需把 host 改成 localhost
 uvicorn app.main:app --reload --port 8000
+# 注：本地直接跑后端时没有前端构建产物（/app/static 不存在），
+# main.py 会告警并仅提供 API 服务，前端用下面的 dev server 访问
 
 # 3. 前端（需 Node 20）
 cd frontend
 npm install
-npm run dev
+npm run dev   # http://localhost:5173，/api 通过 vite 代理转到后端
 ```
 
 ## 目录结构
 
 ```
 oci-panel/
-├── docker-compose.yml      # api / frontend / postgres / redis / worker(Celery)
+├── docker-compose.yml      # api / postgres / redis / worker(Celery)，只暴露 8035
 ├── .env.example            # 环境变量模板（含 MASTER_KEY 等占位符）
 ├── backend/
 │   ├── requirements.txt    # 依赖（版本已 pin，含 alembic）
-│   ├── Dockerfile
+│   ├── Dockerfile          # 多阶段构建：node 打包前端 → Python 运行并托管 dist
 │   ├── alembic.ini         # 数据迁移配置
 │   ├── alembic/
 │   │   ├── env.py

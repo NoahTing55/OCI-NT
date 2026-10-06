@@ -7,6 +7,7 @@ import Sniper from '../views/Sniper.vue'
 import BatchCreate from '../views/BatchCreate.vue'
 import Login from '../views/Login.vue'
 import Security from '../views/Security.vue'
+import Settings from '../views/Settings.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +21,7 @@ const router = createRouter({
     { path: '/sniper', component: Sniper },
     { path: '/batch-create', component: BatchCreate },
     { path: '/security', component: Security },
+    { path: '/settings', component: Settings },
   ],
 })
 
