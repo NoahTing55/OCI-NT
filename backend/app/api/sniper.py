@@ -57,6 +57,7 @@ def _to_out(task: SnipeTask, account_name: str = "") -> SnipeTaskOut:
         target_count=task.target_count or 1,
         success_count=task.success_count or 0,
         interval_seconds=task.interval_seconds or 60,
+        open_all_ports=task.open_all_ports if task.open_all_ports is not None else True,
         root_password=task.root_password or "",
         started_at=task.started_at,
         finished_at=task.finished_at,
@@ -110,6 +111,7 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
         root_password=data.root_password or "",
         target_count=data.target_count,
         interval_seconds=data.interval_seconds,
+        open_all_ports=data.open_all_ports,
         status="pending",
     )
     db.add(task)

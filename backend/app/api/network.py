@@ -22,7 +22,8 @@ from app.core import telegram
 from app.core.deps import get_db
 from app.core.oci_factory import build_client_for_account, compartment_of
 from app.models.models import Account
-from app.schemas.schemas import ChangeIpIn, ChangeIpOut
+from app.schemas.schemas import ChangeIpIn, ChangeIpOut, OpenPortsIn
+from app.services.security_rules import ensure_allow_all_ingress
 from app.services import cloudflare as cf_service
 from app.services.instances import invalidate_instance_cache
 
@@ -114,6 +115,29 @@ async def change_ip(request: Request, data: ChangeIpIn, db: Session = Depends(ge
         )
     finally:
         await client.aclose()
+
+@router.post("/open-all-ports")
+async def open_all_ports(request: Request, data: OpenPortsIn, db: Session = Depends(get_db)):
+    """给指定实例的子网安全列表放行所有端口（protocol=all, 0.0.0.0/0）。"""
+    account = db.get(Account, data.account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    client = build_client_for_account(account)
+    compartment = compartment_of(account)
+    # 查实例主 VNIC → 子网
+    atts = await client.list_vnic_attachments(compartment, data.instance_id)
+    if not atts:
+        raise HTTPException(status_code=400, detail="该实例没有 VNIC 附件")
+    vnic = (await client.get_vnic(atts[0]["vnicId"])).json()
+    subnet_id = vnic.get("subnetId")
+    if not subnet_id:
+        raise HTTPException(status_code=400, detail="未找到实例子网")
+    ok = await ensure_allow_all_ingress(client, subnet_id)
+    request.state.audit_detail = "安全组放行所有端口：账号 %s 实例 %s（%s）" % (account.name, data.instance_id, "成功" if ok else "失败")
+    request.state.audit_account_id = account.id
+    return {"ok": ok, "subnet_id": subnet_id,
+            "message": "已放行所有端口" if ok else "操作失败，请检查日志"}
+
 
 @router.post("/ephemeral-ip/probe")
 async def ephemeral_ip_probe():

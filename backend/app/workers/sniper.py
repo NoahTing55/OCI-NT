@@ -34,6 +34,7 @@ from app.models.models import Account, SnipeLog, SnipeTask
 from app.services.cloudflare import sync_instance_domains
 from app.services.instances import invalidate_instance_cache
 from app.services.network_ensure import ensure_subnet
+from app.services.security_rules import ensure_allow_all_ingress
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +316,7 @@ class SniperManager:
                 or "Oracle-%d-%s" % (task.id, datetime.utcnow().strftime("%Y%m%d%H%M")),
                 "target_count": max(1, task.target_count or 1),
                 "interval_seconds": max(5, task.interval_seconds or 60),  # 无容量重试间隔（秒）
+                "open_all_ports": task.open_all_ports if task.open_all_ports is not None else True,  # 开机后放行所有端口
                 "compartment": compartment_of(account),
                 "root_password": task.root_password or "",
             }
@@ -524,6 +526,15 @@ class SniperManager:
             )
         finally:
             db3.close()
+        # 安全规则：默认开机后放行所有端口（开关在任务配置里）
+        if cfg.get("open_all_ports", True):
+            try:
+                ports_ok = await ensure_allow_all_ingress(client, cfg["subnet_ocid"])
+                self._log(task_id, "info" if ports_ok else "warning",
+                          "安全组已放行所有端口（protocol=all, 0.0.0.0/0）" if ports_ok
+                          else "安全组放行所有端口失败，已跳过（不影响开机）")
+            except Exception as e:
+                self._log(task_id, "warning", "安全组规则设置异常：%s" % str(e)[:120])
         # 新实例加入列表，失效实例缓存
         invalidate_instance_cache()
         # 新实例公网 IP 需要一点时间分配，最多等约 2 分钟

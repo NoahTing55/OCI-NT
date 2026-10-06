@@ -49,6 +49,7 @@ ACTION_MAP = {
     ("PUT", "/api/instances/{account_id}/{instance_id}"): "instance.edit",
     ("POST", "/api/network/change-ip"): "network.change_ip",
     ("POST", "/api/network/ephemeral-ip/probe"): "network.probe",
+    ("POST", "/api/network/open-all-ports"): "network.open_all_ports",
     ("POST", "/api/cloudflare/tokens"): "cf.token_create",
     ("DELETE", "/api/cloudflare/tokens/{token_id}"): "cf.token_delete",
     ("POST", "/api/cloudflare/bindings"): "cf.bind_create",
