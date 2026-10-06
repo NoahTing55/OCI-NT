@@ -66,6 +66,14 @@
           <el-tag v-else type="info" size="small">无</el-tag>
         </template>
       </el-table-column>
+      <!-- 账号类型：免费/付费/未知 -->
+      <el-table-column label="账号类型" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.account_type === 'free'" type="success" size="small">免费</el-tag>
+          <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
+          <el-tag v-else type="info" size="small">未知</el-tag>
+        </template>
+      </el-table-column>
       <!-- 实例数：点击跳转筛选 -->
       <el-table-column label="实例数" width="80" align="center">
         <template #default="{ row }">
@@ -172,6 +180,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="editForm.remark" /></el-form-item>
+        <el-form-item label="注册时间">
+          <el-date-picker v-model="editForm.registered_at" type="date" placeholder="账号真实注册日期（空则用添加时间）"
+            style="width: 100%" value-format="YYYY-MM-DD" clearable />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -231,7 +243,7 @@ const defaultProxyId = () => {
 const editVisible = ref(false)
 const editSubmitting = ref(false)
 const editId = ref(null)
-const editForm = ref({ name: '', region: '', remark: '' })
+const editForm = ref({ name: '', region: '', remark: '', registered_at: '' })
 
 // ---------- 配置文件导入（纯前端解析，零后端改动） ----------
 const createTab = ref('manual')
@@ -366,10 +378,11 @@ const handleOp = (cmd, row) => {
   else if (cmd === 'check') checkOne(row)
   else if (cmd === 'delete') remove(row)
 }
-// 存活天数：created_at 距今天数
+// 存活天数：优先用真实注册时间 registered_at，没有则用 created_at 兜底
 const aliveDays = (row) => {
-  if (!row.created_at) return '-'
-  const d = Math.floor((Date.now() - new Date(row.created_at).getTime()) / 86400000)
+  const base = row.registered_at || row.created_at
+  if (!base) return '-'
+  const d = Math.floor((Date.now() - new Date(base).getTime()) / 86400000)
   return (d < 0 ? 0 : d) + ' 天'
 }
 // 创建时间只显示日期
@@ -401,7 +414,8 @@ const submitCreate = async () => {
 
 const openEdit = (row) => {
   editId.value = row.id
-  editForm.value = { name: row.name || '', region: row.region || '', remark: row.remark || '' }
+  editForm.value = { name: row.name || '', region: row.region || '', remark: row.remark || '',
+    registered_at: row.registered_at ? row.registered_at.slice(0, 10) : '' }
   editVisible.value = true
 }
 
@@ -413,6 +427,8 @@ const submitEdit = async () => {
       name: editForm.value.name.trim(),
       region: editForm.value.region,
       remark: editForm.value.remark,
+      // 空字符串表示清空（后端用 fields_set 区分"没传"和"清空"）
+      ...(editForm.value.registered_at !== undefined ? { registered_at: editForm.value.registered_at || null } : {}),
     })
     ElMessage.success('已保存')
     editVisible.value = false
