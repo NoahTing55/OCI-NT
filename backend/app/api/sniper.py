@@ -19,24 +19,12 @@ from app.workers.sniper import sniper_manager
 
 router = APIRouter()
 
-# 内置场景模板：前端"一键填入"用。不含任何密钥/OCID，只有公开的 shape 与区域信息。
-# 分两类：ARM（A1 4C24G）、免费 AMD（E2.1.Micro 1C1G）。
+# 内置场景模板：前端"一键填入"用。不含区域/密钥/OCID，只有公开的 shape 配置。
+# 两类：ARM（A1 4C24G）、免费 AMD（E2.1.Micro 1C1G）。区域跟随所选账号。
 TEMPLATES = [
-    {"name": "ARM 4C24G（首尔）", "region": "ap-seoul-1",
+    {"name": "ARM 4C24G",
      "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24},
-    {"name": "ARM 4C24G（东京）", "region": "ap-tokyo-1",
-     "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24},
-    {"name": "ARM 4C24G（新加坡）", "region": "ap-singapore-1",
-     "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24},
-    {"name": "ARM 4C24G（凤凰城）", "region": "us-phoenix-1",
-     "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24},
-    {"name": "免费 AMD 1C1G（首尔）", "region": "ap-seoul-1",
-     "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
-    {"name": "免费 AMD 1C1G（东京）", "region": "ap-tokyo-1",
-     "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
-    {"name": "免费 AMD 1C1G（新加坡）", "region": "ap-singapore-1",
-     "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
-    {"name": "免费 AMD 1C1G（凤凰城）", "region": "us-phoenix-1",
+    {"name": "免费 AMD 1C1G",
      "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
 ]
 

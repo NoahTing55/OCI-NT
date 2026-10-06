@@ -50,6 +50,14 @@ export const deleteSnipeTask = (id) => api.delete(`/sniper/${id}`).then((r) => r
 export const getSnipeLogs = (id, params) => api.get(`/sniper/${id}/logs`, { params }).then((r) => r.data)
 export const getSnipeTemplates = () => api.get('/sniper/templates').then((r) => r.data)
 
+// OCI 选项查询（抢机/批量创建表单级联下拉：可用域、平台镜像、子网）
+export const getOciAvailabilityDomains = (params) =>
+  api.get('/oci-options/availability-domains', { params }).then((r) => r.data)
+export const getOciImages = (params) =>
+  api.get('/oci-options/images', { params }).then((r) => r.data)
+export const getOciSubnets = (params) =>
+  api.get('/oci-options/subnets', { params }).then((r) => r.data)
+
 // 批量创建实例
 export const getShapePresets = () => api.get('/batch-create/shape-presets').then((r) => r.data)
 export const createBatchCreateTask = (data) => api.post('/batch-create', data).then((r) => r.data)

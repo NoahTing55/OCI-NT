@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import accounts, auth, batch, batch_create, cloudflare, health, instances, network, proxies, sniper
+from app.api import accounts, auth, batch, batch_create, cloudflare, health, instances, network, oci_options, proxies, sniper
 from app.api import settings as settings_api
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
@@ -83,6 +83,7 @@ app.include_router(batch.router, prefix="/api/batch", tags=["批量任务"], dep
 app.include_router(network.router, prefix="/api/network", tags=["网络/换IP"], dependencies=auth_dep)
 app.include_router(instances.router, prefix="/api/instances", tags=["实例运维"], dependencies=auth_dep)
 app.include_router(cloudflare.router, prefix="/api/cloudflare", tags=["Cloudflare"], dependencies=auth_dep)
+app.include_router(oci_options.router, prefix="/api/oci-options", tags=["OCI 选项查询"], dependencies=auth_dep)
 app.include_router(sniper.router, prefix="/api/sniper", tags=["抢机任务"], dependencies=auth_dep)
 app.include_router(batch_create.router, prefix="/api/batch-create", tags=["批量创建实例"], dependencies=auth_dep)
 app.include_router(settings_api.router, prefix="/api/settings", tags=["系统设置"], dependencies=auth_dep)

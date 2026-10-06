@@ -1,0 +1,143 @@
+"""OCI 选项查询：给抢机/批量创建表单用的级联下拉数据。
+
+按账号（走该账号绑定的代理）实时查询 OCI，返回可用域、平台镜像、
+子网列表，前端用 el-select allow-create 展示，保留手动填 OCID。
+"""
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_db
+from app.core.oci_client import OciClient
+from app.core.oci_factory import build_client_for_account, compartment_of
+from app.models.models import Account
+
+router = APIRouter()
+
+
+def _get_account(db: Session, account_id: int) -> Account:
+    """取账号，不存在抛 404。"""
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return account
+
+
+def _build_client(account: Account, region: str) -> OciClient:
+    """按账号构建带代理的 client；region 参数非空时覆盖账号默认区域。"""
+    try:
+        client = build_client_for_account(account)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"构建 OCI 客户端失败：{e}")
+    if region:
+        client.region = region.strip()
+    return client
+
+
+def _check_ok(resp: httpx.Response, what: str) -> None:
+    """OCI 返回非 2xx 时转成 400 中文错误（不暴露 500）。"""
+    if resp.status_code >= 300:
+        detail = ""
+        try:
+            detail = resp.json().get("message", "") or resp.text[:200]
+        except Exception:
+            detail = resp.text[:200]
+        raise HTTPException(
+            status_code=400,
+            detail=f"查询{what}失败：OCI 返回 {resp.status_code}（{detail}）",
+        )
+
+
+@router.get("/availability-domains")
+async def list_availability_domains(
+    account_id: int = Query(...),
+    region: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """可用域列表：GET identity /20160918/availabilityDomains。"""
+    account = _get_account(db, account_id)
+    client = _build_client(account, region)
+    try:
+        resp = await client.request(
+            "GET", "identity",
+            f"/20160918/availabilityDomains?compartmentId={account.tenancy_ocid}",
+        )
+        _check_ok(resp, "可用域")
+        return [{"name": ad.get("name", "")} for ad in resp.json()]
+    finally:
+        await client.aclose()
+
+
+@router.get("/images")
+async def list_platform_images(
+    account_id: int = Query(...),
+    region: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """平台镜像列表：只取 Oracle 官方镜像（compartmentId 为 null），
+    过滤出 Ubuntu / Oracle Linux，按发布时间倒序取前 20。"""
+    account = _get_account(db, account_id)
+    client = _build_client(account, region)
+    try:
+        resp = await client.request(
+            "GET", "iaas",
+            f"/20160918/images?compartmentId={account.tenancy_ocid}&limit=50",
+        )
+        _check_ok(resp, "镜像")
+        items = resp.json()
+        # 官方平台镜像：compartmentId 为 null
+        platform = [i for i in items if not i.get("compartmentId")]
+        wanted = []
+        for i in platform:
+            os_name = (i.get("operatingSystem") or "").lower()
+            if "ubuntu" in os_name or "oracle linux" in os_name:
+                wanted.append(i)
+        # 按发布时间倒序，取最新 20 个
+        wanted.sort(key=lambda i: i.get("timeCreated") or "", reverse=True)
+        return [
+            {
+                "ocid": i.get("id", ""),
+                "display_name": i.get("displayName", ""),
+                "operating_system": i.get("operatingSystem", ""),
+            }
+            for i in wanted[:20]
+        ]
+    finally:
+        await client.aclose()
+
+
+@router.get("/subnets")
+async def list_subnets(
+    account_id: int = Query(...),
+    region: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """子网列表：先查 VCN，再逐个 VCN 查子网，带上 VCN 名和 CIDR 方便辨认。"""
+    account = _get_account(db, account_id)
+    comp = compartment_of(account)
+    client = _build_client(account, region)
+    try:
+        vcn_resp = await client.request(
+            "GET", "iaas", f"/20160918/vcns?compartmentId={comp}&limit=50"
+        )
+        _check_ok(vcn_resp, "VCN")
+        vcns = vcn_resp.json()
+        result = []
+        for vcn in vcns:
+            vcn_id = vcn.get("id", "")
+            vcn_name = vcn.get("displayName", "")
+            sub_resp = await client.request(
+                "GET", "iaas",
+                f"/20160918/subnets?compartmentId={comp}&vcnId={vcn_id}&limit=100",
+            )
+            _check_ok(sub_resp, "子网")
+            for s in sub_resp.json():
+                result.append({
+                    "ocid": s.get("id", ""),
+                    "display_name": s.get("displayName", ""),
+                    "vcn_name": vcn_name,
+                    "cidr": s.get("cidrBlock", ""),
+                })
+        return result
+    finally:
+        await client.aclose()

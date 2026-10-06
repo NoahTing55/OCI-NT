@@ -43,11 +43,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="账号" required>
-          <el-select v-model="form.account_id" placeholder="选择账号" style="width: 100%">
+          <el-select v-model="form.account_id" placeholder="选择账号" style="width: 100%" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="`${a.name}（${a.region}）`" />
           </el-select>
         </el-form-item>
-        <el-form-item label="区域" required><el-input v-model="form.region" placeholder="如 ap-seoul-1" /></el-form-item>
+        <el-form-item label="区域" required>
+          <el-input v-model="form.region" placeholder="如 ap-seoul-1" @change="clearOciOptions" />
+        </el-form-item>
         <el-form-item label="Shape" required><el-input v-model="form.shape" placeholder="VM.Standard.A1.Flex" /></el-form-item>
         <el-form-item label="OCPU / 内存">
           <el-input-number v-model="form.ocpus" :min="1" :step="1" style="width: 130px" />
@@ -55,9 +57,38 @@
           <el-input-number v-model="form.memory_gb" :min="1" :step="1" style="width: 130px" />
           <span style="margin-left: 4px">GB</span>
         </el-form-item>
-        <el-form-item label="镜像 OCID" required><el-input v-model="form.image_ocid" placeholder="ocid1.image.oc1...." /></el-form-item>
-        <el-form-item label="子网 OCID" required><el-input v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." /></el-form-item>
-        <el-form-item label="可用域" required><el-input v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" /></el-form-item>
+        <el-form-item label="镜像 OCID" required>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-select v-if="imageOptions.length" v-model="form.image_ocid" filterable allow-create
+              placeholder="选择或手动输入镜像 OCID" style="flex: 1">
+              <el-option v-for="o in imageOptions" :key="o.ocid" :value="o.ocid"
+                :label="`${o.display_name}（${o.operating_system}）`" />
+            </el-select>
+            <el-input v-else v-model="form.image_ocid" placeholder="ocid1.image.oc1...." style="flex: 1" />
+            <el-button :loading="fetching.image" @click="fetchImages">获取</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="子网 OCID" required>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-select v-if="subnetOptions.length" v-model="form.subnet_ocid" filterable allow-create
+              placeholder="选择或手动输入子网 OCID" style="flex: 1">
+              <el-option v-for="o in subnetOptions" :key="o.ocid" :value="o.ocid"
+                :label="`${o.display_name}（${o.vcn_name} ${o.cidr}）`" />
+            </el-select>
+            <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
+            <el-button :loading="fetching.subnet" @click="fetchSubnets">获取</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="可用域" required>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-select v-if="adOptions.length" v-model="form.availability_domain" filterable allow-create
+              placeholder="选择或手动输入可用域" style="flex: 1">
+              <el-option v-for="o in adOptions" :key="o.name" :value="o.name" :label="o.name" />
+            </el-select>
+            <el-input v-else v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" style="flex: 1" />
+            <el-button :loading="fetching.ad" @click="fetchAds">获取</el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 snipe-{id}-时间" /></el-form-item>
       </el-form>
       <template #footer>
@@ -101,6 +132,9 @@ import {
   deleteSnipeTask,
   getSnipeLogs,
   getSnipeTemplates,
+  getOciAvailabilityDomains,
+  getOciImages,
+  getOciSubnets,
 } from '../api/client'
 
 const STATUS_MAP = {
@@ -126,6 +160,81 @@ const form = ref({
   availability_domain: '', display_name: '',
 })
 
+// OCI 级联选项：点"获取"后从 OCI 实时查询填充
+const adOptions = ref([])
+const imageOptions = ref([])
+const subnetOptions = ref([])
+const fetching = ref({ ad: false, image: false, subnet: false })
+
+const clearOciOptions = () => {
+  adOptions.value = []
+  imageOptions.value = []
+  subnetOptions.value = []
+}
+
+// 选账号后自动带出该账号的默认区域，之前拉取的 OCI 选项失效清空
+const onAccountChange = () => {
+  const a = accounts.value.find((x) => x.id === form.value.account_id)
+  if (a && a.region) form.value.region = a.region
+  clearOciOptions()
+}
+
+const needAccountRegion = () => {
+  if (!form.value.account_id) {
+    ElMessage.warning('请先选择账号')
+    return null
+  }
+  if (!form.value.region) {
+    ElMessage.warning('请先填写区域')
+    return null
+  }
+  return { account_id: form.value.account_id, region: form.value.region }
+}
+
+const errDetail = (e) => e.response?.data?.detail || e.message
+
+const fetchAds = async () => {
+  const p = needAccountRegion()
+  if (!p) return
+  fetching.value.ad = true
+  try {
+    adOptions.value = await getOciAvailabilityDomains(p)
+    if (!adOptions.value.length) ElMessage.warning('该区域未返回可用域')
+  } catch (e) {
+    ElMessage.error('获取可用域失败：' + errDetail(e))
+  } finally {
+    fetching.value.ad = false
+  }
+}
+
+const fetchImages = async () => {
+  const p = needAccountRegion()
+  if (!p) return
+  fetching.value.image = true
+  try {
+    imageOptions.value = await getOciImages(p)
+    if (!imageOptions.value.length) ElMessage.warning('该区域未返回平台镜像')
+  } catch (e) {
+    ElMessage.error('获取镜像失败：' + errDetail(e))
+  } finally {
+    fetching.value.image = false
+  }
+}
+
+const fetchSubnets = async () => {
+  const p = needAccountRegion()
+  if (!p) return
+  fetching.value.subnet = true
+  try {
+    subnetOptions.value = await getOciSubnets(p)
+    if (!subnetOptions.value.length) ElMessage.warning('该 compartment 下未找到子网')
+  } catch (e) {
+    ElMessage.error('获取子网失败：' + errDetail(e))
+  } finally {
+    fetching.value.subnet = false
+  }
+}
+
 const logsVisible = ref(false)
 const logTask = ref(null)
 const logs = ref([])
@@ -150,6 +259,7 @@ const openCreate = async () => {
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
     availability_domain: '', display_name: '',
   })
+  clearOciOptions()
   try {
     accounts.value = await listAccounts()
     templates.value = await getSnipeTemplates()
@@ -162,7 +272,7 @@ const openCreate = async () => {
 const applyTemplate = () => {
   const t = templates.value[templateIdx.value]
   if (!t) return
-  form.value.region = t.region
+  // 模板只含 shape 配置，不碰区域（区域跟随所选账号）
   form.value.shape = t.shape
   form.value.ocpus = t.ocpus
   form.value.memory_gb = t.memory_gb
