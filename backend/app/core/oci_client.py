@@ -403,9 +403,11 @@ class OciClient:
             )
             # 注意：Subscription API 属于 osp-gateway 服务（OCI-Start 用 SubscriptionServiceClient），
             # host 是 osp-gateway.{region}.oraclecloud.com，不是 identity
+            logger.info("订阅查询：GET osp-gateway %s", path[:80])
             resp = await self.request("GET", "osp-gateway", path)
+            logger.info("订阅查询返回：HTTP %s", resp.status_code)
             if resp.status_code != 200:
-                logger.debug("查询订阅列表失败：HTTP %s", resp.status_code)
+                logger.warning("查询订阅列表失败：HTTP %s，body=%.200s", resp.status_code, resp.text)
                 return result
             items = resp.json()
             # API 直接返回数组；兼容包一层的格式
@@ -433,7 +435,7 @@ class OciClient:
                     logger.debug("解析订阅时间失败：%s", ts)
             return result
         except Exception as e:
-            logger.debug("查询订阅信息异常：%s", str(e)[:100])
+            logger.warning("查询订阅信息异常：%s", str(e)[:200], exc_info=True)
             return result
 
     async def get_subscription_type(self, home_region: str | None = None) -> str | None:
