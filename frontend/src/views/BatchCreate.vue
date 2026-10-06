@@ -56,6 +56,21 @@
             <el-select v-model="form.shape" placeholder="选择机型" style="width: 100%" filterable allow-create>
               <el-option v-for="p in shapePresets" :key="p.shape" :value="p.shape" :label="`${p.shape}（${p.label}）`" />
             </el-select>
+            <!-- 架构快捷卡片：OCI-Start 式，点击填入 shape/OCPU/内存，可再手动调整 -->
+            <div class="tpl-cards" style="margin-top: 8px">
+              <div class="tpl-card" @click="applyQuickCard({ shape: 'VM.Standard.A1.Flex', ocpus: 4, memory_gb: 24 })">
+                <div class="tpl-card-name">ARM 4C24G</div>
+                <div class="tpl-card-desc">A1.Flex · ARM</div>
+              </div>
+              <div class="tpl-card" @click="applyQuickCard({ shape: 'VM.Standard.E2.1.Micro', ocpus: 1, memory_gb: 1 })">
+                <div class="tpl-card-name">AMD 免费 1C1G</div>
+                <div class="tpl-card-desc">E2.1.Micro · AMD</div>
+              </div>
+              <div class="tpl-card" @click="applyQuickCard({ shape: 'VM.Standard.E5.Flex', ocpus: 1, memory_gb: 6 })">
+                <div class="tpl-card-name">x86 通用</div>
+                <div class="tpl-card-desc">E5.Flex 1C6G · AMD</div>
+              </div>
+            </div>
           </el-form-item>
           <el-form-item label="OCPU / 内存">
             <el-input-number v-model="form.ocpus" :min="0.5" :step="1" style="width: 130px" />
@@ -306,6 +321,14 @@ const randomPassword = () => {
 const accountRows = ref([])
 const selected = ref([])
 const selChange = (rows) => { selected.value = rows }
+
+// 架构快捷卡片：填入 shape/OCPU/内存（OCI-Start 模板卡思路），填入后仍可手动改；
+// shape 变化会触发 refShapeArch watcher，按新架构刷新操作系统下拉
+const applyQuickCard = (c) => {
+  form.value.shape = c.shape
+  form.value.ocpus = c.ocpus
+  form.value.memory_gb = c.memory_gb
+}
 
 // ---------- 第 1 步 OCI 级联（参考账号：只用于查询镜像/子网/可用域，不影响创建） ----------
 const refAccountId = ref(null)
@@ -592,3 +615,39 @@ const delTask = async (row) => {
 onMounted(() => { load(); loadTemplates() })
 onUnmounted(stopPoll)
 </script>
+
+<style scoped>
+/* 架构快捷卡片：OCI-Start 式可视化选择 */
+.tpl-cards {
+  display: flex;
+  gap: 12px;
+}
+.tpl-card {
+  flex: 1;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fff;
+}
+.tpl-card:hover {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+.tpl-card:active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary);
+}
+.tpl-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 4px;
+}
+.tpl-card-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+}
+</style>

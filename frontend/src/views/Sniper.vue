@@ -37,10 +37,20 @@
     <!-- 新建任务 -->
     <el-dialog v-model="createVisible" title="新建抢机任务" width="560px">
       <el-form :model="form" label-width="110px">
+        <!-- 场景模板：OCI-Start 式卡片选择，点击填入 shape/OCPU/内存，可再手动调整 -->
         <el-form-item label="场景模板">
-          <el-select v-model="templateIdx" placeholder="选择后一键填入" clearable style="width: 100%" @change="applyTemplate">
-            <el-option v-for="(t, i) in templates" :key="i" :value="i" :label="t.name" />
-          </el-select>
+          <div style="width: 100%">
+            <div class="tpl-cards">
+              <div v-for="(t, i) in templates" :key="i"
+                class="tpl-card" :class="{ active: templateIdx === i }"
+                @click="selectTemplate(i)">
+                <div class="tpl-card-name">{{ t.name }}</div>
+                <div class="tpl-card-desc">{{ t.shape }}</div>
+                <div class="tpl-card-desc">{{ t.ocpus }}C / {{ t.memory_gb }}G · {{ t.shape.includes('A1') ? 'ARM' : 'AMD' }} 架构</div>
+              </div>
+            </div>
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">点击卡片填入配置，可再手动调整</div>
+          </div>
         </el-form-item>
         <el-form-item label="账号" required>
           <el-select v-model="form.account_id" placeholder="选择账号" style="width: 100%" @change="onAccountChange">
@@ -384,6 +394,12 @@ const applyTemplate = () => {
   form.value.memory_gb = t.memory_gb
 }
 
+// 卡片点击：选中并填入模板（shape 变化会触发 shapeArch watcher 自动刷新操作系统列表）
+const selectTemplate = (i) => {
+  templateIdx.value = i
+  applyTemplate()
+}
+
 const submitCreate = async () => {
   if (!form.value.account_id || !form.value.region || !form.value.shape ||
       !form.value.image_ocid || !form.value.availability_domain) {
@@ -463,3 +479,41 @@ const stopLogPoll = () => {
 onMounted(load)
 onUnmounted(stopLogPoll)
 </script>
+
+<style scoped>
+/* 场景模板卡片：OCI-Start 式可视化选择 */
+.tpl-cards {
+  display: flex;
+  gap: 12px;
+}
+.tpl-card {
+  flex: 1;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fff;
+}
+.tpl-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+.tpl-card.active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary);
+}
+.tpl-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 6px;
+}
+.tpl-card.active .tpl-card-name {
+  color: var(--el-color-primary);
+}
+.tpl-card-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+}
+</style>
