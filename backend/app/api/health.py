@@ -11,7 +11,19 @@ router = APIRouter()
 
 @router.post("/check/{account_id}", response_model=CheckResult)
 async def check_one(account_id: int, db: Session = Depends(get_db)):
-    return await check_account_liveness(db, account_id)
+    result = await check_account_liveness(db, account_id)
+    # 单账号检查也发 TG 通知
+    try:
+        from app.core import telegram
+        mark = "✅" if result.get("status") == "healthy" else "❌"
+        typ = {"free": "免费", "paid": "付费"}.get(result.get("account_type") or "", "")
+        await telegram.send_message(
+            "%s 存活检查：%s（%s）%s\n%s" % (
+                mark, result.get("name"), result.get("region"),
+                f"·{typ}" if typ else "", result.get("message") or ""))
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/check-all", response_model=list[CheckResult])
