@@ -112,6 +112,10 @@
             <el-button :loading="fetching.ad" @click="fetchAds">获取</el-button>
           </div>
         </el-form-item>
+        <el-form-item label="放行所有端口">
+          <el-switch v-model="form.open_all_ports" />
+          <span style="color: #909399; font-size: 12px; margin-left: 8px">开机后自动在安全列表添加全端口放行规则</span>
+        </el-form-item>
 
         <!-- 分组4：高级（默认折叠） -->
         <el-collapse style="margin-top: 8px">
@@ -233,7 +237,7 @@ const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
   availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
-  target_count: 1, interval_seconds: 60,
+  target_count: 1, interval_seconds: 60, open_all_ports: true,
 })
 
 // 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
@@ -443,7 +447,7 @@ const openCreate = async () => {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
     availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
-    target_count: 1, interval_seconds: 60,
+    target_count: 1, interval_seconds: 60, open_all_ports: true,
   })
   clearOciOptions()
   try {

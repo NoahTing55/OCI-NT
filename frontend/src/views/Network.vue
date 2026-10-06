@@ -45,6 +45,33 @@
       </div>
     </el-card>
 
+    <!-- 安全组：放行所有端口 -->
+    <el-card header="安全组（放行所有端口）" style="margin-bottom: 16px">
+      <el-form :inline="true" :model="portsForm">
+        <el-form-item label="账号">
+          <el-select v-model="portsForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadPortsInstances">
+            <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="a.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="实例">
+          <el-select v-model="portsForm.instance_id" placeholder="先选账号" style="width: 280px">
+            <el-option
+              v-for="i in portsInstances"
+              :key="i.instance_id"
+              :value="i.instance_id"
+              :label="`${i.display_name}（${i.public_ip || '无公网IP'}）`"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="opening" :disabled="!portsForm.instance_id" @click="submitOpenPorts">
+            放行所有端口
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <div style="font-size: 12px; color: #909399">在实例子网的安全列表添加 protocol=all、来源 0.0.0.0/0 的入站规则（已存在则跳过）</div>
+    </el-card>
+
     <!-- CF Token -->
     <el-card header="Cloudflare Token（加密存储，权限最小化：Zone.DNS 编辑）" style="margin-bottom: 16px">
       <el-button size="small" type="primary" @click="tokenVisible = true">新增 Token</el-button>
@@ -163,6 +190,7 @@ import {
   syncBinding,
   cfCheck,
   cfSyncAll,
+  openAllPorts,
 } from '../api/client.js'
 
 const accounts = ref([])
@@ -200,6 +228,39 @@ const submitChangeIp = async () => {
     ElMessage.error('换 IP 失败：' + (e.response?.data?.detail || e.message))
   } finally {
     changing.value = false
+  }
+}
+
+// ---------- 放行所有端口 ----------
+const portsForm = ref({ account_id: null, instance_id: '' })
+const portsInstances = ref([])
+const opening = ref(false)
+
+const loadPortsInstances = async () => {
+  portsForm.value.instance_id = ''
+  portsInstances.value = []
+  if (!portsForm.value.account_id) return
+  try {
+    const data = await listInstances({ account_id: portsForm.value.account_id })
+    portsInstances.value = data.items
+  } catch (e) {
+    ElMessage.error('加载实例失败：' + (e.response?.data?.detail || e.message))
+  }
+}
+
+const submitOpenPorts = async () => {
+  opening.value = true
+  try {
+    const r = await openAllPorts({
+      account_id: portsForm.value.account_id,
+      instance_id: portsForm.value.instance_id,
+    })
+    if (r.ok) ElMessage.success('已放行所有端口')
+    else ElMessage.warning(r.message || '操作失败')
+  } catch (e) {
+    ElMessage.error('操作失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    opening.value = false
   }
 }
 

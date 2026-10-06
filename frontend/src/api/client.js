@@ -33,6 +33,7 @@ export const getBatchTask = (id) => api.get(`/batch/${id}`).then((r) => r.data)
 
 // 换 IP
 export const changeIp = (data) => api.post('/network/change-ip', data).then((r) => r.data)
+export const openAllPorts = (data) => api.post('/network/open-all-ports', data).then((r) => r.data)
 
 // Cloudflare
 export const listCfTokens = () => api.get('/cloudflare/tokens').then((r) => r.data)
