@@ -4,11 +4,11 @@
 
 ## 功能
 
-- **账号管理**：多 OCI 账号 CRUD，单 API 单代理绑定（socks5h 防 DNS 泄漏），一键存活检查（401 密钥失效 / 403 权限不足 / 超时分类）
-- **抢机**：Out of host capacity 抖动重试、429 指数退避、抢到即停；成功后自动同步 Cloudflare
-- **批量创建**：E5/A1/E2 等 shape 预设，三步向导（选配置 → 选账号 → 看进度），复用抢机引擎的错误分类与退避
+- **账号管理**：多 OCI 账号 CRUD，单 API 单代理绑定（socks5h 防 DNS 泄漏）；一键存活检查（401 密钥失效 / 403 权限不足 / 超时分类）；账户摘要卡片（实例数、OCPU/内存、E2/A1/E5 配额进度条）；账号成本、存活天数、账号类型（免费/试用/升级自动识别）一目了然
+- **抢机**：4 个快捷模板（ARM 4C24G / 免费 AMD 1C1G / E5 2C12G / E5 4C24G），模板填入后可手动改；抢机数量（1-100 台）、抢机间隔（30s/60s/300s 快捷+自定义）；Out of host capacity 按间隔重试、429 指数退避；子网选填，worker 自动建网（VCN→网关→路由→子网，有则复用）；cloud-init 下发 root 密码（可填/随机/自动生成）；开机成功默认放行所有端口；成功后 TG 推送实例信息、公网 IP、root 密码
 - **实例运维**：多账号多区域聚合列表，批量开机/关机/重启/终止，编辑名称/标签
 - **换 IP**：预留 IP 标准流程，换完自动同步 Cloudflare
+- **网络**：安全组一键放行所有端口（给已开机实例补规则）
 - **Cloudflare**：Token 加密存储，A/AAAA 记录管理，一致性巡检
 - **安全**：登录鉴权 + TOTP 双因素，审计日志（敏感字段脱敏），实例列表 Redis 缓存
 - **系统设置**：TG、定时任务间隔、缓存等网页可配，改完即时生效
@@ -19,12 +19,10 @@
 git clone https://github.com/NoahTing55/OCI-NT.git /opt/oci--nt
 cd /opt/oci--nt
 cp .env.example .env   # 填写 MASTER_KEY 等（见下方配置说明）
-
-docker compose pull    # 拉取最新镜像，无需本地构建
-docker compose up -d
+docker compose up --build -d
 ```
 
-以后更新：`git pull && docker compose pull && docker compose up -d`，不用重新构建。
+以后更新：`git pull && docker compose up --build -d` 即可。启动时自动执行数据库迁移，无需手动补 SQL。
 
 只暴露 **8035** 一个端口（安全组/防火墙放行 8035 即可）：
 
@@ -34,6 +32,8 @@ docker compose up -d
 ## 配置
 
 首次部署只需填 `.env` 里启动必需的几项：`MASTER_KEY`、`ADMIN_USERNAME` / `ADMIN_PASSWORD`（初始管理员）。其他配置（TG Bot、定时任务间隔、缓存等）在网页「系统设置」里改，保存后即时生效。
+
+抢机成功要收到 TG 通知：在「系统设置」填 Telegram Bot Token 和 Chat ID，点"测试推送"确认。
 
 ## 安全提醒
 
