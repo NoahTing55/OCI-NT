@@ -29,6 +29,9 @@ class AccountUpdate(BaseModel):
     compartment_ocid: str | None = None
     remark: str | None = None
     cost: float | None = None
+    # 真实注册时间（ISO 字符串或 datetime；传 null 清空则用 created_at 兜底）
+    registered_at: datetime | None = None
+    account_type: str | None = None
     private_key: str | None = Field(default=None, description="传了才更新私钥")
 
 
@@ -62,6 +65,8 @@ class AccountOut(BaseModel):
     # 该账号抢机任务状态：running（有进行中）/ paused（有已暂停）/ none（无）
     snipe_task_status: str = "none"
     cost: float = 0  # 账号成本（OCI-Start 式，可点击修改）
+    registered_at: datetime | None = None  # 真实注册时间（存活天数优先用它）
+    account_type: str = ""  # free 免费 / paid 付费 / "" 未知
 
 
 class BindProxyIn(BaseModel):

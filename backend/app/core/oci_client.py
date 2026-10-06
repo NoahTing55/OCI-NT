@@ -383,3 +383,39 @@ class OciClient:
             "PUT", "iaas", f"/20160918/securityLists/{security_list_id}",
             {"ingressSecurityRules": ingress_rules},
         )
+
+    # ---------------- 账号类型（订阅） ----------------
+    async def get_subscription_type(self, home_region: str | None = None) -> str | None:
+        """查账号订阅类型：free 免费 / paid 付费 / None 未知。
+
+        调 osp-gateway Subscription API（identity 服务）：
+        GET /20190111/subscriptions?compartmentId={tenancy}&ospHomeRegion={home}
+        取第一条的 subscriptionTier：ALWAYS_FREE/FREE → free，PAID → paid。
+        任何失败（无权限/无订阅/网络异常）都返回 None，不抛异常。
+        """
+        try:
+            hr = home_region or self.region
+            path = (
+                "/20190111/subscriptions"
+                f"?compartmentId={self.tenancy_ocid}&ospHomeRegion={hr}"
+            )
+            resp = await self.request("GET", "identity", path)
+            if resp.status_code != 200:
+                logger.debug("查询订阅列表失败：HTTP %s", resp.status_code)
+                return None
+            items = resp.json()
+            # API 直接返回数组；兼容包一层的格式
+            if isinstance(items, dict):
+                items = items.get("items", [])
+            if not items:
+                return None
+            tier = str(items[0].get("subscriptionTier", "")).upper()
+            if tier in ("ALWAYS_FREE", "FREE"):
+                return "free"
+            if tier == "PAID":
+                return "paid"
+            logger.debug("未知 subscriptionTier：%s", tier)
+            return None
+        except Exception:
+            logger.debug("查询订阅类型异常", exc_info=True)
+            return None

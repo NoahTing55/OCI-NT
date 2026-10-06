@@ -77,9 +77,16 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
 
     status_code = None
     err = None
+    sub_type = None
     try:
         resp = await client.get_user()
         status_code = resp.status_code
+        # 存活检查顺带查账号类型（失败不影响主流程）
+        if status_code == 200:
+            try:
+                sub_type = await client.get_subscription_type()
+            except Exception:
+                logger.debug("账号 %s 查订阅类型异常", account.name, exc_info=True)
     except httpx.TimeoutException:
         err = "timeout"
     except (httpx.ConnectError, httpx.ProxyError):
@@ -93,6 +100,8 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     new_status, message = _classify(status_code, err)
     account.status = new_status
     account.last_check_at = datetime.utcnow()
+    if sub_type:
+        account.account_type = sub_type
     db.commit()
     logger.info("账号「%s」存活检查：%s（%s）", account.name, STATUS_TEXT[new_status], message)
 

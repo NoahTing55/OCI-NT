@@ -37,6 +37,10 @@ class Account(Base):
     last_check_at = Column(DateTime, nullable=True)
     remark = Column(String(255), default="")
     cost = Column(Float, default=0)  # 账号成本（OCI-Start 式，可点击修改）
+    # 账号真实注册时间（可空；为空时存活天数用 created_at 兜底）
+    registered_at = Column(DateTime, nullable=True)
+    # 账号类型：free 免费 / paid 付费 / 空 未知（存活检查时调 Subscription API 更新）
+    account_type = Column(String(32), default="")
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
 

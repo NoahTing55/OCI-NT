@@ -133,6 +133,11 @@ def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(g
         account.remark = data.remark
     if data.cost is not None:
         account.cost = data.cost
+    # registered_at 用 fields_set 区分"没传"和"显式传 null（清空）"
+    if "registered_at" in data.model_fields_set:
+        account.registered_at = data.registered_at
+    if data.account_type is not None:
+        account.account_type = data.account_type
     if data.private_key:
         if "PRIVATE KEY" not in data.private_key:
             raise HTTPException(status_code=400, detail="private_key 看起来不是 PEM 私钥")
