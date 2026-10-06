@@ -14,7 +14,7 @@
       <el-table-column prop="region" label="区域" width="140" />
       <el-table-column prop="shape" label="Shape" width="180" />
       <el-table-column label="配置" width="130">
-        <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span><span style="color:#909399"> · 间隔{{ row.interval_seconds || 60 }}s</span></template>
+        <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span></template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -24,13 +24,15 @@
       <el-table-column prop="attempts" label="尝试" width="70" />
       <el-table-column prop="last_error" label="最后错误" min-width="200" show-overflow-tooltip />
       <el-table-column prop="created_at" label="创建时间" width="170" />
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" type="success" v-if="row.status !== 'running'" @click="startTask(row)">启动</el-button>
-          <el-button size="small" type="warning" v-if="row.status === 'running'" @click="pauseTask(row)">暂停</el-button>
-          <el-button size="small" @click="openLogs(row)">日志</el-button>
-          <el-button size="small" v-if="row.root_password" @click="showPassword(row)">密码</el-button>
-          <el-button size="small" type="danger" :disabled="row.status === 'running'" @click="delTask(row)">删除</el-button>
+          <div class="op-btns">
+            <el-button size="small" type="success" v-if="row.status !== 'running'" @click="startTask(row)">启动</el-button>
+            <el-button size="small" type="warning" v-if="row.status === 'running'" @click="pauseTask(row)">暂停</el-button>
+            <el-button size="small" @click="openLogs(row)">日志</el-button>
+            <el-button size="small" v-if="row.root_password" @click="showPassword(row)">密码</el-button>
+            <el-button size="small" type="danger" :disabled="row.status === 'running'" @click="delTask(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -656,5 +658,14 @@ onUnmounted(stopLogPoll)
 :deep(.el-collapse-item__header) {
   font-size: 13px;
   color: #606266;
+}
+.op-btns {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  align-items: center;
+}
+.op-btns .el-button {
+  margin-left: 0;
 }
 </style>
