@@ -313,6 +313,7 @@ class SniperManager:
                 "ad": task.availability_domain,
                 "display_name": task.display_name
                 or "snipe-%d-%s" % (task.id, datetime.utcnow().strftime("%Y%m%d%H%M")),
+                "target_count": max(1, task.target_count or 1),
                 "compartment": compartment_of(account),
                 "root_password": task.root_password or "",
             }
@@ -368,6 +369,8 @@ class SniperManager:
             unknown_streak = 0
             backoff_429 = 30.0
             stop_ev = self._stop_events.get(task_id)
+            # 本地已抢台数（用于实例名序号后缀；_on_success 返回最新值保持同步）
+            snipe_done = 0
             while not (stop_ev and stop_ev.is_set()):
                 if not self._is_running(task_id):
                     self._log(task_id, "info", "任务已暂停/停止，worker 退出")
@@ -381,16 +384,20 @@ class SniperManager:
                     await self._sleep(task_id, 10)
                     continue
                 if existing:
-                    await self._on_success(
-                        task_id, cfg, client, existing["id"], "查到存量实例，直接成功停止（防重复创建）"
+                    done, snipe_done = await self._on_success(
+                        task_id, cfg, client, existing["id"], "查到存量实例（防重复创建）"
                     )
-                    break
+                    if done:
+                        break
+                    continue
 
                 # b. 单账号限流（带抖动）
                 await self._limiters.acquire(cfg["account_id"])
 
-                # c. 发起创建
+                # c. 发起创建（多台时实例名加序号后缀，避免重名）
                 self._bump_attempts(task_id)
+                seq = snipe_done + 1
+                dn = cfg["display_name"] + ("-%d" % seq if cfg["target_count"] > 1 else "")
                 try:
                     resp = await client.launch_instance(
                         compartment_id=cfg["compartment"],
@@ -400,7 +407,7 @@ class SniperManager:
                         memory_gb=cfg["memory_gb"],
                         image_ocid=cfg["image_ocid"],
                         subnet_ocid=cfg["subnet_ocid"],
-                        display_name=cfg["display_name"],
+                        display_name=dn,
                         user_data=user_data,
                     )
                 except (httpx.TimeoutException, httpx.ConnectError, httpx.ProxyError) as e:
@@ -429,8 +436,12 @@ class SniperManager:
                 kind, msg = classify_launch_error(resp.status_code, resp.text)
                 if kind == "success":
                     instance_ocid = (resp.json() or {}).get("id", "")
-                    await self._on_success(task_id, cfg, client, instance_ocid, "抢机成功")
-                    break
+                    done, snipe_done = await self._on_success(
+                        task_id, cfg, client, instance_ocid, "抢机成功", display_name=dn)
+                    if done:
+                        break
+                    # 未达目标台数：继续循环抢下一台
+                    continue
                 if kind == "no_capacity":
                     unknown_streak = 0
                     delay = random.uniform(3, 8)
@@ -474,27 +485,39 @@ class SniperManager:
                 return inst
         return None
 
-    async def _on_success(self, task_id: int, cfg: dict, client, instance_ocid: str, note: str):
-        """抢到即停：CAS 置 success → TG 推送 → 查公网 IP → CF 自动同步。"""
+    async def _on_success(self, task_id: int, cfg: dict, client, instance_ocid: str, note: str,
+                          display_name: str = "") -> tuple[bool, int]:
+        """抢到一台：success_count+1、OCID 追加 → 若达目标则 CAS 置 success 结束，
+        否则继续循环。返回 (done, new_count)：done 为 True 表示任务已完成（调用方 break）。
+        每台都发 TG（含"第 X/Y 台"），最后加 CF 自动同步。"""
+        target = cfg.get("target_count", 1) or 1
+        # 原子更新：success_count+1，instance_ocid 逗号追加
         db = SessionLocal()
         try:
-            ok = _cas_status(
-                db, task_id, {"running"}, "success",
-                instance_ocid=instance_ocid, finished_at=datetime.utcnow(), last_error="",
-            )
+            task = db.get(SnipeTask, task_id)
+            if not task or task.status != "running":
+                self._log(task_id, "warning", "状态已非 running（可能被暂停），放弃后处理")
+                return True, 0  # 当作结束，调用方退出循环
+            new_count = (task.success_count or 0) + 1
+            task.success_count = new_count
+            old_ocids = (task.instance_ocid or "").strip()
+            task.instance_ocid = (old_ocids + "," + instance_ocid).strip(",") if old_ocids else instance_ocid
+            task.last_error = ""
+            done = new_count >= target
+            if done:
+                task.status = "success"
+                task.finished_at = datetime.utcnow()
+            db.commit()
         finally:
             db.close()
-        if not ok:
-            self._log(task_id, "warning", "状态 CAS 失败（可能已被暂停），放弃后处理")
-            return
-        self._log(task_id, "info", "%s：实例 OCID %s" % (note, instance_ocid))
+        self._log(task_id, "info", "%s：第 %d/%d 台，实例 OCID %s" % (note, new_count, target, instance_ocid))
         # 抢机成功是后台事件，走手动审计（非 HTTP 请求，中间件覆盖不到）
         db3 = SessionLocal()
         try:
             log_operation(
                 db3, "snipe.success", account_id=cfg.get("account_id"),
-                detail="抢机成功：%s 在 %s 抢到 %s，实例 %s"
-                % (cfg["account_name"], cfg["region"], cfg["shape"], instance_ocid),
+                detail="抢机成功（第 %d/%d 台）：%s 在 %s 抢到 %s，实例 %s"
+                % (new_count, target, cfg["account_name"], cfg["region"], cfg["shape"], instance_ocid),
                 operator="sniper",
             )
         finally:
@@ -512,8 +535,10 @@ class SniperManager:
                 break
             await self._sleep(task_id, 10)
         # 开机成功通知：带机器信息、公网 IP 和 root 密码（纯文本发送，无转义问题）
+        # 多台时注明"第 X/Y 台"，最后一台额外注明任务完成
+        count_tag = "（第 %d/%d 台%s）" % (new_count, target, "，任务完成" if done else "")
         await telegram.send_message(
-            "🚀 ————开机成功通知———— 🚀\n"
+            "🚀 ————开机成功通知———— 🚀%s\n"
             "账号: %s\n"
             "区域: %s\n"
             "实例: %s (%s)\n"
@@ -521,23 +546,24 @@ class SniperManager:
             "公网 IP: %s\n"
             "用户: root\n"
             "密码: %s"
-            % (cfg["account_name"], cfg["region"], cfg["display_name"], instance_ocid,
+            % (count_tag, cfg["account_name"], cfg["region"], display_name or cfg["display_name"], instance_ocid,
                cfg["shape"], cfg["ocpus"], cfg["memory_gb"],
                ip or "获取中", cfg["root_password"] or "未设置")
         )
         if not ip:
             self._log(task_id, "warning", "未获取到新实例公网 IP，跳过 CF 自动同步（可在网络页手动同步）")
-            return
+            return done, new_count
         db2 = SessionLocal()
         try:
             results = await sync_instance_domains(db2, instance_ocid, ip)
         except Exception as e:
             self._log(task_id, "warning", "CF 自动同步异常：%s" % str(e)[:160])
-            return
+            return done, new_count
         finally:
             db2.close()
         ok_n = sum(1 for r in results if r.get("ok"))
         self._log(task_id, "info", "CF 自动同步：%d/%d 个域名成功" % (ok_n, len(results)))
+        return done, new_count
 
     async def _get_public_ip(self, client, compartment: str, instance_ocid: str) -> str | None:
         atts = await client.list_vnic_attachments(compartment, instance_ocid)
