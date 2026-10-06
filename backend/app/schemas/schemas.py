@@ -245,6 +245,7 @@ class SnipeTaskCreate(BaseModel):
     display_name: str = Field(default="", max_length=128)
     root_password: str = Field(default="", max_length=128, description="root 密码；为空则 worker 自动生成随机密码")
     target_count: int = Field(default=1, ge=1, le=100, description="目标抢机台数，一次抢 N 台")
+    interval_seconds: int = Field(default=60, ge=5, le=3600, description="无可用容量时的重试间隔（秒）")
 
 
 class SnipeTaskOut(BaseModel):
@@ -267,6 +268,7 @@ class SnipeTaskOut(BaseModel):
     instance_ocid: str = ""
     target_count: int = 1
     success_count: int = 0
+    interval_seconds: int = 60
     root_password: str = ""
     started_at: datetime | None = None
     finished_at: datetime | None = None

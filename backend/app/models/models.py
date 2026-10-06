@@ -86,6 +86,7 @@ class SnipeTask(Base):
     root_password = Column(String(128), default="")  # cloud-init 设置的 root 密码（明文，参考 OCI-Start）
     target_count = Column(Integer, default=1)  # 目标抢机台数（一次抢 N 台）
     success_count = Column(Integer, default=0)  # 已抢到台数
+    interval_seconds = Column(Integer, default=60)  # 无容量时重试间隔（秒），默认 60
     status = Column(String(32), default="pending")  # pending / running / paused / success / stopped / failed
     attempts = Column(Integer, default=0)
     last_error = Column(Text, default="")
