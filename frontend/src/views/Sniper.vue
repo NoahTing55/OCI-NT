@@ -13,8 +13,8 @@
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140" />
       <el-table-column prop="shape" label="Shape" width="180" />
-      <el-table-column label="配置" width="110">
-        <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G</template>
+      <el-table-column label="配置" width="130">
+        <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span></template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -34,24 +34,26 @@
       </el-table-column>
     </el-table>
 
-    <!-- 新建任务 -->
-    <el-dialog v-model="createVisible" title="新建抢机任务" width="560px">
-      <el-form :model="form" label-width="110px">
-        <!-- 场景模板：OCI-Start 式卡片选择，点击填入 shape/OCPU/内存，可再手动调整 -->
-        <el-form-item label="场景模板">
-          <div style="width: 100%">
-            <div class="tpl-cards">
-              <div v-for="(t, i) in templates" :key="i"
-                class="tpl-card" :class="{ active: templateIdx === i }"
-                @click="selectTemplate(i)">
-                <div class="tpl-card-name">{{ t.name }}</div>
-                <div class="tpl-card-desc">{{ t.shape }}</div>
-                <div class="tpl-card-desc">{{ t.ocpus }}C / {{ t.memory_gb }}G · {{ t.shape.includes('A1') ? 'ARM' : 'AMD' }} 架构</div>
-              </div>
+    <!-- 新建任务：分组布局（模板 → 基础 → 实例 → 高级折叠） -->
+    <el-dialog v-model="createVisible" title="新建抢机任务" width="640px">
+      <el-form :model="form" label-width="100px">
+        <!-- 分组1：选择模板（2×2 卡片网格） -->
+        <div class="form-group-title">选择模板</div>
+        <div class="tpl-cards tpl-cards-4">
+          <div v-for="(t, i) in templates" :key="i"
+            class="tpl-card" :class="{ active: templateIdx === i }"
+            @click="selectTemplate(i)">
+            <div class="tpl-card-name">{{ t.name }}
+              <el-tag size="small" :type="archTagType(t.shape)" style="margin-left: 6px">{{ archLabel(t.shape) }}</el-tag>
             </div>
-            <div style="color: #909399; font-size: 12px; margin-top: 4px">点击卡片填入配置，可再手动调整</div>
+            <div class="tpl-card-desc">{{ t.shape }}</div>
+            <div class="tpl-card-desc">{{ t.ocpus }}C / {{ t.memory_gb }}G</div>
           </div>
-        </el-form-item>
+        </div>
+        <div style="color: #909399; font-size: 12px; margin: 4px 0 12px">点击卡片填入配置，可再手动调整</div>
+
+        <!-- 分组2：基础配置 -->
+        <div class="form-group-title">基础配置</div>
         <el-form-item label="账号" required>
           <el-select v-model="form.account_id" placeholder="选择账号" style="width: 100%" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="`${a.name}（${a.region}）`" />
@@ -60,16 +62,13 @@
         <el-form-item label="区域" required>
           <el-input v-model="form.region" placeholder="如 ap-seoul-1" @change="onRegionChange" />
         </el-form-item>
-        <el-form-item label="Compartment">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-select v-if="compOptions.length" v-model="form.compartment_ocid" filterable allow-create
-              placeholder="选择或手动输入 Compartment OCID" style="flex: 1" @change="subnetOptions = []">
-              <el-option v-for="o in compOptions" :key="o.ocid" :value="o.ocid" :label="o.name" />
-            </el-select>
-            <el-input v-else v-model="form.compartment_ocid" placeholder="空则用账号根 compartment" style="flex: 1" />
-            <el-button :loading="fetching.comp" @click="fetchComps">获取</el-button>
-          </div>
+        <el-form-item label="抢机数量">
+          <el-input-number v-model="form.target_count" :min="1" :max="100" style="width: 160px" />
+          <span style="color: #909399; font-size: 12px; margin-left: 8px">同一账号连续抢 N 台（每台实例名自动加序号）</span>
         </el-form-item>
+
+        <!-- 分组3：实例配置 -->
+        <div class="form-group-title">实例配置</div>
         <el-form-item label="Shape" required><el-input v-model="form.shape" placeholder="VM.Standard.A1.Flex" /></el-form-item>
         <el-form-item label="OCPU / 内存">
           <el-input-number v-model="form.ocpus" :min="1" :step="1" style="width: 130px" />
@@ -91,18 +90,6 @@
           </div>
           <template #extra><span style="color:#909399;font-size:12px">按 shape 架构自动拉取：先选操作系统，再选版本</span></template>
         </el-form-item>
-        <el-form-item label="子网 OCID">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-select v-if="subnetOptions.length" v-model="form.subnet_ocid" filterable allow-create
-              placeholder="选择或手动输入子网 OCID" style="flex: 1">
-              <el-option v-for="o in subnetOptions" :key="o.ocid" :value="o.ocid"
-                :label="`[${o.compartment_name || '未知'}] ${o.display_name}（${o.vcn_name} ${o.cidr}）`" />
-            </el-select>
-            <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
-            <el-button :loading="fetching.subnet" @click="fetchSubnets">获取</el-button>
-          </div>
-          <template #extra><span style="color:#909399;font-size:12px">留空则任务启动时自动创建网络（有则复用、无则创建）</span></template>
-        </el-form-item>
         <el-form-item label="可用域" required>
           <div style="display: flex; gap: 8px; width: 100%">
             <el-select v-if="adOptions.length" v-model="form.availability_domain" filterable allow-create
@@ -113,14 +100,42 @@
             <el-button :loading="fetching.ad" @click="fetchAds">获取</el-button>
           </div>
         </el-form-item>
-        <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 snipe-{id}-时间" /></el-form-item>
-        <el-form-item label="Root 密码">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input v-model="form.root_password" placeholder="留空则自动生成随机密码" style="flex: 1" show-password />
-            <el-button @click="form.root_password = randomPassword()">随机</el-button>
-          </div>
-          <template #extra><span style="color:#909399;font-size:12px">通过 cloud-init 在开机时设置，TG 通知会带上</span></template>
-        </el-form-item>
+
+        <!-- 分组4：高级（默认折叠） -->
+        <el-collapse style="margin-top: 8px">
+          <el-collapse-item title="高级选项（Compartment / 子网 / 显示名 / Root 密码）" name="advanced">
+            <el-form-item label="Compartment">
+              <div style="display: flex; gap: 8px; width: 100%">
+                <el-select v-if="compOptions.length" v-model="form.compartment_ocid" filterable allow-create
+                  placeholder="选择或手动输入 Compartment OCID" style="flex: 1" @change="subnetOptions = []">
+                  <el-option v-for="o in compOptions" :key="o.ocid" :value="o.ocid" :label="o.name" />
+                </el-select>
+                <el-input v-else v-model="form.compartment_ocid" placeholder="空则用账号根 compartment" style="flex: 1" />
+                <el-button :loading="fetching.comp" @click="fetchComps">获取</el-button>
+              </div>
+            </el-form-item>
+            <el-form-item label="子网 OCID">
+              <div style="display: flex; gap: 8px; width: 100%">
+                <el-select v-if="subnetOptions.length" v-model="form.subnet_ocid" filterable allow-create
+                  placeholder="选择或手动输入子网 OCID" style="flex: 1">
+                  <el-option v-for="o in subnetOptions" :key="o.ocid" :value="o.ocid"
+                    :label="`[${o.compartment_name || '未知'}] ${o.display_name}（${o.vcn_name} ${o.cidr}）`" />
+                </el-select>
+                <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
+                <el-button :loading="fetching.subnet" @click="fetchSubnets">获取</el-button>
+              </div>
+              <template #extra><span style="color:#909399;font-size:12px">留空则任务启动时自动创建网络（有则复用、无则创建）</span></template>
+            </el-form-item>
+            <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 snipe-{id}-时间（多台自动加序号）" /></el-form-item>
+            <el-form-item label="Root 密码">
+              <div style="display: flex; gap: 8px; width: 100%">
+                <el-input v-model="form.root_password" placeholder="留空则自动生成随机密码" style="flex: 1" show-password />
+                <el-button @click="form.root_password = randomPassword()">随机</el-button>
+              </div>
+              <template #extra><span style="color:#909399;font-size:12px">通过 cloud-init 在开机时设置，TG 通知会带上</span></template>
+            </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -177,6 +192,9 @@ const statusText = (s) => STATUS_MAP[s] || s
 const statusType = (s) =>
   ({ running: 'primary', success: 'success', failed: 'danger', paused: 'warning' }[s] || 'info')
 const levelColor = (l) => ({ info: '#9cdcfe', warning: '#dcdcaa', error: '#f48771' }[l] || '#d4d4d4')
+// 模板卡片架构标签：A1→ARM，E2→AMD，E5→x86
+const archLabel = (shape) => shape.includes('A1') ? 'ARM' : (shape.includes('E5') ? 'x86' : 'AMD')
+const archTagType = (shape) => shape.includes('A1') ? 'success' : (shape.includes('E5') ? 'warning' : 'info')
 
 const tasks = ref([])
 const accounts = ref([])
@@ -190,6 +208,7 @@ const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
   availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
+  target_count: 1,
 })
 
 // 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
@@ -375,6 +394,7 @@ const openCreate = async () => {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
     availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
+    target_count: 1,
   })
   clearOciOptions()
   try {
@@ -483,9 +503,27 @@ onUnmounted(stopLogPoll)
 
 <style scoped>
 /* 场景模板卡片：OCI-Start 式可视化选择 */
+/* 表单分组标题 */
+.form-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 4px 0 12px;
+  padding-left: 8px;
+  border-left: 3px solid var(--el-color-primary);
+}
 .tpl-cards {
   display: flex;
   gap: 12px;
+}
+/* 4 卡片时用 2×2 网格 */
+.tpl-cards-4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.tpl-cards-4 .tpl-card {
+  flex: none;
 }
 .tpl-card {
   flex: 1;
@@ -493,14 +531,16 @@ onUnmounted(stopLogPoll)
   border-radius: 8px;
   padding: 12px 14px;
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
   background: #fff;
 }
 .tpl-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  border-color: var(--el-color-primary-light-5);
 }
 .tpl-card.active {
   border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
   box-shadow: 0 0 0 1px var(--el-color-primary);
 }
 .tpl-card-name {
