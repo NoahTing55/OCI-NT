@@ -539,7 +539,9 @@ class SniperManager:
         # 开机成功通知：带机器信息、公网 IP 和 root 密码（纯文本发送，无转义问题）
         # 多台时注明"第 X/Y 台"，最后一台额外注明任务完成
         count_tag = "（第 %d/%d 台%s）" % (new_count, target, "，任务完成" if done else "")
-        await telegram.send_message(
+        self._log(task_id, "info", "发送 TG 开机通知%s…" % count_tag)
+        try:
+            tg_ok = await telegram.send_message(
             "🚀 ————开机成功通知———— 🚀%s\n"
             "账号: %s\n"
             "区域: %s\n"
@@ -551,7 +553,11 @@ class SniperManager:
             % (count_tag, cfg["account_name"], cfg["region"], display_name or cfg["display_name"], instance_ocid,
                cfg["shape"], cfg["ocpus"], cfg["memory_gb"],
                ip or "获取中", cfg["root_password"] or "未设置")
-        )
+            )
+            self._log(task_id, "info" if tg_ok else "warning",
+                      "TG 开机通知%s" % ("发送成功" if tg_ok else "发送失败（检查系统设置里的 TG 配置）"))
+        except Exception as e:
+            self._log(task_id, "warning", "TG 开机通知异常：%s" % str(e)[:120])
         if not ip:
             self._log(task_id, "warning", "未获取到新实例公网 IP，跳过 CF 自动同步（可在网络页手动同步）")
             return done, new_count

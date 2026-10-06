@@ -180,7 +180,7 @@
         <el-descriptions-item label="任务">#{{ pwdTask?.id }}（{{ pwdTask?.account_name }}）</el-descriptions-item>
         <el-descriptions-item label="用户">root</el-descriptions-item>
         <el-descriptions-item label="密码">
-          <el-input :value="pwdTask?.root_password" readonly show-password style="width: 220px" />
+          <el-input :value="pwdTask?.root_password" readonly show-password style="width: 220px" @click="selectPwd" />
           <el-button size="small" @click="copyPwd" style="margin-left: 8px">复制</el-button>
         </el-descriptions-item>
       </el-descriptions>
@@ -399,11 +399,26 @@ const pwdVisible = ref(false)
 const pwdTask = ref(null)
 const showPassword = (row) => { pwdTask.value = row; pwdVisible.value = true }
 const copyPwd = async () => {
+  const text = pwdTask.value?.root_password || ''
   try {
-    await navigator.clipboard.writeText(pwdTask.value?.root_password || '')
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // HTTP 非安全上下文降级方案
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
     ElMessage.success('已复制')
-  } catch (e) { ElMessage.error('复制失败') }
+  } catch (e) { ElMessage.error('复制失败，请手动选中复制') }
 }
+// 点击密码框自动选中，方便手动复制
+const selectPwd = (e) => { e.target.select() }
 const logTask = ref(null)
 const logs = ref([])
 const logLevel = ref('')
