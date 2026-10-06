@@ -115,6 +115,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAccounts,
@@ -294,6 +295,9 @@ const submitChangeIp = async () => {
 
 onMounted(async () => {
   accounts.value = await listAccounts().catch(() => [])
+  // 从账户摘要卡片跳转过来时按账号筛选
+  const qid = useRoute().query.account_id
+  if (qid) filters.value.account_id = Number(qid) || qid
   load()
 })
 onUnmounted(() => clearInterval(pollTimer))

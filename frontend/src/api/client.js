@@ -14,6 +14,9 @@ export const listProxies = () => api.get('/proxies').then((r) => r.data)
 export const createProxy = (data) => api.post('/proxies', data).then((r) => r.data)
 export const deleteProxy = (id) => api.delete(`/proxies/${id}`).then((r) => r.data)
 
+// 账户摘要
+export const getAccountSummary = () => api.get('/account-summary').then((r) => r.data)
+
 // 存活检查
 export const checkAccount = (id) => api.post(`/health/check/${id}`).then((r) => r.data)
 export const checkAllAccounts = () => api.post('/health/check-all').then((r) => r.data)

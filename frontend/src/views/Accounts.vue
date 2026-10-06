@@ -2,6 +2,30 @@
   <div>
     <el-button type="primary" @click="createVisible = true">新建账号</el-button>
     <el-button @click="checkAll" :loading="checkingAll">全部存活检查</el-button>
+    <el-button @click="loadSummary" :loading="summaryLoading">刷新摘要</el-button>
+
+    <!-- 账户摘要卡片 -->
+    <div v-if="summary.length" class="summary-cards">
+      <el-card v-for="s in summary" :key="s.account_id" class="summary-card" shadow="hover" @click="goInstances(s.account_id)">
+        <div class="summary-head">
+          <span class="summary-name">{{ s.name }}</span>
+          <el-tag size="small" type="info">{{ s.region }}</el-tag>
+        </div>
+        <div class="summary-stats">
+          <div class="stat"><div class="stat-num">{{ s.running_count }}<span class="stat-sub">/{{ s.instance_count }}</span></div><div class="stat-label">运行中/总数</div></div>
+          <div class="stat"><div class="stat-num">{{ s.ocpu_used }}</div><div class="stat-label">OCPU 已用</div></div>
+          <div class="stat"><div class="stat-num">{{ s.memory_used_gb }}<span class="stat-unit">G</span></div><div class="stat-label">内存已用</div></div>
+        </div>
+        <div class="summary-quotas">
+          <div v-for="q in quotaRows(s)" :key="q.key" class="quota-row">
+            <span class="quota-label">{{ q.label }}</span>
+            <el-progress :percentage="q.pct" :color="q.color" :show-text="false" class="quota-bar" />
+            <span class="quota-text">{{ q.text }}</span>
+          </div>
+        </div>
+      </el-card>
+    </div>
+    <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
     <el-table :data="accounts" v-loading="loading" style="margin-top: 12px" border>
       <el-table-column prop="name" label="别名" width="140" />
@@ -104,9 +128,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies } from '../api/client.js'
+import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary } from '../api/client.js'
 
+const router = useRouter()
 const REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
 const STATUS = {
   healthy: ['正常', 'success'],
@@ -186,6 +212,45 @@ const load = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// ---------- 账户摘要 ----------
+const summary = ref([])
+const summaryLoading = ref(false)
+const summaryLoaded = ref(false)
+const QUOTA_META = [
+  { key: 'e2', label: 'E2 配额' },
+  { key: 'a1', label: 'ARM 配额' },
+  { key: 'e5', label: 'E5 配额' },
+]
+// 配额行：计算进度条百分比和显示文本
+const quotaRows = (s) => {
+  return QUOTA_META.map((m) => {
+    const q = (s.quotas || {})[m.key] || {}
+    const avail = q.available, used = q.used
+    if (avail == null || used == null) {
+      return { key: m.key, label: m.label, pct: 0, color: '#dcdfe6', text: '未知' }
+    }
+    const total = avail + used
+    const pct = total > 0 ? Math.round((used / total) * 100) : 0
+    const color = pct >= 90 ? '#f56c6c' : pct >= 70 ? '#e6a23c' : '#67c23a'
+    return { key: m.key, label: m.label, pct, color, text: `可用 ${avail}/${total}` }
+  })
+}
+const loadSummary = async () => {
+  summaryLoading.value = true
+  try {
+    summary.value = await getAccountSummary()
+    summaryLoaded.value = true
+  } catch (e) {
+    ElMessage.error('摘要加载失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    summaryLoading.value = false
+  }
+}
+// 卡片点击跳转到实例运维（按账号筛选）
+const goInstances = (accountId) => {
+  router.push({ path: '/instances', query: { account_id: accountId } })
 }
 
 const submitCreate = async () => {
@@ -287,3 +352,68 @@ const submitBind = async () => {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+.summary-card {
+  width: 300px;
+  cursor: pointer;
+}
+.summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.summary-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+.summary-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.stat-num {
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+.stat-sub, .stat-unit {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 400;
+}
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+.quota-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.quota-label {
+  font-size: 12px;
+  color: #606266;
+  width: 52px;
+  flex-shrink: 0;
+}
+.quota-bar {
+  flex: 1;
+}
+.quota-text {
+  font-size: 12px;
+  color: #909399;
+  width: 86px;
+  text-align: right;
+  flex-shrink: 0;
+}
+</style>
