@@ -385,6 +385,16 @@ class OciClient:
         )
 
     # ---------------- 账号类型（订阅） ----------------
+    async def get_tenancy_home_region(self) -> str | None:
+        """查 tenancy 的 home region（GET /20160918/tenancies/{id} 返回 homeRegionKey）。"""
+        try:
+            resp = await self.request("GET", "identity", f"/20160918/tenancies/{self.tenancy_ocid}")
+            if resp.status_code == 200:
+                return resp.json().get("homeRegionKey")
+        except Exception:
+            pass
+        return None
+
     async def get_subscription_info(self, home_region: str | None = None) -> dict:
         """查账号订阅信息：{type: free/paid/None, start_time: datetime/None}。
 
@@ -396,15 +406,19 @@ class OciClient:
         """
         result = {"type": None, "start_time": None}
         try:
-            hr = home_region or self.region
+            # home region 优先用 tenancy 的真实 home region（OSP Gateway 只在 home region 有 endpoint）
+            hr = home_region or await self.get_tenancy_home_region() or self.region
             path = (
                 "/20190111/subscriptions"
                 f"?compartmentId={self.tenancy_ocid}&ospHomeRegion={hr}"
             )
             # 注意：Subscription API 属于 osp-gateway 服务（OCI-Start 用 SubscriptionServiceClient），
             # host 是 osp-gateway.{region}.oraclecloud.com，不是 identity
-            logger.info("订阅查询：GET osp-gateway %s", path[:80])
-            resp = await self.request("GET", "osp-gateway", path)
+            logger.info("订阅查询：GET osp-gateway.%s %s", hr, path[:80])
+            # endpoint host 用 home region
+            url = f"https://osp-gateway.{hr}.oraclecloud.com{path}"
+            headers = self._sign_headers("GET", url, None)
+            resp = await self._client.request("GET", url, headers=headers)
             logger.info("订阅查询返回：HTTP %s", resp.status_code)
             if resp.status_code != 200:
                 logger.warning("查询订阅列表失败：HTTP %s，body=%.200s", resp.status_code, resp.text)
