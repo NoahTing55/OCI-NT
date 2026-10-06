@@ -241,6 +241,7 @@ const onAccountChange = () => {
   if (a && a.region) form.value.region = a.region
   clearOciOptions()
   fetchImages()
+  fetchComps()  // 选账号后自动加载 compartment 列表，不用手动点获取
 }
 
 const needAccountRegion = () => {

@@ -80,7 +80,7 @@
             <span style="margin-left: 8px; font-size: 12px; color: #909399">不做机型特判，配错靠 OCI 400 拦截</span>
           </el-form-item>
           <el-form-item label="每账号台数" required>
-            <el-input-number v-model="form.count_per_account" :min="1" :max="10" />
+            <el-input-number v-model="form.count_per_account" :min="1" />
           </el-form-item>
           <el-form-item label="命名前缀" required>
             <el-input v-model="form.name_prefix" placeholder="如 e5，实例名为 e5-01、e5-02…" />
@@ -374,6 +374,7 @@ const onRefAccountChange = () => {
   refRegion.value = (a && a.defaultRegion) || ''
   clearRefOptions()
   fetchRefImages()
+  fetchRefComps()  // 选参考账号后自动加载 compartment 列表
 }
 
 const needRefAccountRegion = () => {
