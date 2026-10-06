@@ -401,7 +401,9 @@ class OciClient:
                 "/20190111/subscriptions"
                 f"?compartmentId={self.tenancy_ocid}&ospHomeRegion={hr}"
             )
-            resp = await self.request("GET", "identity", path)
+            # 注意：Subscription API 属于 osp-gateway 服务（OCI-Start 用 SubscriptionServiceClient），
+            # host 是 osp-gateway.{region}.oraclecloud.com，不是 identity
+            resp = await self.request("GET", "osp-gateway", path)
             if resp.status_code != 200:
                 logger.debug("查询订阅列表失败：HTTP %s", resp.status_code)
                 return result
