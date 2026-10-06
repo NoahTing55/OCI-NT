@@ -84,7 +84,9 @@ alembic upgrade head   # 0001_m2 是幂等的：只建缺失的表、只加缺�
 ## Docker 一键运行（单端口部署）
 
 ```bash
-cd oci-panel
+# 克隆到部署目录（/OPT 需要写权限，没有就加 sudo）
+git clone https://github.com/NoahTing555/OCI-NT.git /OPT/OCI-NT
+cd /OPT/OCI-NT
 cp .env.example .env
 # 编辑 .env，至少填写 MASTER_KEY（生成方法见 .env.example 注释）
 # 如需网页改不动的配置（MASTER_KEY/数据库/初始管理员），也在 .env 里填好
@@ -121,7 +123,7 @@ npm run dev   # http://localhost:5173，/api 通过 vite 代理转到后端
 ## 目录结构
 
 ```
-oci-panel/
+/OPT/OCI-NT/
 ├── docker-compose.yml      # api / postgres / redis / worker(Celery)，只暴露 8035
 ├── .env.example            # 环境变量模板（含 MASTER_KEY 等占位符）
 ├── backend/
