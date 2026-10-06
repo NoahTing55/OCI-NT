@@ -28,27 +28,51 @@
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
     <el-table :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table">
-      <el-table-column prop="name" label="别名" width="130" />
+      <!-- 🛡️ 代理绑定状态：点击快速配置代理 -->
+      <el-table-column width="52" align="center">
+        <template #header><span title="绑定代理" style="opacity: .55">🛡️</span></template>
+        <template #default="{ row }">
+          <span class="shield-btn" :class="{ bound: !!row.proxy_id }"
+            :title="row.proxy ? `已绑定：${row.proxy.name}，点击配置` : '未绑定代理，点击配置'"
+            @click="openBind(row)">🛡️</span>
+        </template>
+      </el-table-column>
+      <!-- 别名：点击单元格直接改 -->
+      <el-table-column label="别名" min-width="130">
+        <template #default="{ row }">
+          <el-input v-if="isEditing(row.id, 'name')" v-model="cellVal" size="small" ref="cellInputRef"
+            @keyup.enter="saveCell(row, 'name')" @blur="saveCell(row, 'name')" />
+          <span v-else class="cell-editable" @click="startEdit(row, 'name')" :title="'点击修改：' + row.name">{{ row.name }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="region" label="区域" width="140" />
+      <!-- 成本：点击单元格直接改 -->
+      <el-table-column label="成本" width="100" align="center">
+        <template #default="{ row }">
+          <el-input-number v-if="isEditing(row.id, 'cost')" v-model="cellVal" size="small" :min="0" :precision="2"
+            @keyup.enter="saveCell(row, 'cost')" @blur="saveCell(row, 'cost')" ref="cellInputRef" style="width: 96px" />
+          <span v-else class="cell-editable" @click="startEdit(row, 'cost')" title="点击修改成本">{{ fmtCost(row.cost) }}</span>
+        </template>
+      </el-table-column>
+      <!-- 存活天数徽标 -->
+      <el-table-column label="存活天数" width="90" align="center">
+        <template #default="{ row }"><el-tag size="small" class="days-chip">{{ aliveDays(row) }}</el-tag></template>
+      </el-table-column>
+      <!-- 抢机任务状态 -->
+      <el-table-column label="抢机任务" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small" class="task-badge"><span class="spin-dot"></span>抢机中</el-tag>
+          <el-tag v-else-if="row.snipe_task_status === 'paused'" type="warning" size="small">已暂停</el-tag>
+          <el-tag v-else type="info" size="small">无</el-tag>
+        </template>
+      </el-table-column>
+      <!-- 实例数：点击跳转筛选 -->
       <el-table-column label="实例数" width="80" align="center">
         <template #default="{ row }">
           <el-link type="primary" @click="goInstances(row.id)">{{ row.instance_count ?? 0 }}</el-link>
         </template>
       </el-table-column>
-      <el-table-column label="抢机任务" width="100" align="center">
-        <template #default="{ row }">
-          <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small">抢机中</el-tag>
-          <el-tag v-else-if="row.snipe_task_status === 'paused'" type="warning" size="small">已暂停</el-tag>
-          <el-tag v-else type="info" size="small">无</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="绑定代理" width="140">
-        <template #default="{ row }">{{ row.proxy ? row.proxy.name : '直连' }}</template>
-      </el-table-column>
-      <el-table-column label="存活天数" width="90" align="center">
-        <template #default="{ row }">{{ aliveDays(row) }}</template>
-      </el-table-column>
-      <el-table-column label="账号状态" width="100" align="center">
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="STATUS[row.status]?.[1] || ''" size="small">{{ STATUS[row.status]?.[0] || row.status }}</el-tag>
         </template>
@@ -56,16 +80,21 @@
       <el-table-column label="创建时间" width="110" align="center">
         <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-      <el-table-column label="操作" width="380" fixed="right">
+      <!-- 操作收进下拉菜单 -->
+      <el-table-column label="操作" width="70" align="center" fixed="right">
         <template #default="{ row }">
-          <div class="op-btns">
-            <el-button size="small" @click="checkOne(row)" :loading="row._checking">检查</el-button>
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="primary" @click="goCreateInstance(row.id)">创建实例</el-button>
-            <el-button size="small" @click="openBind(row)">绑定代理</el-button>
-            <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
-          </div>
+          <el-dropdown trigger="click" @command="(cmd) => handleOp(cmd, row)">
+            <el-button size="small">···</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="create">创建实例</el-dropdown-item>
+                <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                <el-dropdown-item command="bind">绑定代理</el-dropdown-item>
+                <el-dropdown-item command="check">存活检查</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -164,7 +193,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary } from '../api/client.js'
@@ -297,6 +326,45 @@ const goInstances = (accountId) => {
 // 跳转抢机页并预选账号（Sniper.vue 的 onMounted 会读取 account_id 自动打开新建对话框）
 const goCreateInstance = (accountId) => {
   router.push({ path: '/sniper', query: { account_id: accountId } })
+}
+// ---------- 单元格点击编辑（别名/成本，OCI-Start 式：点击变输入框，回车/失焦保存） ----------
+const editingCell = ref({ id: null, field: null })
+const cellVal = ref('')
+const cellInputRef = ref(null)
+const isEditing = (id, field) => editingCell.value.id === id && editingCell.value.field === field
+const startEdit = (row, field) => {
+  editingCell.value = { id: row.id, field }
+  cellVal.value = field === 'cost' ? Number(row.cost ?? 0) : (row[field] ?? '')
+  nextTick(() => { try { cellInputRef.value?.focus() } catch (e) {} })
+}
+const cancelEdit = () => { editingCell.value = { id: null, field: null } }
+const saveCell = async (row, field) => {
+  if (!isEditing(row.id, field)) return  // 回车+失焦会触发两次，第二次直接返回
+  const v = field === 'cost' ? Number(cellVal.value) : String(cellVal.value).trim()
+  cancelEdit()
+  if (field === 'name') {
+    if (!v) return ElMessage.error('别名不能为空')
+    if (v === row.name) return
+  } else if (field === 'cost') {
+    if (Number(row.cost ?? 0) === v) return
+  }
+  try {
+    await updateAccount(row.id, { [field]: v })
+    ElMessage.success('已保存')
+    load()
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e.response?.data?.detail || e.message))
+  }
+}
+// 成本格式化：保留 2 位小数
+const fmtCost = (v) => Number(v ?? 0).toFixed(2)
+// 操作下拉菜单分发
+const handleOp = (cmd, row) => {
+  if (cmd === 'create') goCreateInstance(row.id)
+  else if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'bind') openBind(row)
+  else if (cmd === 'check') checkOne(row)
+  else if (cmd === 'delete') remove(row)
 }
 // 存活天数：created_at 距今天数
 const aliveDays = (row) => {
@@ -480,18 +548,53 @@ onMounted(load)
   flex-shrink: 0;
 }
 
-/* 账号表格：操作按钮单行对齐 */
-.op-btns {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  align-items: center;
-}
-.op-btns .el-button {
-  margin-left: 0;
-}
 /* 表格紧凑精致 */
 .acct-table {
   font-size: 13px;
+}
+/* 🛡️ 代理盾牌：未绑定灰色，已绑定蓝色 */
+.shield-btn {
+  cursor: pointer;
+  font-size: 17px;
+  filter: grayscale(1);
+  opacity: .45;
+  display: inline-block;
+  transition: transform .15s;
+}
+.shield-btn.bound {
+  filter: none;
+  opacity: 1;
+}
+.shield-btn:hover {
+  transform: scale(1.2);
+}
+/* 可点击编辑的单元格 */
+.cell-editable {
+  cursor: pointer;
+  border-bottom: 1px dashed #c0c4cc;
+}
+.cell-editable:hover {
+  color: #409eff;
+  border-color: #409eff;
+}
+/* 存活天数徽标 */
+.days-chip {
+  font-weight: 600;
+}
+/* 抢机中：旋转圆点 */
+.spin-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #67c23a;
+  margin-right: 5px;
+  vertical-align: 1px;
+  animation: spinPulse 1.1s linear infinite;
+}
+@keyframes spinPulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.7); }
+  100% { opacity: 1; transform: scale(1); }
 }
 </style>
