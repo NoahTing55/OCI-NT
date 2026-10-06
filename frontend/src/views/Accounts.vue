@@ -27,27 +27,45 @@
     </div>
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
-    <el-table :data="accounts" v-loading="loading" style="margin-top: 12px" border>
-      <el-table-column prop="name" label="别名" width="140" />
-      <el-table-column prop="region" label="区域" width="150" />
-      <el-table-column label="绑定代理" width="160">
-        <template #default="{ row }">{{ row.proxy ? row.proxy.name : '直连' }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="120">
+    <el-table :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table">
+      <el-table-column prop="name" label="别名" width="130" />
+      <el-table-column prop="region" label="区域" width="140" />
+      <el-table-column label="实例数" width="80" align="center">
         <template #default="{ row }">
-          <el-tag :type="STATUS[row.status]?.[1] || ''">{{ STATUS[row.status]?.[0] || row.status }}</el-tag>
+          <el-link type="primary" @click="goInstances(row.id)">{{ row.instance_count ?? 0 }}</el-link>
         </template>
       </el-table-column>
-      <el-table-column prop="last_check_at" label="最后检查" width="180">
-        <template #default="{ row }">{{ row.last_check_at || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="remark" label="备注" />
-      <el-table-column label="操作" width="320" fixed="right">
+      <el-table-column label="抢机任务" width="100" align="center">
         <template #default="{ row }">
-          <el-button size="small" @click="checkOne(row)" :loading="row._checking">检查</el-button>
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" @click="openBind(row)">绑定代理</el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small">抢机中</el-tag>
+          <el-tag v-else-if="row.snipe_task_status === 'paused'" type="warning" size="small">已暂停</el-tag>
+          <el-tag v-else type="info" size="small">无</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="绑定代理" width="140">
+        <template #default="{ row }">{{ row.proxy ? row.proxy.name : '直连' }}</template>
+      </el-table-column>
+      <el-table-column label="存活天数" width="90" align="center">
+        <template #default="{ row }">{{ aliveDays(row) }}</template>
+      </el-table-column>
+      <el-table-column label="账号状态" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag :type="STATUS[row.status]?.[1] || ''" size="small">{{ STATUS[row.status]?.[0] || row.status }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="创建时间" width="110" align="center">
+        <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+      </el-table-column>
+      <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+      <el-table-column label="操作" width="380" fixed="right">
+        <template #default="{ row }">
+          <div class="op-btns">
+            <el-button size="small" @click="checkOne(row)" :loading="row._checking">检查</el-button>
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="primary" @click="goCreateInstance(row.id)">创建实例</el-button>
+            <el-button size="small" @click="openBind(row)">绑定代理</el-button>
+            <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -276,6 +294,21 @@ const loadSummary = async () => {
 const goInstances = (accountId) => {
   router.push({ path: '/instances', query: { account_id: accountId } })
 }
+// 跳转抢机页并预选账号（Sniper.vue 的 onMounted 会读取 account_id 自动打开新建对话框）
+const goCreateInstance = (accountId) => {
+  router.push({ path: '/sniper', query: { account_id: accountId } })
+}
+// 存活天数：created_at 距今天数
+const aliveDays = (row) => {
+  if (!row.created_at) return '-'
+  const d = Math.floor((Date.now() - new Date(row.created_at).getTime()) / 86400000)
+  return (d < 0 ? 0 : d) + ' 天'
+}
+// 创建时间只显示日期
+const fmtDate = (v) => {
+  if (!v) return '-'
+  return String(v).slice(0, 10)
+}
 
 const openCreate = () => {
   form.value.proxy_id = defaultProxyId()
@@ -445,5 +478,20 @@ onMounted(load)
   width: 86px;
   text-align: right;
   flex-shrink: 0;
+}
+
+/* 账号表格：操作按钮单行对齐 */
+.op-btns {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  align-items: center;
+}
+.op-btns .el-button {
+  margin-left: 0;
+}
+/* 表格紧凑精致 */
+.acct-table {
+  font-size: 13px;
 }
 </style>

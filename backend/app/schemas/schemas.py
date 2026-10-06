@@ -56,6 +56,10 @@ class AccountOut(BaseModel):
     last_check_at: datetime | None
     remark: str
     proxy: ProxyBrief | None = None
+    created_at: datetime | None = None  # 账号创建时间（存活天数用）
+    instance_count: int = 0  # 该账号实例数（从实例缓存统计，无缓存则为 0）
+    # 该账号抢机任务状态：running（有进行中）/ paused（有已暂停）/ none（无）
+    snipe_task_status: str = "none"
 
 
 class BindProxyIn(BaseModel):

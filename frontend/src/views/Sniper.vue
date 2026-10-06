@@ -197,6 +197,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAccounts,
@@ -550,7 +551,16 @@ const stopLogPoll = () => {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // 从账号管理"创建实例"跳转过来：预选账号并自动打开新建对话框
+  const qid = Number(useRoute().query.account_id)
+  if (qid) {
+    await openCreate()
+    form.value.account_id = qid
+    onAccountChange()
+  }
+})
 onUnmounted(stopLogPoll)
 </script>
 
