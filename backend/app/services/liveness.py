@@ -77,16 +77,17 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
 
     status_code = None
     err = None
-    sub_type = None
+    sub_info = {"type": None, "start_time": None}
     try:
         resp = await client.get_user()
         status_code = resp.status_code
-        # 存活检查顺带查账号类型（失败不影响主流程）
+        # 存活检查顺带查订阅信息（类型+注册时间，失败不影响主流程）
+        # 对标 OCI-Start：registerTime 取 subscription.getTimeStart()
         if status_code == 200:
             try:
-                sub_type = await client.get_subscription_type()
+                sub_info = await client.get_subscription_info()
             except Exception:
-                logger.debug("账号 %s 查订阅类型异常", account.name, exc_info=True)
+                logger.debug("账号 %s 查订阅信息异常", account.name, exc_info=True)
     except httpx.TimeoutException:
         err = "timeout"
     except (httpx.ConnectError, httpx.ProxyError):
@@ -100,8 +101,11 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     new_status, message = _classify(status_code, err)
     account.status = new_status
     account.last_check_at = datetime.utcnow()
-    if sub_type:
-        account.account_type = sub_type
+    if sub_info["type"]:
+        account.account_type = sub_info["type"]
+    # 订阅开始时间即账号注册时间（OCI-Start 同款逻辑）；用户手动填过的优先保留
+    if sub_info["start_time"] and not account.registered_at:
+        account.registered_at = sub_info["start_time"]
     db.commit()
     logger.info("账号「%s」存活检查：%s（%s）", account.name, STATUS_TEXT[new_status], message)
 

@@ -385,14 +385,16 @@ class OciClient:
         )
 
     # ---------------- 账号类型（订阅） ----------------
-    async def get_subscription_type(self, home_region: str | None = None) -> str | None:
-        """查账号订阅类型：free 免费 / paid 付费 / None 未知。
+    async def get_subscription_info(self, home_region: str | None = None) -> dict:
+        """查账号订阅信息：{type: free/paid/None, start_time: datetime/None}。
 
         调 osp-gateway Subscription API（identity 服务）：
         GET /20190111/subscriptions?compartmentId={tenancy}&ospHomeRegion={home}
-        取第一条的 subscriptionTier：ALWAYS_FREE/FREE → free，PAID → paid。
-        任何失败（无权限/无订阅/网络异常）都返回 None，不抛异常。
+        取第一条的 subscriptionTier（ALWAYS_FREE/FREE → free，PAID → paid）
+        和 timeStart（订阅开始时间，即账号注册时间）。
+        任何失败都返回 {type: None, start_time: None}，不抛异常。
         """
+        result = {"type": None, "start_time": None}
         try:
             hr = home_region or self.region
             path = (
@@ -402,20 +404,36 @@ class OciClient:
             resp = await self.request("GET", "identity", path)
             if resp.status_code != 200:
                 logger.debug("查询订阅列表失败：HTTP %s", resp.status_code)
-                return None
+                return result
             items = resp.json()
             # API 直接返回数组；兼容包一层的格式
             if isinstance(items, dict):
                 items = items.get("items", [])
             if not items:
-                return None
-            tier = str(items[0].get("subscriptionTier", "")).upper()
+                return result
+            sub = items[0]
+            tier = str(sub.get("subscriptionTier", "")).upper()
             if tier in ("ALWAYS_FREE", "FREE"):
-                return "free"
-            if tier == "PAID":
-                return "paid"
-            logger.debug("未知 subscriptionTier：%s", tier)
-            return None
-        except Exception:
-            logger.debug("查询订阅类型异常", exc_info=True)
-            return None
+                result["type"] = "free"
+            elif tier == "PAID":
+                result["type"] = "paid"
+            else:
+                logger.debug("未知 subscriptionTier：%s", tier)
+            # timeStart 是订阅开始时间（ISO8601），即账号注册时间
+            ts = sub.get("timeStart") or sub.get("timeCreated")
+            if ts:
+                try:
+                    from datetime import datetime
+                    # 处理 "2024-01-15T10:30:00.000Z" 格式
+                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    result["start_time"] = dt.replace(tzinfo=None)
+                except (ValueError, TypeError):
+                    logger.debug("解析订阅时间失败：%s", ts)
+            return result
+        except Exception as e:
+            logger.debug("查询订阅信息异常：%s", str(e)[:100])
+            return result
+
+    async def get_subscription_type(self, home_region: str | None = None) -> str | None:
+        """查账号订阅类型：free 免费 / paid 付费 / None 未知（兼容旧调用）。"""
+        return (await self.get_subscription_info(home_region))["type"]

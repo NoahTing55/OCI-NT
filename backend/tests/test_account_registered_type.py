@@ -112,11 +112,14 @@ class FakeResp:
         return self._data
 
 
-def make_client(tier=None, status=200, empty=False):
+def make_client(tier=None, status=200, empty=False, time_start=None):
     c = OciClient.__new__(OciClient)
     c.tenancy_ocid = "ocid1.tenancy.oc1..x"
     c.region = "ap-seoul-1"
-    data = [] if empty else ([{"subscriptionTier": tier}] if tier else [{}])
+    item = {"subscriptionTier": tier} if tier else {}
+    if time_start:
+        item["timeStart"] = time_start
+    data = [] if empty else [item]
 
     async def fake_request(method, service, path, json_body=None):
         assert service == "identity", service
@@ -140,6 +143,14 @@ async def run_sub_tests():
           await make_client(empty=True).get_subscription_type() is None)
     check("非 200 → None",
           await make_client("PAID", status=403).get_subscription_type() is None)
+
+    # timeStart 解析（对标 OCI-Start subscription.getTimeStart()）
+    info = await make_client("PAID", time_start="2024-03-15T10:30:00.000Z").get_subscription_info()
+    check("timeStart 解析", info["start_time"] is not None and info["start_time"].year == 2024
+          and info["start_time"].month == 3 and info["start_time"].day == 15)
+    check("type+start_time 同返", info["type"] == "paid")
+    info2 = await make_client("FREE").get_subscription_info()
+    check("无 timeStart → None", info2["start_time"] is None and info2["type"] == "free")
 
     # 网络异常不抛
     c = make_client("PAID")
