@@ -38,17 +38,21 @@ def check(name, cond, extra=""):
 
 
 NEW_COLS = ("root_password", "target_count", "success_count", "interval_seconds")
+# 0010 新增：accounts.cost（与 snipe_tasks 的列分开模拟）
+ACCOUNT_NEW_COLS = ("cost",)
 
 
 def cols_of(table):
     return {c["name"] for c in inspect(engine).get_columns(table)}
 
 
-# 1. 模拟老库：create_all 建表（当前模型），然后删掉 4 个新列
+# 1. 模拟老库：create_all 建表（当前模型），然后删掉新列
 Base.metadata.create_all(bind=engine)
 with engine.begin() as conn:
     for col in NEW_COLS:
         conn.execute(text(f"ALTER TABLE snipe_tasks DROP COLUMN {col}"))
+    for col in ACCOUNT_NEW_COLS:
+        conn.execute(text(f"ALTER TABLE accounts DROP COLUMN {col}"))
 
 tables = set(inspect(engine).get_table_names())
 check("模拟老库无 alembic_version 记录", "alembic_version" not in tables)
@@ -58,9 +62,10 @@ check("模拟老库缺 4 个新列", not set(NEW_COLS) & cols_of("snipe_tasks"))
 run_db_migrations(engine)
 
 check("4 个新列全部补上", set(NEW_COLS) <= cols_of("snipe_tasks"))
+check("accounts.cost 列补上", set(ACCOUNT_NEW_COLS) <= cols_of("accounts"))
 with engine.connect() as conn:
     version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-check("版本记录为 0009（当前 head）", version == "0009", str(version))
+check("版本记录为 0010（当前 head）", version == "0010", str(version))
 check("老库已有数据表未被破坏（accounts 表存在）", "accounts" in set(inspect(engine).get_table_names()))
 
 # 3. 幂等：再跑一次无异常、无副作用
@@ -70,7 +75,7 @@ after = cols_of("snipe_tasks")
 check("第二次运行幂等（列集合不变）", before == after)
 with engine.connect() as conn:
     version2 = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-check("第二次运行版本仍为 0009", version2 == "0009", str(version2))
+check("第二次运行版本仍为 0010", version2 == "0010", str(version2))
 
 # 4. 全新空库：无表时 upgrade 应直接到 head（不抛异常）
 engine.dispose()

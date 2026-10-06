@@ -28,6 +28,7 @@ class AccountUpdate(BaseModel):
     region: str | None = None
     compartment_ocid: str | None = None
     remark: str | None = None
+    cost: float | None = None
     private_key: str | None = Field(default=None, description="传了才更新私钥")
 
 
@@ -60,6 +61,7 @@ class AccountOut(BaseModel):
     instance_count: int = 0  # 该账号实例数（从实例缓存统计，无缓存则为 0）
     # 该账号抢机任务状态：running（有进行中）/ paused（有已暂停）/ none（无）
     snipe_task_status: str = "none"
+    cost: float = 0  # 账号成本（OCI-Start 式，可点击修改）
 
 
 class BindProxyIn(BaseModel):

@@ -36,6 +36,7 @@ class Account(Base):
     status = Column(String(32), nullable=False, default="unchecked")
     last_check_at = Column(DateTime, nullable=True)
     remark = Column(String(255), default="")
+    cost = Column(Float, default=0)  # 账号成本（OCI-Start 式，可点击修改）
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
 

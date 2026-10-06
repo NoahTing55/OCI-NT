@@ -131,6 +131,8 @@ def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(g
         account.compartment_ocid = data.compartment_ocid.strip()
     if data.remark is not None:
         account.remark = data.remark
+    if data.cost is not None:
+        account.cost = data.cost
     if data.private_key:
         if "PRIVATE KEY" not in data.private_key:
             raise HTTPException(status_code=400, detail="private_key 看起来不是 PEM 私钥")
