@@ -66,10 +66,12 @@
           <el-tag v-else type="info" size="small">无</el-tag>
         </template>
       </el-table-column>
-      <!-- 账号类型：免费/付费/未知 -->
+      <!-- 账号类型：免费/试用/升级/未知（对标 OCI-Start） -->
       <el-table-column label="账号类型" width="90" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.account_type === 'free'" type="success" size="small">免费</el-tag>
+          <el-tag v-else-if="row.account_type === 'trial'" type="warning" size="small">试用</el-tag>
+          <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">升级</el-tag>
           <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
           <el-tag v-else type="info" size="small">未知</el-tag>
         </template>
