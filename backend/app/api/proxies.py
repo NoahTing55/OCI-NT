@@ -11,7 +11,13 @@ router = APIRouter()
 
 @router.get("", response_model=list[ProxyOut])
 def list_proxies(db: Session = Depends(get_db)):
-    return [ProxyOut.model_validate(p) for p in db.query(Proxy).order_by(Proxy.id.desc()).all()]
+    result = []
+    for p in db.query(Proxy).order_by(Proxy.id.desc()).all():
+        out = ProxyOut.model_validate(p)
+        # 透出绑定状态，供新建账号时默认选中未使用代理
+        out.bound_account_name = p.account.name if p.account is not None else None
+        result.append(out)
+    return result
 
 @router.post("", response_model=ProxyOut)
 def create_proxy(data: ProxyCreate, db: Session = Depends(get_db)):

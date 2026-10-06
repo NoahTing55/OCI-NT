@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-button type="primary" @click="createVisible = true">新建账号</el-button>
+    <el-button type="primary" @click="openCreate">新建账号</el-button>
     <el-button @click="checkAll" :loading="checkingAll">全部存活检查</el-button>
     <el-button @click="loadSummary" :loading="summaryLoading">刷新摘要</el-button>
 
@@ -90,6 +90,25 @@
           </el-form>
         </el-tab-pane>
       </el-tabs>
+      <el-form :model="form" label-width="110px" style="margin-top: 4px">
+        <el-form-item label="绑定代理">
+          <el-select v-model="form.proxy_id" placeholder="选择代理" style="width: 100%">
+            <el-option :value="null" label="直连（不使用代理）" />
+            <el-option
+              v-for="p in proxies"
+              :key="p.id"
+              :value="p.id"
+              :disabled="!!p.bound_account_name"
+              :label="p.bound_account_name ? `${p.name}（已绑定：${p.bound_account_name}）` : `${p.name}（${p.scheme}://${p.host}:${p.port}）`"
+            >
+              <span>{{ p.name }}（{{ p.scheme }}://{{ p.host }}:{{ p.port }}）</span>
+              <span v-if="p.bound_account_name" style="float: right; color: #e6a23c; font-size: 12px">已绑定：{{ p.bound_account_name }}</span>
+              <span v-else style="float: right; color: #67c23a; font-size: 12px">{{ p.status === 'ok' ? `延迟 ${p.latency_ms ?? '-'}ms` : '未使用' }}</span>
+            </el-option>
+          </el-select>
+          <div style="font-size:12px;color:#909399">默认选中第一个未使用的代理；一代理只能绑一个账号</div>
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
         <el-button type="primary" @click="submitCreate" :loading="submitting">保存</el-button>
@@ -154,7 +173,12 @@ const bindVisible = ref(false)
 const binding = ref(false)
 const bindProxyId = ref(null)
 const bindAccount = ref(null)
-const form = ref({ name: '', tenancy_ocid: '', user_ocid: '', fingerprint: '', private_key: '', region: 'ap-seoul-1', remark: '' })
+const form = ref({ name: '', tenancy_ocid: '', user_ocid: '', fingerprint: '', private_key: '', region: 'ap-seoul-1', remark: '', proxy_id: null })
+// 默认选中第一个未使用的代理；没有可用时为 null（直连）
+const defaultProxyId = () => {
+  const free = proxies.value.find((p) => !p.bound_account_name)
+  return free ? free.id : null
+}
 
 // ---------- 编辑账号（别名/区域/备注） ----------
 const editVisible = ref(false)
@@ -253,13 +277,19 @@ const goInstances = (accountId) => {
   router.push({ path: '/instances', query: { account_id: accountId } })
 }
 
+const openCreate = () => {
+  form.value.proxy_id = defaultProxyId()
+  createTab.value = 'manual'
+  createVisible.value = true
+}
+
 const submitCreate = async () => {
   submitting.value = true
   try {
     await createAccount(form.value)
     ElMessage.success('账号已创建（私钥已加密存储）')
     createVisible.value = false
-    form.value = { name: '', tenancy_ocid: '', user_ocid: '', fingerprint: '', private_key: '', region: 'ap-seoul-1', remark: '' }
+    form.value = { name: '', tenancy_ocid: '', user_ocid: '', fingerprint: '', private_key: '', region: 'ap-seoul-1', remark: '', proxy_id: null }
     load()
   } catch (e) {
     ElMessage.error('创建失败：' + (e.response?.data?.detail || e.message))

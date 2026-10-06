@@ -19,6 +19,8 @@ class AccountCreate(BaseModel):
     # 实例列表查询用的 compartment OCID；为空则用 tenancy OCID（根 compartment）
     compartment_ocid: str = ""
     remark: str = ""
+    # 新建时直接绑定的代理 id；None 表示直连
+    proxy_id: int | None = None
 
 
 class AccountUpdate(BaseModel):
@@ -83,6 +85,8 @@ class ProxyOut(BaseModel):
     status: str
     latency_ms: int | None
     remark: str
+    # 该代理当前绑定的账号别名；未绑定为 None
+    bound_account_name: str | None = None
 
 
 # ---------------- 存活检查 ----------------

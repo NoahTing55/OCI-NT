@@ -24,6 +24,16 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
         private_key_enc = encrypt_text(data.private_key)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    # 新建时直接绑定代理：检查代理存在且未被其他账号占用
+    if data.proxy_id is not None:
+        proxy = db.get(Proxy, data.proxy_id)
+        if not proxy:
+            raise HTTPException(status_code=404, detail="代理不存在")
+        if proxy.account is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"该代理已被账号「{proxy.account.name}」绑定（单API单代理，一代理只能绑一个账号）",
+            )
     account = Account(
         name=data.name,
         tenancy_ocid=data.tenancy_ocid.strip(),
@@ -33,6 +43,7 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
         region=data.region.strip(),
         compartment_ocid=data.compartment_ocid.strip(),
         remark=data.remark,
+        proxy_id=data.proxy_id,
     )
     db.add(account)
     db.commit()
