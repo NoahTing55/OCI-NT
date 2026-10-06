@@ -39,6 +39,8 @@ async def _fetch_one(account: Account) -> tuple:
                 "availability_domain": inst.get("availabilityDomain"),
                 "compartment_id": inst.get("compartmentId"),
                 "time_created": inst.get("timeCreated"),
+                # shapeConfig：{"ocpus": x, "memoryInGBs": y}，账户摘要统计 OCPU/内存用
+                "shape_config": inst.get("shapeConfig") or {},
                 "public_ip": None,
                 "private_ip": None,
             }
