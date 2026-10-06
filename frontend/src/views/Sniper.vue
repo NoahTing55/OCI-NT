@@ -48,7 +48,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="区域" required>
-          <el-input v-model="form.region" placeholder="如 ap-seoul-1" @change="clearOciOptions" />
+          <el-input v-model="form.region" placeholder="如 ap-seoul-1" @change="onRegionChange" />
         </el-form-item>
         <el-form-item label="Compartment">
           <div style="display: flex; gap: 8px; width: 100%">
@@ -67,18 +67,21 @@
           <el-input-number v-model="form.memory_gb" :min="1" :step="1" style="width: 130px" />
           <span style="margin-left: 4px">GB</span>
         </el-form-item>
-        <el-form-item label="镜像 OCID" required>
+        <el-form-item label="镜像" required>
           <div style="display: flex; gap: 8px; width: 100%">
-            <el-select v-if="imageOptions.length" v-model="form.image_ocid" filterable allow-create
-              placeholder="选择或手动输入镜像 OCID" style="flex: 1">
-              <el-option v-for="o in imageOptions" :key="o.ocid" :value="o.ocid"
-                :label="`${o.display_name}（${o.operating_system}）`" />
+            <el-select v-model="imageOs" placeholder="操作系统" style="flex: 1"
+              :loading="fetching.image" @change="onImageOsChange">
+              <el-option v-for="os in imageOsList" :key="os" :value="os" :label="os" />
             </el-select>
-            <el-input v-else v-model="form.image_ocid" placeholder="ocid1.image.oc1...." style="flex: 1" />
-            <el-button :loading="fetching.image" @click="fetchImages">获取</el-button>
+            <el-select v-model="form.image_ocid" filterable allow-create
+              placeholder="系统版本（可直接粘贴 OCID）" style="flex: 1">
+              <el-option v-for="v in imageVersionList" :key="v.ocid" :value="v.ocid"
+                :label="v.operating_system_version" />
+            </el-select>
           </div>
+          <template #extra><span style="color:#909399;font-size:12px">按 shape 架构自动拉取：先选操作系统，再选版本</span></template>
         </el-form-item>
-        <el-form-item label="子网 OCID" required>
+        <el-form-item label="子网 OCID">
           <div style="display: flex; gap: 8px; width: 100%">
             <el-select v-if="subnetOptions.length" v-model="form.subnet_ocid" filterable allow-create
               placeholder="选择或手动输入子网 OCID" style="flex: 1">
@@ -88,6 +91,7 @@
             <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
             <el-button :loading="fetching.subnet" @click="fetchSubnets">获取</el-button>
           </div>
+          <template #extra><span style="color:#909399;font-size:12px">留空则任务启动时自动创建网络（有则复用、无则创建）</span></template>
         </el-form-item>
         <el-form-item label="可用域" required>
           <div style="display: flex; gap: 8px; width: 100%">
@@ -100,6 +104,13 @@
           </div>
         </el-form-item>
         <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 snipe-{id}-时间" /></el-form-item>
+        <el-form-item label="Root 密码">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input v-model="form.root_password" placeholder="留空则自动生成随机密码" style="flex: 1" show-password />
+            <el-button @click="form.root_password = randomPassword()">随机</el-button>
+          </div>
+          <template #extra><span style="color:#909399;font-size:12px">通过 cloud-init 在开机时设置，TG 通知会带上</span></template>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -131,7 +142,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAccounts,
@@ -168,28 +179,58 @@ const templateIdx = ref(null)
 const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
-  availability_domain: '', display_name: '', compartment_ocid: '',
+  availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
 })
 
-// OCI 级联选项：点"获取"后从 OCI 实时查询填充
+// 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
+const randomPassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  const arr = new Uint32Array(12)
+  crypto.getRandomValues(arr)
+  return Array.from(arr, (x) => chars[x % chars.length]).join('')
+}
+
+// OCI 级联选项：点"获取"后从 OCI 实时查询填充；镜像为「操作系统→版本」两级下拉
 const adOptions = ref([])
-const imageOptions = ref([])
 const subnetOptions = ref([])
 const compOptions = ref([])
 const fetching = ref({ ad: false, image: false, subnet: false, comp: false })
 
+// 镜像两级下拉状态
+const imageOs = ref('')
+const imageOsList = ref([])
+const imageVersionMap = ref({})  // os -> [{ocid, operating_system_version, ...}]
+const imageVersionList = computed(() => imageVersionMap.value[imageOs.value] || [])
+
+// shape 决定架构：A1 → ARM，E2/E5/E4 → AMD（OCI-Start 按模板卡选架构的思路）
+const shapeArch = computed(() => {
+  const s = (form.value.shape || '').toUpperCase()
+  if (s.includes('A1')) return 'arm'
+  if (s.includes('E2') || s.includes('E5') || s.includes('E4')) return 'amd'
+  return ''
+})
+
 const clearOciOptions = () => {
   adOptions.value = []
-  imageOptions.value = []
   subnetOptions.value = []
   compOptions.value = []
+  imageOs.value = ''
+  imageOsList.value = []
+  imageVersionMap.value = {}
 }
 
-// 选账号后自动带出该账号的默认区域，之前拉取的 OCI 选项失效清空
+// 区域手改后选项失效清空，镜像自动重拉
+const onRegionChange = () => {
+  clearOciOptions()
+  fetchImages()
+}
+
+// 选账号后自动带出该账号的默认区域，之前拉取的 OCI 选项失效清空，镜像自动重拉
 const onAccountChange = () => {
   const a = accounts.value.find((x) => x.id === form.value.account_id)
   if (a && a.region) form.value.region = a.region
   clearOciOptions()
+  fetchImages()
 }
 
 const needAccountRegion = () => {
@@ -222,17 +263,49 @@ const fetchAds = async () => {
 
 const fetchImages = async () => {
   const p = needAccountRegion()
-  if (!p) return
+  const arch = shapeArch.value
+  if (!p || !arch) {
+    imageOs.value = ''
+    imageOsList.value = []
+    imageVersionMap.value = {}
+    return
+  }
   fetching.value.image = true
   try {
-    imageOptions.value = await getOciImages(p)
-    if (!imageOptions.value.length) ElMessage.warning('该区域未返回平台镜像')
+    const list = await getOciImages({ ...p, arch })
+    // 按操作系统分组
+    const map = {}
+    for (const it of list) {
+      const os = it.operating_system || '其他'
+      ;(map[os] = map[os] || []).push(it)
+    }
+    imageOsList.value = Object.keys(map)
+    imageVersionMap.value = map
+    if (imageOsList.value.length) {
+      // 自动选中第一个 OS 和第一个版本，imageId 自动填入
+      imageOs.value = imageOsList.value[0]
+      onImageOsChange()
+    } else {
+      imageOs.value = ''
+      ElMessage.warning('该区域未返回该架构的平台镜像')
+    }
   } catch (e) {
     ElMessage.error('获取镜像失败：' + errDetail(e))
   } finally {
     fetching.value.image = false
   }
 }
+
+// 切换操作系统后自动选中该 OS 的第一个版本
+const onImageOsChange = () => {
+  const vers = imageVersionMap.value[imageOs.value] || []
+  form.value.image_ocid = vers.length ? vers[0].ocid : ''
+}
+
+// shape 变化导致架构变化时重拉镜像（如模板切换、手改 shape）
+watch(shapeArch, () => {
+  if (form.value.account_id) fetchImages()
+})
 
 const fetchSubnets = async () => {
   const p = needAccountRegion()
@@ -290,7 +363,7 @@ const openCreate = async () => {
   Object.assign(form.value, {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
-    availability_domain: '', display_name: '', compartment_ocid: '',
+    availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
   })
   clearOciOptions()
   try {
@@ -313,7 +386,7 @@ const applyTemplate = () => {
 
 const submitCreate = async () => {
   if (!form.value.account_id || !form.value.region || !form.value.shape ||
-      !form.value.image_ocid || !form.value.subnet_ocid || !form.value.availability_domain) {
+      !form.value.image_ocid || !form.value.availability_domain) {
     ElMessage.warning('请填写必填项')
     return
   }
