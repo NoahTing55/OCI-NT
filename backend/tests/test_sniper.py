@@ -132,10 +132,10 @@ with TestClient(app) as client:
     account_id = _make_account()
     body = dict(TASK_BODY, account_id=account_id)
 
-    # 缺子网 → 400
+    # 缺子网 → 200（子网可留空，任务启动时自动建网）
     bad = dict(body, subnet_ocid="")
     r = client.post("/api/sniper", json=bad)
-    check("建任务缺子网 → 400", r.status_code == 400, r.text[:120])
+    check("建任务缺子网 → 200（启动时自动建网）", r.status_code == 200, r.text[:120])
 
     # 账号不存在 → 404
     r = client.post("/api/sniper", json=dict(body, account_id=99999))
@@ -170,6 +170,63 @@ with TestClient(app) as client:
     # 删除（paused 可删）
     r = client.delete(f"/api/sniper/{task1}")
     check("删除任务", r.status_code == 200, r.text[:120])
+
+    # ---------- 3. 抢机数量（target_count） ----------
+    import asyncio  # noqa: E402
+    from unittest.mock import AsyncMock, patch  # noqa: E402
+
+    from app.models.models import SnipeTask  # noqa: E402
+    from app.workers.sniper import sniper_manager  # noqa: E402
+
+    # API：target_count 透出
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, target_count=3))
+    check("建任务 target_count=3 → 200 且透出",
+          r.status_code == 200 and r.json().get("target_count") == 3, r.text[:120])
+    task3 = r.json()["id"]
+    check("新任务 success_count=0", r.json().get("success_count") == 0)
+
+    # 非法值 → 422
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, target_count=0))
+    check("target_count=0 → 422", r.status_code == 422)
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, target_count=101))
+    check("target_count=101 → 422", r.status_code == 422)
+
+    # Worker：_on_success 连续调 3 次，第 3 次才结束
+    async def _run_multi():
+        db = SessionLocal()
+        try:
+            t = db.get(SnipeTask, task3)
+            t.status = "running"
+            db.commit()
+        finally:
+            db.close()
+        cfg = {"account_id": account_id, "account_name": "test", "region": "ap-seoul-1",
+               "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24,
+               "display_name": "snipe-test", "compartment": "ocid1.tenancy.oc1..test",
+               "root_password": "pw123", "target_count": 3}
+        with patch("app.workers.sniper.telegram.send_message", new=AsyncMock()), \
+             patch.object(sniper_manager, "_get_public_ip", new=AsyncMock(return_value="1.2.3.4")), \
+             patch("app.workers.sniper.sync_instance_domains", new=AsyncMock(return_value=[])):
+            results = []
+            for i in range(3):
+                done, cnt = await sniper_manager._on_success(
+                    task3, cfg, None, f"ocid1.instance.oc1..i{i}", "测试", display_name=f"snipe-test-{i+1}")
+                results.append((done, cnt))
+        return results
+
+    results = asyncio.run(_run_multi())
+    check("第1次 _on_success → (False, 1)", results[0] == (False, 1), str(results[0]))
+    check("第2次 _on_success → (False, 2)", results[1] == (False, 2), str(results[1]))
+    check("第3次 _on_success → (True, 3)", results[2] == (True, 3), str(results[2]))
+
+    db = SessionLocal()
+    try:
+        t = db.get(SnipeTask, task3)
+        check("DB success_count=3", t.success_count == 3, str(t.success_count))
+        check("DB status=success（达目标才结束）", t.status == "success", t.status)
+        check("DB instance_ocid 逗号分隔 3 个", len((t.instance_ocid or "").split(",")) == 3, t.instance_ocid)
+    finally:
+        db.close()
 
 print()
 print("共 %d 项：通过 %d，失败 %d" % (len(PASS) + len(FAIL), len(PASS), len(FAIL)))
