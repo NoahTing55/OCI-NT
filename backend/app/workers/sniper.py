@@ -15,21 +15,25 @@
 import asyncio
 import logging
 import random
+import secrets
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
 import httpx
+from fastapi import HTTPException
 from sqlalchemy.orm import joinedload
 
 from app.core import telegram
 from app.core.audit import log_operation
+from app.core.cloud_init import build_root_password_script
 from app.services.settings import get_setting
 from app.core.deps import SessionLocal
 from app.core.oci_factory import build_client_for_account, compartment_of
 from app.models.models import Account, SnipeLog, SnipeTask
 from app.services.cloudflare import sync_instance_domains
 from app.services.instances import invalidate_instance_cache
+from app.services.network_ensure import ensure_subnet
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +314,7 @@ class SniperManager:
                 "display_name": task.display_name
                 or "snipe-%d-%s" % (task.id, datetime.utcnow().strftime("%Y%m%d%H%M")),
                 "compartment": compartment_of(account),
+                "root_password": task.root_password or "",
             }
             client = build_client_for_account(account)
         except ValueError as e:
@@ -320,6 +325,39 @@ class SniperManager:
             return
         finally:
             db.close()
+
+        # 子网留空则任务启动前自动建网（OCI-Start 思路）：有则复用、无则创建
+        if not cfg["subnet_ocid"]:
+            self._log(task_id, "info", "子网未填，自动准备网络（有则复用、无则创建）…")
+            try:
+                cfg["subnet_ocid"] = await ensure_subnet(account, cfg["region"], cfg["ad"])
+            except Exception as e:
+                detail = e.detail if isinstance(e, HTTPException) else str(e)
+                await self._finish_failed(task_id, cfg, "自动建网失败：%s" % detail)
+                return
+            # 写回任务，方便在列表/表单看到实际用的子网
+            db2 = SessionLocal()
+            try:
+                t = db2.get(SnipeTask, task_id)
+                if t:
+                    t.subnet_ocid = cfg["subnet_ocid"]
+                    db2.commit()
+            finally:
+                db2.close()
+            self._log(task_id, "info", "网络已就绪，子网 %s" % cfg["subnet_ocid"])
+
+        # root 密码：没填则生成随机密码，通过 cloud-init 下发（开机即生效）
+        if not cfg["root_password"]:
+            cfg["root_password"] = secrets.token_urlsafe(12)
+            db2 = SessionLocal()
+            try:
+                t = db2.get(SnipeTask, task_id)
+                if t:
+                    t.root_password = cfg["root_password"]
+                    db2.commit()
+            finally:
+                db2.close()
+        user_data = build_root_password_script(cfg["root_password"])
 
         self._log(
             task_id, "info",
@@ -363,6 +401,7 @@ class SniperManager:
                         image_ocid=cfg["image_ocid"],
                         subnet_ocid=cfg["subnet_ocid"],
                         display_name=cfg["display_name"],
+                        user_data=user_data,
                     )
                 except (httpx.TimeoutException, httpx.ConnectError, httpx.ProxyError) as e:
                     unknown_streak += 1
@@ -462,10 +501,6 @@ class SniperManager:
             db3.close()
         # 新实例加入列表，失效实例缓存
         invalidate_instance_cache()
-        await telegram.send_message(
-            "【抢机成功】账号 %s 在 %s 抢到 %s（%sC/%sG），实例：%s"
-            % (cfg["account_name"], cfg["region"], cfg["shape"], cfg["ocpus"], cfg["memory_gb"], instance_ocid)
-        )
         # 新实例公网 IP 需要一点时间分配，最多等约 2 分钟
         ip = None
         for _ in range(12):
@@ -476,6 +511,20 @@ class SniperManager:
             if ip:
                 break
             await self._sleep(task_id, 10)
+        # 开机成功通知：带机器信息、公网 IP 和 root 密码（纯文本发送，无转义问题）
+        await telegram.send_message(
+            "🚀 ————开机成功通知———— 🚀\n"
+            "账号: %s\n"
+            "区域: %s\n"
+            "实例: %s (%s)\n"
+            "Shape: %s (%sC/%sG)\n"
+            "公网 IP: %s\n"
+            "用户: root\n"
+            "密码: %s"
+            % (cfg["account_name"], cfg["region"], cfg["display_name"], instance_ocid,
+               cfg["shape"], cfg["ocpus"], cfg["memory_gb"],
+               ip or "获取中", cfg["root_password"] or "未设置")
+        )
         if not ip:
             self._log(task_id, "warning", "未获取到新实例公网 IP，跳过 CF 自动同步（可在网络页手动同步）")
             return

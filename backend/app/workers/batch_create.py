@@ -19,14 +19,18 @@ import random
 from datetime import datetime
 
 import httpx
+import secrets
+from fastapi import HTTPException
 from sqlalchemy.orm import joinedload
 
 from app.core import telegram
+from app.core.cloud_init import build_root_password_script
 from app.core.audit import log_operation
 from app.core.deps import SessionLocal
 from app.core.oci_factory import build_client_for_account, compartment_of
 from app.models.models import Account, BatchCreateItem, BatchCreateTask
 from app.services.instances import invalidate_instance_cache
+from app.services.network_ensure import ensure_subnet
 from app.workers.sniper import AccountRateLimiter, classify_launch_error
 
 logger = logging.getLogger(__name__)
@@ -226,6 +230,7 @@ class BatchCreateManager:
                     "subnet_ocid": item.subnet_ocid,
                     "ad": item.availability_domain,
                     "display_name": item.display_name,
+                    "root_password": item.root_password or "",
                     "compartment": compartment_of(account),
                 }
                 try:
@@ -233,6 +238,26 @@ class BatchCreateManager:
                 except ValueError as e:
                     _set_item(db, item_id, "failed", last_error="客户端构建失败：%s" % e)
                     return
+                # 子网留空则自动建网（OCI-Start 思路）：有则复用、无则创建
+                if not cfg["subnet_ocid"]:
+                    try:
+                        cfg["subnet_ocid"] = await ensure_subnet(account, cfg["region"], cfg["ad"])
+                    except Exception as e:
+                        detail = e.detail if isinstance(e, HTTPException) else str(e)
+                        _set_item(db, item_id, "failed",
+                                  last_error="自动建网失败：%s" % detail[:500])
+                        return
+                    # 写回 item，方便查看实际用的子网
+                    it = db.get(BatchCreateItem, item_id)
+                    if it:
+                        it.subnet_ocid = cfg["subnet_ocid"]
+                # root 密码：没填则每台独立生成随机密码
+                if not cfg["root_password"]:
+                    cfg["root_password"] = secrets.token_urlsafe(12)
+                    it = db.get(BatchCreateItem, item_id)
+                    if it:
+                        it.root_password = cfg["root_password"]
+                cfg["user_data"] = build_root_password_script(cfg["root_password"])
                 _set_item(db, item_id, "running")
             finally:
                 db.close()
@@ -256,6 +281,7 @@ class BatchCreateManager:
                 image_ocid=cfg["image_ocid"],
                 subnet_ocid=cfg["subnet_ocid"],
                 display_name=cfg["display_name"],
+                user_data=cfg.get("user_data", ""),
             )
         except (httpx.TimeoutException, httpx.ConnectError, httpx.ProxyError) as e:
             return "network", "网络异常（%s）" % type(e).__name__, ""
@@ -282,12 +308,28 @@ class BatchCreateManager:
         finally:
             db.close()
 
-    def _finish_item(self, item_id: int, status: str, instance_ocid: str = "", last_error: str = ""):
+    def _finish_item(self, item_id: int, status: str, instance_ocid: str = "",
+                     last_error: str = "", public_ip: str = ""):
         db = SessionLocal()
         try:
-            _set_item(db, item_id, status, instance_ocid=instance_ocid, last_error=last_error[:2000])
+            _set_item(db, item_id, status, instance_ocid=instance_ocid,
+                      last_error=last_error[:2000], public_ip=public_ip)
         finally:
             db.close()
+
+    async def _get_public_ip(self, client, compartment: str, instance_ocid: str) -> str | None:
+        """查实例公网 IP（最多等约 1 分钟，拿不到返回 None 不阻塞）。"""
+        for _ in range(6):
+            try:
+                atts = await client.list_vnic_attachments(compartment, instance_ocid)
+                if atts:
+                    vnic = (await client.get_vnic(atts[0]["vnicId"])).json()
+                    if vnic.get("publicIp"):
+                        return vnic.get("publicIp")
+            except Exception as e:
+                logger.warning("item 查公网 IP 失败：%s", str(e)[:120])
+            await asyncio.sleep(10)
+        return None
 
     async def _run_direct(self, task_id: int, item_id: int, cfg: dict, client):
         """direct 模式：单次尝试，失败即记 failed。"""
@@ -295,7 +337,21 @@ class BatchCreateManager:
         self._bump_attempts(item_id)
         kind, msg, ocid = await self._attempt_once(client, cfg)
         if kind == "success":
-            self._finish_item(item_id, "success", instance_ocid=ocid)
+            ip = await self._get_public_ip(client, cfg["compartment"], ocid)
+            self._finish_item(item_id, "success", instance_ocid=ocid, public_ip=ip or "")
+            await telegram.send_message(
+                "🚀 ————开机成功通知———— 🚀\n"
+                "账号: %s\n"
+                "区域: %s\n"
+                "实例: %s (%s)\n"
+                "Shape: %s (%sC/%sG)\n"
+                "公网 IP: %s\n"
+                "用户: root\n"
+                "密码: %s"
+                % (cfg["account_name"], cfg["region"], cfg["display_name"], ocid,
+                   cfg["shape"], cfg["ocpus"], cfg["memory_gb"],
+                   ip or "获取中", cfg["root_password"] or "未设置")
+            )
             logger.info("批量创建成功：%s @ 账号 %s", cfg["display_name"], cfg["account_name"])
             return
         if kind == "auth_error":
@@ -316,7 +372,21 @@ class BatchCreateManager:
             attempts += 1
             kind, msg, ocid = await self._attempt_once(client, cfg)
             if kind == "success":
-                self._finish_item(item_id, "success", instance_ocid=ocid)
+                ip = await self._get_public_ip(client, cfg["compartment"], ocid)
+                self._finish_item(item_id, "success", instance_ocid=ocid, public_ip=ip or "")
+                await telegram.send_message(
+                    "🚀 ————开机成功通知———— 🚀\n"
+                    "账号: %s\n"
+                    "区域: %s\n"
+                    "实例: %s (%s)\n"
+                    "Shape: %s (%sC/%sG)\n"
+                    "公网 IP: %s\n"
+                    "用户: root\n"
+                    "密码: %s"
+                    % (cfg["account_name"], cfg["region"], cfg["display_name"], ocid,
+                       cfg["shape"], cfg["ocpus"], cfg["memory_gb"],
+                       ip or "获取中", cfg["root_password"] or "未设置")
+                )
                 logger.info("批量创建成功：%s @ 账号 %s（第 %d 次尝试）",
                             cfg["display_name"], cfg["account_name"], attempts)
                 return
@@ -412,9 +482,24 @@ class BatchCreateManager:
             db4.close()
         # 新实例加入列表，失效实例缓存
         invalidate_instance_cache()
+        # 成功明细：每台一行 实例名 | 公网 IP | root 密码
+        lines = []
+        for i in items:
+            if i.status == "success":
+                lines.append("%s | %s | %s" % (
+                    i.display_name or i.instance_ocid,
+                    i.public_ip or "获取中",
+                    i.root_password or "未设置",
+                ))
+        detail_text = ""
+        if lines:
+            detail_text = "\n" + "\n".join(lines[:20])
+            if len(lines) > 20:
+                detail_text += "\n…等共 %d 台" % len(lines)
         await telegram.send_message(
-            "【批量创建%s】任务「%s」：成功 %d / 失败 %d / 取消 %d，共 %d 台"
-            % (done_text, name, success, fail, cancel, total)
+            "🚀 ————批量开机%s———— 🚀\n"
+            "任务「%s」：成功 %d / 失败 %d / 取消 %d，共 %d 台%s"
+            % (done_text, name, success, fail, cancel, total, detail_text)
         )
         logger.info("批量创建任务 #%d %s：成功 %d / 失败 %d / 取消 %d", task_id, done_text, success, fail, cancel)
 
