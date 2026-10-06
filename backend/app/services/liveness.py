@@ -85,9 +85,11 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
         # 对标 OCI-Start：registerTime 取 subscription.getTimeStart()
         if status_code == 200:
             try:
+                logger.info("账号 %s 开始查订阅信息", account.name)
                 sub_info = await client.get_subscription_info()
+                logger.info("账号 %s 订阅信息：%s", account.name, sub_info)
             except Exception:
-                logger.debug("账号 %s 查订阅信息异常", account.name, exc_info=True)
+                logger.warning("账号 %s 查订阅信息异常", account.name, exc_info=True)
     except httpx.TimeoutException:
         err = "timeout"
     except (httpx.ConnectError, httpx.ProxyError):
