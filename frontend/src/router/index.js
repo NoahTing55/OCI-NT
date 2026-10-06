@@ -4,7 +4,6 @@ import Proxies from '../views/Proxies.vue'
 import Instances from '../views/Instances.vue'
 import Network from '../views/Network.vue'
 import Sniper from '../views/Sniper.vue'
-import BatchCreate from '../views/BatchCreate.vue'
 import Login from '../views/Login.vue'
 import Security from '../views/Security.vue'
 import Settings from '../views/Settings.vue'
@@ -19,7 +18,6 @@ const router = createRouter({
     { path: '/instances', component: Instances },
     { path: '/network', component: Network },
     { path: '/sniper', component: Sniper },
-    { path: '/batch-create', component: BatchCreate },
     { path: '/security', component: Security },
     { path: '/settings', component: Settings },
   ],
