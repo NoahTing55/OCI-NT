@@ -50,6 +50,16 @@
         <el-form-item label="区域" required>
           <el-input v-model="form.region" placeholder="如 ap-seoul-1" @change="clearOciOptions" />
         </el-form-item>
+        <el-form-item label="Compartment">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-select v-if="compOptions.length" v-model="form.compartment_ocid" filterable allow-create
+              placeholder="选择或手动输入 Compartment OCID" style="flex: 1" @change="subnetOptions = []">
+              <el-option v-for="o in compOptions" :key="o.ocid" :value="o.ocid" :label="o.name" />
+            </el-select>
+            <el-input v-else v-model="form.compartment_ocid" placeholder="空则用账号根 compartment" style="flex: 1" />
+            <el-button :loading="fetching.comp" @click="fetchComps">获取</el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="Shape" required><el-input v-model="form.shape" placeholder="VM.Standard.A1.Flex" /></el-form-item>
         <el-form-item label="OCPU / 内存">
           <el-input-number v-model="form.ocpus" :min="1" :step="1" style="width: 130px" />
@@ -135,6 +145,7 @@ import {
   getOciAvailabilityDomains,
   getOciImages,
   getOciSubnets,
+  getOciCompartments,
 } from '../api/client'
 
 const STATUS_MAP = {
@@ -157,19 +168,21 @@ const templateIdx = ref(null)
 const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
-  availability_domain: '', display_name: '',
+  availability_domain: '', display_name: '', compartment_ocid: '',
 })
 
 // OCI 级联选项：点"获取"后从 OCI 实时查询填充
 const adOptions = ref([])
 const imageOptions = ref([])
 const subnetOptions = ref([])
-const fetching = ref({ ad: false, image: false, subnet: false })
+const compOptions = ref([])
+const fetching = ref({ ad: false, image: false, subnet: false, comp: false })
 
 const clearOciOptions = () => {
   adOptions.value = []
   imageOptions.value = []
   subnetOptions.value = []
+  compOptions.value = []
 }
 
 // 选账号后自动带出该账号的默认区域，之前拉取的 OCI 选项失效清空
@@ -226,12 +239,35 @@ const fetchSubnets = async () => {
   if (!p) return
   fetching.value.subnet = true
   try {
-    subnetOptions.value = await getOciSubnets(p)
+    // 带上当前选中的 compartment（用户 VCN 可能建在子 compartment 里）
+    subnetOptions.value = await getOciSubnets({
+      ...p,
+      compartment_id: form.value.compartment_ocid || undefined,
+    })
     if (!subnetOptions.value.length) ElMessage.warning('该 compartment 下未找到子网')
   } catch (e) {
     ElMessage.error('获取子网失败：' + errDetail(e))
   } finally {
     fetching.value.subnet = false
+  }
+}
+
+const fetchComps = async () => {
+  const p = needAccountRegion()
+  if (!p) return
+  fetching.value.comp = true
+  try {
+    compOptions.value = await getOciCompartments(p)
+    if (!compOptions.value.length) {
+      ElMessage.warning('未返回 compartment')
+    } else if (!form.value.compartment_ocid) {
+      // 默认选中根 tenancy
+      form.value.compartment_ocid = compOptions.value[0].ocid
+    }
+  } catch (e) {
+    ElMessage.error('获取 Compartment 失败：' + errDetail(e))
+  } finally {
+    fetching.value.comp = false
   }
 }
 
@@ -257,7 +293,7 @@ const openCreate = async () => {
   Object.assign(form.value, {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
-    availability_domain: '', display_name: '',
+    availability_domain: '', display_name: '', compartment_ocid: '',
   })
   clearOciOptions()
   try {

@@ -1,8 +1,10 @@
 """OCI 选项查询：给抢机/批量创建表单用的级联下拉数据。
 
 按账号（走该账号绑定的代理）实时查询 OCI，返回可用域、平台镜像、
-子网列表，前端用 el-select allow-create 展示，保留手动填 OCID。
+子网、compartment 列表，前端用 el-select allow-create 展示，保留手动填 OCID。
 """
+from urllib.parse import quote
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -74,34 +76,61 @@ async def list_platform_images(
     region: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    """平台镜像列表：只取 Oracle 官方镜像（compartmentId 为 null），
-    过滤出 Ubuntu / Oracle Linux，按发布时间倒序取前 20。"""
+    """平台镜像列表：服务端按 operatingSystem 精确过滤（之前无排序随机取 50
+    再前端过滤，平台镜像可能根本不在里面），Ubuntu 在前，各取最新 10 个。"""
+    account = _get_account(db, account_id)
+    client = _build_client(account, region)
+    try:
+        result = []
+        for os_name in ("Canonical Ubuntu", "Oracle Linux"):
+            qs = (
+                f"compartmentId={account.tenancy_ocid}"
+                f"&operatingSystem={quote(os_name, safe='')}"
+                "&sortBy=TIMECREATED&sortOrder=DESC&limit=10"
+            )
+            resp = await client.request("GET", "iaas", f"/20160918/images?{qs}")
+            _check_ok(resp, "镜像")
+            for i in resp.json():
+                # 官方平台镜像：compartmentId 为 null
+                if i.get("compartmentId"):
+                    continue
+                result.append({
+                    "ocid": i.get("id", ""),
+                    "display_name": i.get("displayName", ""),
+                    "operating_system": i.get("operatingSystem", ""),
+                })
+        return result
+    finally:
+        await client.aclose()
+
+
+@router.get("/compartments")
+async def list_compartments(
+    account_id: int = Query(...),
+    region: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """Compartment 列表：identity 服务 /20160918/compartments（含子树），
+    根 tenancy 手动放在第一位，方便前端默认选中。"""
     account = _get_account(db, account_id)
     client = _build_client(account, region)
     try:
         resp = await client.request(
-            "GET", "iaas",
-            f"/20160918/images?compartmentId={account.tenancy_ocid}&limit=50",
+            "GET", "identity",
+            f"/20160918/compartments?compartmentId={account.tenancy_ocid}"
+            "&compartmentIdInSubtree=true&accessLevel=ACCESSIBLE&limit=100",
         )
-        _check_ok(resp, "镜像")
-        items = resp.json()
-        # 官方平台镜像：compartmentId 为 null
-        platform = [i for i in items if not i.get("compartmentId")]
-        wanted = []
-        for i in platform:
-            os_name = (i.get("operatingSystem") or "").lower()
-            if "ubuntu" in os_name or "oracle linux" in os_name:
-                wanted.append(i)
-        # 按发布时间倒序，取最新 20 个
-        wanted.sort(key=lambda i: i.get("timeCreated") or "", reverse=True)
-        return [
-            {
-                "ocid": i.get("id", ""),
-                "display_name": i.get("displayName", ""),
-                "operating_system": i.get("operatingSystem", ""),
-            }
-            for i in wanted[:20]
-        ]
+        _check_ok(resp, "Compartment")
+        result = [{"ocid": account.tenancy_ocid, "name": "根 compartment（tenancy）"}]
+        for c in resp.json():
+            # 去重：根 tenancy 可能已在子树结果里
+            if c.get("id") == account.tenancy_ocid:
+                continue
+            result.append({
+                "ocid": c.get("id", ""),
+                "name": c.get("displayName", "") or c.get("name", ""),
+            })
+        return result
     finally:
         await client.aclose()
 
@@ -110,11 +139,13 @@ async def list_platform_images(
 async def list_subnets(
     account_id: int = Query(...),
     region: str = Query(""),
+    compartment_id: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    """子网列表：先查 VCN，再逐个 VCN 查子网，带上 VCN 名和 CIDR 方便辨认。"""
+    """子网列表：先查 VCN，再逐个 VCN 查子网，带上 VCN 名和 CIDR 方便辨认。
+    compartment_id 为空时沿用账号默认 compartment（用户 VCN 可能建在子 compartment）。"""
     account = _get_account(db, account_id)
-    comp = compartment_of(account)
+    comp = compartment_id.strip() or compartment_of(account)
     client = _build_client(account, region)
     try:
         vcn_resp = await client.request(

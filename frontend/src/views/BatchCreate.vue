@@ -76,9 +76,59 @@
               <el-radio value="retry">失败重试（retry，按抢机引擎的错误分类与退避）</el-radio>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="默认镜像 OCID"><el-input v-model="form.image_ocid" placeholder="ocid1.image.oc1...." /><template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template></el-form-item>
-          <el-form-item label="默认子网 OCID"><el-input v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." /><template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template></el-form-item>
-          <el-form-item label="默认可用域"><el-input v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" /><template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template></el-form-item>
+          <el-form-item label="参考账号">
+            <el-select v-model="refAccountId" placeholder="选账号用于从 OCI 查询选项（不影响创建）" clearable style="width: 100%" @change="onRefAccountChange">
+              <el-option v-for="a in accountRows" :key="a.account_id" :value="a.account_id" :label="`${a.name}（${a.defaultRegion}）`" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="参考区域">
+            <el-input v-model="refRegion" placeholder="选择参考账号后自动填入，可手动改" @change="clearRefOptions" />
+          </el-form-item>
+          <el-form-item label="Compartment">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-select v-if="refCompOptions.length" v-model="refCompartment" filterable allow-create
+                placeholder="选择或手动输入 Compartment OCID" style="flex: 1" @change="refSubnetOptions = []">
+                <el-option v-for="o in refCompOptions" :key="o.ocid" :value="o.ocid" :label="o.name" />
+              </el-select>
+              <el-input v-else v-model="refCompartment" placeholder="空则用账号根 compartment" style="flex: 1" />
+              <el-button :loading="refFetching.comp" @click="fetchRefComps">获取</el-button>
+            </div>
+          </el-form-item>
+          <el-form-item label="默认镜像 OCID">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-select v-if="refImageOptions.length" v-model="form.image_ocid" filterable allow-create
+                placeholder="选择或手动输入镜像 OCID" style="flex: 1">
+                <el-option v-for="o in refImageOptions" :key="o.ocid" :value="o.ocid"
+                  :label="`${o.display_name}（${o.operating_system}）`" />
+              </el-select>
+              <el-input v-else v-model="form.image_ocid" placeholder="ocid1.image.oc1...." style="flex: 1" />
+              <el-button :loading="refFetching.image" @click="fetchRefImages">获取</el-button>
+            </div>
+            <template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template>
+          </el-form-item>
+          <el-form-item label="默认子网 OCID">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-select v-if="refSubnetOptions.length" v-model="form.subnet_ocid" filterable allow-create
+                placeholder="选择或手动输入子网 OCID" style="flex: 1">
+                <el-option v-for="o in refSubnetOptions" :key="o.ocid" :value="o.ocid"
+                  :label="`${o.display_name}（${o.vcn_name} ${o.cidr}）`" />
+              </el-select>
+              <el-input v-else v-model="form.subnet_ocid" placeholder="ocid1.subnet.oc1...." style="flex: 1" />
+              <el-button :loading="refFetching.subnet" @click="fetchRefSubnets">获取</el-button>
+            </div>
+            <template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template>
+          </el-form-item>
+          <el-form-item label="默认可用域">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-select v-if="refAdOptions.length" v-model="form.availability_domain" filterable allow-create
+                placeholder="选择或手动输入可用域" style="flex: 1">
+                <el-option v-for="o in refAdOptions" :key="o.name" :value="o.name" :label="o.name" />
+              </el-select>
+              <el-input v-else v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" style="flex: 1" />
+              <el-button :loading="refFetching.ad" @click="fetchRefAds">获取</el-button>
+            </div>
+            <template #extra><span style="color:#909399;font-size:12px">可留空，在第 2 步按账号单独填写</span></template>
+          </el-form-item>
           <el-form-item label="配置模板">
             <el-button @click="saveAsTemplate">保存当前为模板</el-button>
             <el-button @click="tplVisible = true">从模板载入</el-button>
@@ -205,6 +255,10 @@ import {
   listBatchCreateTemplates,
   createBatchCreateTemplate,
   deleteBatchCreateTemplate,
+  getOciAvailabilityDomains,
+  getOciImages,
+  getOciSubnets,
+  getOciCompartments,
 } from '../api/client'
 
 const STATUS_MAP = {
@@ -236,9 +290,115 @@ const accountRows = ref([])
 const selected = ref([])
 const selChange = (rows) => { selected.value = rows }
 
+// ---------- 第 1 步 OCI 级联（参考账号：只用于查询镜像/子网/可用域，不影响创建） ----------
+const refAccountId = ref(null)
+const refRegion = ref('')
+const refCompartment = ref('')
+const refAdOptions = ref([])
+const refImageOptions = ref([])
+const refSubnetOptions = ref([])
+const refCompOptions = ref([])
+const refFetching = ref({ ad: false, image: false, subnet: false, comp: false })
+
+const clearRefOptions = () => {
+  refAdOptions.value = []
+  refImageOptions.value = []
+  refSubnetOptions.value = []
+  refCompOptions.value = []
+}
+
+// 选参考账号后自动带出该账号的默认区域，之前拉取的选项失效清空
+const onRefAccountChange = () => {
+  const a = accountRows.value.find((x) => x.account_id === refAccountId.value)
+  refRegion.value = (a && a.defaultRegion) || ''
+  clearRefOptions()
+}
+
+const needRefAccountRegion = () => {
+  if (!refAccountId.value) {
+    ElMessage.warning('请先选择参考账号')
+    return null
+  }
+  if (!refRegion.value) {
+    ElMessage.warning('请先填写参考区域')
+    return null
+  }
+  return { account_id: refAccountId.value, region: refRegion.value }
+}
+
+const fetchRefAds = async () => {
+  const p = needRefAccountRegion()
+  if (!p) return
+  refFetching.value.ad = true
+  try {
+    refAdOptions.value = await getOciAvailabilityDomains(p)
+    if (!refAdOptions.value.length) ElMessage.warning('该区域未返回可用域')
+  } catch (e) {
+    ElMessage.error('获取可用域失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    refFetching.value.ad = false
+  }
+}
+
+const fetchRefImages = async () => {
+  const p = needRefAccountRegion()
+  if (!p) return
+  refFetching.value.image = true
+  try {
+    refImageOptions.value = await getOciImages(p)
+    if (!refImageOptions.value.length) ElMessage.warning('该区域未返回平台镜像')
+  } catch (e) {
+    ElMessage.error('获取镜像失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    refFetching.value.image = false
+  }
+}
+
+const fetchRefSubnets = async () => {
+  const p = needRefAccountRegion()
+  if (!p) return
+  refFetching.value.subnet = true
+  try {
+    // 带上选中的 compartment（用户 VCN 可能建在子 compartment 里）
+    refSubnetOptions.value = await getOciSubnets({
+      ...p,
+      compartment_id: refCompartment.value || undefined,
+    })
+    if (!refSubnetOptions.value.length) ElMessage.warning('该 compartment 下未找到子网')
+  } catch (e) {
+    ElMessage.error('获取子网失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    refFetching.value.subnet = false
+  }
+}
+
+const fetchRefComps = async () => {
+  const p = needRefAccountRegion()
+  if (!p) return
+  refFetching.value.comp = true
+  try {
+    refCompOptions.value = await getOciCompartments(p)
+    if (!refCompOptions.value.length) {
+      ElMessage.warning('未返回 compartment')
+    } else if (!refCompartment.value) {
+      // 默认选中根 tenancy
+      refCompartment.value = refCompOptions.value[0].ocid
+    }
+  } catch (e) {
+    ElMessage.error('获取 Compartment 失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    refFetching.value.comp = false
+  }
+}
+
 const openWizard = async () => {
   step.value = 0
   wizardVisible.value = true
+  // 重置参考账号级联状态
+  refAccountId.value = null
+  refRegion.value = ''
+  refCompartment.value = ''
+  clearRefOptions()
   const [presets, accounts] = await Promise.all([getShapePresets(), listAccounts()])
   shapePresets.value = presets
   accountRows.value = accounts.map((a) => ({
