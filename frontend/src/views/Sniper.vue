@@ -29,6 +29,7 @@
           <el-button size="small" type="success" v-if="row.status !== 'running'" @click="startTask(row)">启动</el-button>
           <el-button size="small" type="warning" v-if="row.status === 'running'" @click="pauseTask(row)">暂停</el-button>
           <el-button size="small" @click="openLogs(row)">日志</el-button>
+          <el-button size="small" v-if="row.root_password" @click="showPassword(row)">密码</el-button>
           <el-button size="small" type="danger" :disabled="row.status === 'running'" @click="delTask(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -172,6 +173,19 @@
         <div v-if="!logs.length" style="color: #858585">暂无日志</div>
       </div>
     </el-drawer>
+
+    <!-- Root 密码查看 -->
+    <el-dialog v-model="pwdVisible" title="Root 密码" width="420px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="任务">#{{ pwdTask?.id }}（{{ pwdTask?.account_name }}）</el-descriptions-item>
+        <el-descriptions-item label="用户">root</el-descriptions-item>
+        <el-descriptions-item label="密码">
+          <el-input :value="pwdTask?.root_password" readonly show-password style="width: 220px" />
+          <el-button size="small" @click="copyPwd" style="margin-left: 8px">复制</el-button>
+        </el-descriptions-item>
+      </el-descriptions>
+      <div style="color: #909399; font-size: 12px; margin-top: 12px">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
+    </el-dialog>
   </div>
 </template>
 
@@ -381,6 +395,15 @@ const fetchComps = async () => {
 }
 
 const logsVisible = ref(false)
+const pwdVisible = ref(false)
+const pwdTask = ref(null)
+const showPassword = (row) => { pwdTask.value = row; pwdVisible.value = true }
+const copyPwd = async () => {
+  try {
+    await navigator.clipboard.writeText(pwdTask.value?.root_password || '')
+    ElMessage.success('已复制')
+  } catch (e) { ElMessage.error('复制失败') }
+}
 const logTask = ref(null)
 const logs = ref([])
 const logLevel = ref('')
