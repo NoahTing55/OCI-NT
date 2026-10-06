@@ -50,6 +50,7 @@ def _to_out(task: SnipeTask, account_name: str = "") -> SnipeTaskOut:
         attempts=task.attempts,
         last_error=task.last_error or "",
         instance_ocid=task.instance_ocid or "",
+        root_password=task.root_password or "",
         started_at=task.started_at,
         finished_at=task.finished_at,
         created_at=task.created_at,
@@ -71,9 +72,9 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
     account = db.get(Account, data.account_id)
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
-    for field in ("image_ocid", "subnet_ocid", "availability_domain"):
+    for field in ("image_ocid", "availability_domain"):
         if not getattr(data, field):
-            raise HTTPException(status_code=400, detail="镜像 / 子网 / 可用域不能为空（配错会导致 400 空转）")
+            raise HTTPException(status_code=400, detail="镜像 / 可用域不能为空（配错会导致 400 空转）；子网可留空，任务启动时自动建网")
     # 同一账号同一 shape 同时只允许一个 running/paused 任务
     dup = (
         db.query(SnipeTask)
@@ -99,6 +100,7 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
         subnet_ocid=data.subnet_ocid,
         availability_domain=data.availability_domain,
         display_name=data.display_name or "",
+        root_password=data.root_password or "",
         status="pending",
     )
     db.add(task)

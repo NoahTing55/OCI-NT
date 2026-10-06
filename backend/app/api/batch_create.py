@@ -53,6 +53,8 @@ def _to_item_out(item: BatchCreateItem, account_names: dict) -> BatchCreateItemO
         display_name=item.display_name or "",
         status=item.status,
         instance_ocid=item.instance_ocid or "",
+        root_password=item.root_password or "",
+        public_ip=item.public_ip or "",
         attempts=item.attempts,
         last_error=item.last_error or "",
         created_at=item.created_at,
@@ -117,8 +119,8 @@ async def create_task(data: BatchCreateTaskIn, db: Session = Depends(get_db)):
         accounts[row.account_id] = acc
     for row in account_rows:
         acc = accounts[row.account_id]
-        for field, label in (("image_ocid", "镜像"), ("subnet_ocid", "子网"),
-                             ("availability_domain", "可用域")):
+        # 子网可留空：item 启动时自动建网；镜像 / 可用域仍必填
+        for field, label in (("image_ocid", "镜像"), ("availability_domain", "可用域")):
             effective = (getattr(row, field, "") or "").strip() or (getattr(data, field, "") or "").strip()
             if not effective:
                 raise HTTPException(
@@ -159,6 +161,7 @@ async def create_task(data: BatchCreateTaskIn, db: Session = Depends(get_db)):
                 subnet_ocid=subnet_ocid,
                 availability_domain=ad,
                 display_name=display_name,
+                root_password=data.root_password or "",
                 status="pending",
             ))
     # 同一任务内 (account_id, display_name) 去重（防御性：正常流程不会重复）

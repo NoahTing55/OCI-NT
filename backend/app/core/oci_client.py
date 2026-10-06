@@ -152,11 +152,14 @@ class OciClient:
         image_ocid: str,
         subnet_ocid: str,
         display_name: str,
+        user_data: str = "",
     ) -> httpx.Response:
         """POST /20160918/instances/：创建实例（抢机核心调用）。
 
         Flex 机型必须带 shapeConfig；createVnicDetails.assignPublicIp=true
         让新实例自动分配临时公网 IP（后续可换预留 IP）。
+        user_data 非空时通过 metadata 下发 base64 后的 cloud-init
+        （用于开机自动设置 root 密码，见 core/cloud_init.py）。
         """
         body: dict = {
             "compartmentId": compartment_id,
@@ -166,6 +169,8 @@ class OciClient:
             "sourceDetails": {"sourceType": "image", "imageId": image_ocid},
             "createVnicDetails": {"subnetId": subnet_ocid, "assignPublicIp": True},
         }
+        if user_data:
+            body["metadata"] = {"user_data": user_data}
         # Flex 机型需要 shapeConfig；固定机型传了会被 400，直接不传
         if shape.endswith(".Flex"):
             body["shapeConfig"] = {"ocpus": ocpus, "memoryInGBs": memory_gb}
@@ -229,3 +234,106 @@ class OciClient:
 
     async def aclose(self):
         await self._client.aclose()
+
+    # ---------------- 一键建网（VCN / IG / 路由表 / 子网） ----------------
+    # OCI-Start buildSimpleAllNetWork 思路：表单不让用户手填子网，后端按
+    # 「有则复用、无则创建」自动备好网络。以下均为原子 API 封装，编排逻辑
+    # 在 api/oci_options.py 的 ensure_network 里。
+    async def list_vcns(self, compartment_id: str) -> list[dict]:
+        """GET /20160918/vcns：查 compartment 下的 VCN 列表。"""
+        resp = await self.request(
+            "GET", "iaas", f"/20160918/vcns?compartmentId={compartment_id}&limit=50"
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询 VCN 失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def get_vcn(self, vcn_id: str) -> httpx.Response:
+        """GET /20160918/vcns/{vcnId}：查 VCN 详情 / 状态（轮询等 AVAILABLE 用）。"""
+        return await self.request("GET", "iaas", f"/20160918/vcns/{vcn_id}")
+
+    async def create_vcn(
+        self,
+        compartment_id: str,
+        cidr_block: str = "10.0.0.0/16",
+        display_name: str = "oci-panel-vcn",
+    ) -> httpx.Response:
+        """POST /20160918/vcns：创建 VCN（异步，建完需轮询到 AVAILABLE）。"""
+        return await self.request(
+            "POST", "iaas", "/20160918/vcns",
+            {"compartmentId": compartment_id, "cidrBlock": cidr_block, "displayName": display_name},
+        )
+
+    async def list_internet_gateways(self, compartment_id: str, vcn_id: str) -> list[dict]:
+        """GET /20160918/internetGateways：查 VCN 下的 Internet Gateway 列表。"""
+        resp = await self.request(
+            "GET", "iaas",
+            f"/20160918/internetGateways?compartmentId={compartment_id}&vcnId={vcn_id}&limit=50",
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询 Internet Gateway 失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def create_internet_gateway(
+        self,
+        compartment_id: str,
+        vcn_id: str,
+        display_name: str = "oci-panel-ig",
+    ) -> httpx.Response:
+        """POST /20160918/internetGateways：创建 Internet Gateway（默认启用）。"""
+        return await self.request(
+            "POST", "iaas", "/20160918/internetGateways",
+            {
+                "compartmentId": compartment_id, "vcnId": vcn_id,
+                "displayName": display_name, "isEnabled": True,
+            },
+        )
+
+    async def list_route_tables(self, compartment_id: str, vcn_id: str) -> list[dict]:
+        """GET /20160918/routeTables：查 VCN 下的路由表列表。"""
+        resp = await self.request(
+            "GET", "iaas",
+            f"/20160918/routeTables?compartmentId={compartment_id}&vcnId={vcn_id}&limit=50",
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询路由表失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def update_route_table(self, rt_id: str, route_rules: list[dict]) -> httpx.Response:
+        """PUT /20160918/routeTables/{rtId}：整体替换路由规则（调用方需先读出现有规则再追加）。"""
+        return await self.request(
+            "PUT", "iaas", f"/20160918/routeTables/{rt_id}", {"routeRules": route_rules}
+        )
+
+    async def list_subnets_of_vcn(self, compartment_id: str, vcn_id: str) -> list[dict]:
+        """GET /20160918/subnets：查指定 VCN 下的所有子网。"""
+        resp = await self.request(
+            "GET", "iaas",
+            f"/20160918/subnets?compartmentId={compartment_id}&vcnId={vcn_id}&limit=100",
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询子网失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def create_subnet(
+        self,
+        compartment_id: str,
+        vcn_id: str,
+        availability_domain: str,
+        cidr_block: str = "10.0.0.0/24",
+        display_name: str = "oci-panel-subnet",
+        route_table_id: str = "",
+    ) -> httpx.Response:
+        """POST /20160918/subnets：创建子网。
+
+        prohibitPublicIpOnVnic=false 做公网子网（抢机要分配公网 IP）；
+        route_table_id 为空则用 VCN 默认路由表。
+        """
+        body: dict = {
+            "compartmentId": compartment_id, "vcnId": vcn_id,
+            "availabilityDomain": availability_domain, "cidrBlock": cidr_block,
+            "displayName": display_name, "prohibitPublicIpOnVnic": False,
+        }
+        if route_table_id:
+            body["routeTableId"] = route_table_id
+        return await self.request("POST", "iaas", "/20160918/subnets", body)
