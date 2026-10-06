@@ -362,3 +362,24 @@ class OciClient:
         if route_table_id:
             body["routeTableId"] = route_table_id
         return await self.request("POST", "iaas", "/20160918/subnets", body)
+
+    async def get_subnet(self, subnet_id: str) -> dict:
+        """GET /20160918/subnets/{subnetId}：查子网详情（含 securityListIds）。"""
+        resp = await self.request("GET", "iaas", f"/20160918/subnets/{subnet_id}")
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询子网详情失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def get_security_list(self, security_list_id: str) -> dict:
+        """GET /20160918/securityLists/{id}：查安全列表（含 ingressSecurityRules）。"""
+        resp = await self.request("GET", "iaas", f"/20160918/securityLists/{security_list_id}")
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询安全列表失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def update_security_list(self, security_list_id: str, ingress_rules: list[dict]) -> httpx.Response:
+        """PUT /20160918/securityLists/{id}：整体替换入站规则（调用方需先读出现有规则再追加）。"""
+        return await self.request(
+            "PUT", "iaas", f"/20160918/securityLists/{security_list_id}",
+            {"ingressSecurityRules": ingress_rules},
+        )

@@ -168,6 +168,11 @@ class ChangeIpIn(BaseModel):
     release_old: bool = Field(default=True, description="更换成功后释放旧的预留 IP（仅 RESERVED 生效）")
 
 
+class OpenPortsIn(BaseModel):
+    account_id: int
+    instance_id: str = Field(description="实例 OCID")
+
+
 class CfSyncResult(BaseModel):
     domain: str
     ok: bool
@@ -250,6 +255,7 @@ class SnipeTaskCreate(BaseModel):
     root_password: str = Field(default="", max_length=128, description="root 密码；为空则 worker 自动生成随机密码")
     target_count: int = Field(default=1, ge=1, le=100, description="目标抢机台数，一次抢 N 台")
     interval_seconds: int = Field(default=60, ge=5, le=3600, description="无可用容量时的重试间隔（秒）")
+    open_all_ports: bool = Field(default=True, description="开机后是否放行所有端口（安全列表加全端口规则）")
 
 
 class SnipeTaskOut(BaseModel):
@@ -273,6 +279,7 @@ class SnipeTaskOut(BaseModel):
     target_count: int = 1
     success_count: int = 0
     interval_seconds: int = 60
+    open_all_ports: bool = True
     root_password: str = ""
     started_at: datetime | None = None
     finished_at: datetime | None = None

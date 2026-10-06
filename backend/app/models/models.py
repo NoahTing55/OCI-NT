@@ -87,6 +87,7 @@ class SnipeTask(Base):
     target_count = Column(Integer, default=1)  # 目标抢机台数（一次抢 N 台）
     success_count = Column(Integer, default=0)  # 已抢到台数
     interval_seconds = Column(Integer, default=60)  # 无容量时重试间隔（秒），默认 60
+    open_all_ports = Column(Boolean, default=True)  # 开机后是否放行所有端口（安全列表加全端口规则），默认 True
     status = Column(String(32), default="pending")  # pending / running / paused / success / stopped / failed
     attempts = Column(Integer, default=0)
     last_error = Column(Text, default="")
