@@ -38,7 +38,7 @@
         </template>
       </el-table-column>
       <!-- 别名：点击单元格直接改 -->
-      <el-table-column label="自定义名称" width="50" class-name="alias-col">
+      <el-table-column label="自定义名称" min-width="120" class-name="alias-col">
         <template #default="{ row }">
           <el-input v-if="isEditing(row.id, 'name')" v-model="cellVal" size="small" ref="cellInputRef"
             @keyup.enter="saveCell(row, 'name')" @blur="saveCell(row, 'name')" />
@@ -638,5 +638,5 @@ onMounted(load)
 }
 
 /* 别名列紧凑间距 */
-.alias-col .cell { padding-left: 4px; padding-right: 4px; }
+.alias-col .cell { padding-left: 8px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
