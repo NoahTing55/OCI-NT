@@ -244,7 +244,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
@@ -372,6 +372,24 @@ const parseConfig = () => {
   ElMessage.success('已解析并填入，请检查后保存')
 }
 
+// config 和 PEM 都有内容时自动解析，无需手动点按钮（防抖 + 内容变化才触发）
+let autoParseTimer = null
+let lastAutoParseKey = ''
+watch(
+  () => [importForm.value.config, importForm.value.privateKey],
+  ([cfg, pem]) => {
+    clearTimeout(autoParseTimer)
+    if (!cfg?.trim() || !pem?.trim()) return
+    const key = cfg.trim() + '||' + pem.trim()
+    if (key === lastAutoParseKey) return
+    autoParseTimer = setTimeout(() => {
+      lastAutoParseKey = key
+      parseConfig()
+    }, 800)
+  },
+  { deep: false }
+)
+
 const load = async () => {
   loading.value = true
   try {
@@ -490,6 +508,7 @@ const openCreate = () => {
   configFileName.value = ''
   pemFileName.value = ''
   detectedRegion.value = ''
+  lastAutoParseKey = ''
   createVisible.value = true
 }
 
