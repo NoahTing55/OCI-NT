@@ -159,13 +159,24 @@ async def _ensure_network(
         resp = await client.update_route_table(rt_id, rules)
         _check_ok(resp, "更新路由表")
 
-    # 5. 子网：该 VCN + 该 AD 下优先复用我们建过的，其次复用已有的，最后创建
+    # 5. 子网：该 VCN + 该 AD 下优先复用我们建过的，其次复用已有的；
+    # 目标 AD 无可用子网时，复用 VCN 内其他 AD 的可用子网（并切换 AD）；
+    # VCN 内完全没有可用子网时才尝试创建（避免与已有大 CIDR 如 10.0.0.0/16 冲突）
     try:
         subnets = await client.list_subnets_of_vcn(comp, vcn_id)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     in_ad = [s for s in subnets if s.get("availabilityDomain") == ad]
     subnet = _prefer_managed(in_ad, MANAGED_SUBNET_NAME)
+    if subnet is None:
+        # 目标 AD 没有可用子网，看 VCN 内其他 AD 有没有
+        other = _prefer_managed(
+            [s for s in subnets if s.get("availabilityDomain") != ad],
+            MANAGED_SUBNET_NAME,
+        )
+        if other is not None:
+            subnet = other
+            ad = other.get("availabilityDomain", ad)  # 切换到子网所在的 AD
     if subnet is None:
         last_err = ""
         for cidr in SUBNET_CIDR_CANDIDATES:
