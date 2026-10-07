@@ -80,19 +80,38 @@ async def subscribe_region(
         await client.aclose()
 
 
+# OCI 公共区域硬编码回退（API 失败时用）
+FALLBACK_OCI_REGIONS = [
+    "ap-chuncheon-1", "ap-hyderabad-1", "ap-melbourne-1", "ap-mumbai-1",
+    "ap-osaka-1", "ap-seoul-1", "ap-singapore-1", "ap-sydney-1", "ap-tokyo-1",
+    "ca-montreal-1", "ca-toronto-1",
+    "eu-amsterdam-1", "eu-frankfurt-1", "eu-madrid-1", "eu-milan-1",
+    "eu-paris-1", "eu-stockholm-1", "eu-zurich-1",
+    "me-abudhabi-1", "me-dubai-1", "me-jeddah-1",
+    "mx-monterrey-1",
+    "sa-saopaulo-1", "sa-santiago-1", "sa-vinhedo-1",
+    "uk-cardiff-1", "uk-london-1",
+    "us-ashburn-1", "us-chicago-1", "us-phoenix-1", "us-sanjose-1",
+]
+
+
 @router.get("/oci-regions")
 async def list_oci_regions(db: Session = Depends(get_db)):
-    """查 OCI 全部可用区域（供前端下拉；用第一个账号的凭证签名）。"""
+    """查 OCI 全部可用区域（供前端下拉；用第一个账号的凭证签名，失败时用硬编码回退）。"""
     account = _first_account(db)
     client = build_client_for_account(account)
     try:
         regions = await client.list_all_regions()
-        return [
+        result = [
             {"region_name": r.get("regionName", ""), "region_key": r.get("regionKey", "")}
             for r in regions
             if r.get("regionName")
         ]
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        if result:
+            return result
+    except RuntimeError:
+        pass
     finally:
         await client.aclose()
+    # API 失败或空结果时用硬编码回退
+    return [{"region_name": r, "region_key": r} for r in FALLBACK_OCI_REGIONS]
