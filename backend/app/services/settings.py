@@ -61,9 +61,9 @@ WEB_SETTINGS = {
         "desc": "抢机任务日志只保留近 N 天，过期自动清理。",
     },
     "INSTANCE_CACHE_TTL": {
-        "group": "cache", "type": "int", "secret": False, "default": 60, "min": 0,
+        "group": "cache", "type": "int", "secret": False, "default": 86400, "min": 0,
         "label": "实例缓存 TTL（秒）",
-        "desc": "实例列表 Redis 缓存有效期。0 为关闭缓存，修改后即时生效。",
+        "desc": "实例列表 Redis 缓存有效期，默认 86400（24 小时）。0 为关闭缓存，修改后即时生效。",
     },
     "JWT_EXPIRE_MINUTES": {
         "group": "security", "type": "int", "secret": False, "default": 720, "min": 5,
