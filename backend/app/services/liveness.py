@@ -108,7 +108,8 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     new_status, message = _classify(status_code, err)
     account.status = new_status
     account.last_check_at = datetime.utcnow()
-    if acct_info["account_type"]:
+    # 账号类型：用户手动锁定过则不再自动覆盖
+    if acct_info["account_type"] and not account.account_type_manual:
         account.account_type = acct_info["account_type"]
     # 根 compartment timeCreated 即账号注册时间；用户手动填过的优先保留
     if acct_info["registered_at"] and not account.registered_at:

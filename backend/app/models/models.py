@@ -41,6 +41,8 @@ class Account(Base):
     registered_at = Column(DateTime, nullable=True)
     # 账号类型：free 免费 / paid 付费 / 空 未知（存活检查时调 Subscription API 更新）
     account_type = Column(String(32), default="")
+    # 账号类型是否用户手动设置过；手动设置后存活检查不再自动覆盖
+    account_type_manual = Column(Boolean, default=False)
     # 租户名称（存活检查时调 tenancies 接口获取，可空）
     tenancy_name = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=_now)

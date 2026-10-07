@@ -138,6 +138,8 @@ def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(g
         account.registered_at = data.registered_at
     if data.account_type is not None:
         account.account_type = data.account_type
+        # 用户手动设置过账号类型：打上锁定标记，存活检查不再自动覆盖
+        account.account_type_manual = True
     if data.private_key:
         if "PRIVATE KEY" not in data.private_key:
             raise HTTPException(status_code=400, detail="private_key 看起来不是 PEM 私钥")
