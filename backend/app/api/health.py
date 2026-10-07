@@ -16,7 +16,7 @@ async def check_one(account_id: int, db: Session = Depends(get_db)):
     try:
         from app.core import telegram
         mark = "✅" if result.get("status") == "healthy" else "❌"
-        typ = {"free": "免费", "trial": "试用", "upgraded": "升级", "paid": "付费"}.get(result.get("account_type") or "", "")
+        typ = {"free": "个人免费号", "trial": "个人试用号", "upgraded": "个人升级号", "paid": "付费"}.get(result.get("account_type") or "", "")
         await telegram.send_message(
             "%s 存活检查：%s（%s）%s\n%s" % (
                 mark, result.get("name"), result.get("region"),
@@ -37,7 +37,7 @@ async def check_all(db: Session = Depends(get_db)):
         lines = ["🔍 存活检查完成：共 %d 个账号，正常 %d，异常 %d" % (len(results), ok, fail)]
         for r in results:
             mark = "✅" if r.get("status") == "healthy" else "❌"
-            typ = {"free": "免费", "trial": "试用", "upgraded": "升级", "paid": "付费"}.get(r.get("account_type") or "", "")
+            typ = {"free": "个人免费号", "trial": "个人试用号", "upgraded": "个人升级号", "paid": "付费"}.get(r.get("account_type") or "", "")
             lines.append("%s %s（%s）%s" % (mark, r.get("name"), r.get("region"), f"·{typ}" if typ else ""))
         await telegram.send_message("\n".join(lines))
     except Exception:

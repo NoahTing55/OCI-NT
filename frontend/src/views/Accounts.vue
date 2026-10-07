@@ -38,7 +38,7 @@
         </template>
       </el-table-column>
       <!-- 别名：点击单元格直接改 -->
-      <el-table-column label="别名" min-width="130">
+      <el-table-column label="别名" min-width="110" class-name="alias-col">
         <template #default="{ row }">
           <el-input v-if="isEditing(row.id, 'name')" v-model="cellVal" size="small" ref="cellInputRef"
             @keyup.enter="saveCell(row, 'name')" @blur="saveCell(row, 'name')" />
@@ -69,9 +69,9 @@
       <!-- 账号类型：免费/试用/升级/未知（对标 OCI-Start） -->
       <el-table-column label="账号类型" width="90" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.account_type === 'free'" type="success" size="small">免费</el-tag>
-          <el-tag v-else-if="row.account_type === 'trial'" type="warning" size="small">试用</el-tag>
-          <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">升级</el-tag>
+          <el-tag v-if="row.account_type === 'free'" type="success" size="small">个人免费号</el-tag>
+          <el-tag v-else-if="row.account_type === 'trial'" type="warning" size="small">个人试用号</el-tag>
+          <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级号</el-tag>
           <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
           <el-tag v-else type="info" size="small">未知</el-tag>
         </template>
@@ -380,11 +380,15 @@ const handleOp = (cmd, row) => {
   else if (cmd === 'check') checkOne(row)
   else if (cmd === 'delete') remove(row)
 }
-// 存活天数：优先用真实注册时间 registered_at，没有则用 created_at 兜底
+// 存活天数：按自然日计算（避免时区/小时差导致少算一天）
 const aliveDays = (row) => {
   const base = row.registered_at || row.created_at
   if (!base) return '-'
-  const d = Math.floor((Date.now() - new Date(base).getTime()) / 86400000)
+  const s = new Date(base)
+  const n = new Date()
+  const sd = new Date(s.getFullYear(), s.getMonth(), s.getDate())
+  const nd = new Date(n.getFullYear(), n.getMonth(), n.getDate())
+  const d = Math.round((nd - sd) / 86400000)
   return (d < 0 ? 0 : d) + ' 天'
 }
 // 创建时间只显示日期
@@ -615,4 +619,7 @@ onMounted(load)
   50% { opacity: .35; transform: scale(.7); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* 别名列紧凑间距 */
+.alias-col .cell { padding-left: 4px; padding-right: 4px; }
 </style>
