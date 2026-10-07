@@ -310,9 +310,11 @@ const onRegionChange = () => {
 const FALLBACK_REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
 const regionOptions = ref([...FALLBACK_REGIONS])
 
-// 拉取账号的已订阅区域，失败时回退硬编码列表
+// 拉取账号的已订阅区域：成功用订阅列表；失败时（免费号 404）只用该账号主区域；
+// 无账号时才回退硬编码列表
 const loadRegionOptions = async (accountId) => {
-  if (!accountId) {
+  const a = accounts.value.find((x) => x.id === accountId)
+  if (!accountId || !a) {
     regionOptions.value = [...FALLBACK_REGIONS]
     return
   }
@@ -320,9 +322,10 @@ const loadRegionOptions = async (accountId) => {
     const subs = await listRegionSubscriptions(accountId)
     const names = (subs || []).map((s) => s.region_name).filter(Boolean)
     if (names.length) regionOptions.value = names
-    else regionOptions.value = [...FALLBACK_REGIONS]
+    else regionOptions.value = a.region ? [a.region] : [...FALLBACK_REGIONS]
   } catch {
-    regionOptions.value = [...FALLBACK_REGIONS]
+    // 免费账户调订阅接口 404，只显示主区域
+    regionOptions.value = a.region ? [a.region] : [...FALLBACK_REGIONS]
   }
 }
 
