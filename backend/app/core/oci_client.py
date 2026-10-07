@@ -480,9 +480,10 @@ class OciClient:
         返回 "PAYG" / "FREE_TIER" / None。走账号代理，失败返回 None 不抛异常。
         """
         try:
-            # osp-gateway 的 region 用账号主区域
+            # osp-gateway endpoint 模板（照搬 OCI SDK）：
+            # https://osp-oci-integ.osp.{region}.oci.{secondLevelDomain}
             url = (
-                f"https://osp-gateway.{self.region}.oraclecloud.com"
+                f"https://osp-oci-integ.osp.{self.region}.oci.oraclecloud.com"
                 f"/20190601/subscriptions"
                 f"?compartmentId={self.tenancy_ocid}"
                 f"&ospHomeRegion={self.region}"
