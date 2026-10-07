@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.models.models import Account, SnipeLog, SnipeTask
-from app.schemas.schemas import SnipeLogOut, SnipeTaskCreate, SnipeTaskOut
+from app.schemas.schemas import SnipeLogOut, SnipeTaskCreate, SnipeTaskOut, SnipeTaskUpdate
 from app.workers.sniper import sniper_manager
 
 router = APIRouter()
@@ -131,6 +131,48 @@ def list_tasks(db: Session = Depends(get_db)):
 @router.get("/{task_id}", response_model=SnipeTaskOut)
 def get_task(task_id: int, db: Session = Depends(get_db)):
     task = _get_task(db, task_id)
+    account = db.get(Account, task.account_id)
+    return _to_out(task, account.name if account else "")
+
+@router.put("/{task_id}", response_model=SnipeTaskOut)
+def update_task(task_id: int, data: SnipeTaskUpdate, db: Session = Depends(get_db)):
+    """编辑抢机任务：只有 pending/paused/stopped/failed 状态可编辑。
+
+    只更新传入的非 None 字段；attempts 与 status 保持不变。
+    """
+    task = _get_task(db, task_id)
+    if task.status in ("running", "success"):
+        raise HTTPException(status_code=400, detail="任务运行中或已完成，不可编辑")
+    # 只更新传入的非 None 字段
+    updates = data.model_dump(exclude_none=True)
+    new_account_id = updates.get("account_id", task.account_id)
+    new_shape = updates.get("shape", task.shape)
+    # 账号存在性校验（如果改了账号）
+    if "account_id" in updates:
+        account = db.get(Account, updates["account_id"])
+        if not account:
+            raise HTTPException(status_code=404, detail="账号不存在")
+    # 同一账号同一 shape 唯一性校验（排除自己）
+    if "account_id" in updates or "shape" in updates:
+        dup = (
+            db.query(SnipeTask)
+            .filter(
+                SnipeTask.id != task.id,
+                SnipeTask.account_id == new_account_id,
+                SnipeTask.shape == new_shape,
+                SnipeTask.status.in_(["running", "paused"]),
+            )
+            .first()
+        )
+        if dup:
+            raise HTTPException(
+                status_code=400,
+                detail="该账号该 shape 已有进行中的抢机任务（#%d，状态 %s），请先暂停或删除" % (dup.id, STATUS_TEXT.get(dup.status, dup.status)),
+            )
+    for field, value in updates.items():
+        setattr(task, field, value)
+    db.commit()
+    db.refresh(task)
     account = db.get(Account, task.account_id)
     return _to_out(task, account.name if account else "")
 

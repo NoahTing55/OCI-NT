@@ -270,6 +270,24 @@ class SnipeTaskCreate(BaseModel):
     boot_volume_gb: int = Field(default=50, ge=50, le=16384, description="启动卷大小（GB），OCI 限制 50-16384")
 
 
+class SnipeTaskUpdate(BaseModel):
+    """抢机任务编辑：所有字段可选，只更新传入的非 None 字段。"""
+    account_id: int | None = None
+    region: str | None = None
+    shape: str | None = None
+    ocpus: float | None = Field(default=None, gt=0)
+    memory_gb: float | None = Field(default=None, gt=0)
+    image_ocid: str | None = None
+    subnet_ocid: str | None = None
+    availability_domain: str | None = None
+    display_name: str | None = Field(default=None, max_length=128)
+    root_password: str | None = Field(default=None, max_length=128)
+    target_count: int | None = Field(default=None, ge=1, le=100)
+    interval_seconds: int | None = Field(default=None, ge=5, le=3600)
+    open_all_ports: bool | None = None
+    boot_volume_gb: int | None = Field(default=None, ge=50, le=16384)
+
+
 class SnipeTaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

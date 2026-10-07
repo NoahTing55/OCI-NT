@@ -268,6 +268,83 @@ with TestClient(app) as client:
     r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, interval_seconds=3601))
     check("interval_seconds=3601 → 422", r.status_code == 422)
 
+    # ---------- 5. 编辑任务（PUT /{id}） ----------
+    # 新建一个 pending 任务用于编辑（E5.Flex，避免与已有任务冲突）
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, shape="VM.Standard.E5.Flex"))
+    check("编辑测试：建 pending 任务", r.status_code == 200, r.text[:120])
+    task_edit = r.json()["id"]
+
+    # 正常编辑：改多个字段
+    r = client.put(f"/api/sniper/{task_edit}", json={
+        "ocpus": 2, "memory_gb": 12, "boot_volume_gb": 100,
+        "interval_seconds": 300, "display_name": "edited", "target_count": 2,
+    })
+    check("编辑 pending 任务 → 200", r.status_code == 200, r.text[:120])
+    j = r.json()
+    check("编辑后 ocpus=2", j.get("ocpus") == 2, str(j.get("ocpus")))
+    check("编辑后 memory=12", j.get("memory_gb") == 12)
+    check("编辑后硬盘 100GB", j.get("boot_volume_gb") == 100)
+    check("编辑后间隔 300s", j.get("interval_seconds") == 300)
+    check("编辑后显示名", j.get("display_name") == "edited")
+    check("编辑后 status 仍 pending", j.get("status") == "pending", j.get("status"))
+    check("编辑后 attempts 不重置", j.get("attempts") == 0)
+
+    # 部分字段编辑：只传一个字段，其他不变
+    r = client.put(f"/api/sniper/{task_edit}", json={"display_name": "v2"})
+    check("部分字段编辑 → 200 且其他字段不变",
+          r.status_code == 200 and r.json().get("display_name") == "v2"
+          and r.json().get("ocpus") == 2, r.text[:160])
+
+    # 非法值 → 422
+    r = client.put(f"/api/sniper/{task_edit}", json={"boot_volume_gb": 10})
+    check("编辑硬盘 <50GB → 422", r.status_code == 422)
+    r = client.put(f"/api/sniper/{task_edit}", json={"interval_seconds": 4})
+    check("编辑间隔 <5s → 422", r.status_code == 422)
+
+    # 不存在的任务 → 404
+    r = client.put("/api/sniper/99999", json={"ocpus": 1})
+    check("编辑不存在的任务 → 404", r.status_code == 404)
+
+    # 改到不存在的账号 → 404
+    r = client.put(f"/api/sniper/{task_edit}", json={"account_id": 99999})
+    check("编辑改到不存在的账号 → 404", r.status_code == 404)
+
+    # running 任务拒绝编辑
+    db = SessionLocal()
+    try:
+        t = db.get(SnipeTask, task_edit)
+        t.status = "running"
+        db.commit()
+    finally:
+        db.close()
+    r = client.put(f"/api/sniper/{task_edit}", json={"ocpus": 1})
+    check("编辑 running 任务 → 400", r.status_code == 400, r.text[:120])
+
+    # success 任务拒绝编辑（task3 在第 3 节已达 success）
+    r = client.put(f"/api/sniper/{task3}", json={"ocpus": 1})
+    check("编辑 success 任务 → 400", r.status_code == 400, r.text[:120])
+
+    # 唯一性冲突：另建一个 A1.Flex 任务并置 paused，再把 task_edit 改成 A1.Flex
+    r = client.post("/api/sniper", json=dict(TASK_BODY, account_id=account_id, shape="VM.Standard.A1.Flex"))
+    check("建另一个 A1 任务", r.status_code == 200, r.text[:120])
+    other = r.json()["id"]
+    db = SessionLocal()
+    try:
+        for tid in (other, task_edit):
+            t = db.get(SnipeTask, tid)
+            t.status = "paused"
+        db.commit()
+    finally:
+        db.close()
+    r = client.put(f"/api/sniper/{task_edit}", json={"shape": "VM.Standard.A1.Flex"})
+    check("编辑导致唯一性冲突 → 400", r.status_code == 400, r.text[:160])
+    # 改回不冲突的 shape → 200
+    r = client.put(f"/api/sniper/{task_edit}", json={"shape": "VM.Standard.E5.Flex"})
+    check("编辑为不冲突 shape → 200", r.status_code == 200, r.text[:120])
+    # paused 任务可编辑
+    r = client.put(f"/api/sniper/{other}", json={"target_count": 5})
+    check("编辑 paused 任务 → 200", r.status_code == 200 and r.json().get("target_count") == 5, r.text[:120])
+
 print()
 print("共 %d 项：通过 %d，失败 %d" % (len(PASS) + len(FAIL), len(PASS), len(FAIL)))
 if FAIL:
