@@ -463,6 +463,7 @@ class OciClient:
                 continue
             # billingType 必须是 Paid（Pay As You Go），LimitedFree（试用）不算
             billing = str(s.get("billingType", "")).upper()
+            logger.info("Shape检查: %s, memory=%s, billingType=%s", name, s.get("memoryInGBs"), billing)
             if billing != "PAID":
                 continue
             try:
