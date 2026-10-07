@@ -157,6 +157,7 @@ class OciClient:
         subnet_ocid: str,
         display_name: str,
         user_data: str = "",
+        boot_volume_gb: int = 50,
     ) -> httpx.Response:
         """POST /20160918/instances/：创建实例（抢机核心调用）。
 
@@ -164,13 +165,18 @@ class OciClient:
         让新实例自动分配临时公网 IP（后续可换预留 IP）。
         user_data 非空时通过 metadata 下发 base64 后的 cloud-init
         （用于开机自动设置 root 密码，见 core/cloud_init.py）。
+        boot_volume_gb：启动卷大小（GB），OCI 限制 50-16384。
         """
         body: dict = {
             "compartmentId": compartment_id,
             "availabilityDomain": availability_domain,
             "shape": shape,
             "displayName": display_name,
-            "sourceDetails": {"sourceType": "image", "imageId": image_ocid},
+            "sourceDetails": {
+                "sourceType": "image",
+                "imageId": image_ocid,
+                "bootVolumeSizeInGBs": boot_volume_gb,
+            },
             "createVnicDetails": {"subnetId": subnet_ocid, "assignPublicIp": True},
         }
         if user_data:

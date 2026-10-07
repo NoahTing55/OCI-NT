@@ -317,6 +317,7 @@ class SniperManager:
                 "target_count": max(1, task.target_count or 1),
                 "interval_seconds": max(5, task.interval_seconds or 60),  # 无容量重试间隔（秒）
                 "open_all_ports": task.open_all_ports if task.open_all_ports is not None else True,  # 开机后放行所有端口
+                "boot_volume_gb": task.boot_volume_gb or 50,  # 启动卷大小（GB）
                 "compartment": compartment_of(account),
                 "root_password": task.root_password or "",
             }
@@ -412,6 +413,7 @@ class SniperManager:
                         subnet_ocid=cfg["subnet_ocid"],
                         display_name=dn,
                         user_data=user_data,
+                        boot_volume_gb=cfg["boot_volume_gb"],
                     )
                 except (httpx.TimeoutException, httpx.ConnectError, httpx.ProxyError) as e:
                     unknown_streak += 1

@@ -124,10 +124,22 @@ with TestClient(app) as client:
     _db.close()
     client.headers.update({"Authorization": "Bearer " + create_access_token("tester")})
 
-    # 模板接口
+    # 模板接口：4 个新模板，顺序固定
     r = client.get("/api/sniper/templates")
-    check("GET /templates 200 且含 ARM 模板", r.status_code == 200 and any(
-        t["shape"] == "VM.Standard.A1.Flex" and t["ocpus"] == 4 for t in r.json()))
+    tpl = r.json()
+    check("GET /templates 200 且有 4 个模板", r.status_code == 200 and len(tpl) == 4, r.text[:120])
+    expected = [
+        ("免费 AMD 1C1G", "VM.Standard.E2.1.Micro", 1, 1),
+        ("ARM 1C6G", "VM.Standard.A1.Flex", 1, 6),
+        ("ARM 2C12G", "VM.Standard.A1.Flex", 2, 12),
+        ("E5 1C6G", "VM.Standard.E5.Flex", 1, 6),
+    ]
+    ok = all(
+        tpl[i]["name"] == e[0] and tpl[i]["shape"] == e[1]
+        and tpl[i]["ocpus"] == e[2] and tpl[i]["memory_gb"] == e[3]
+        for i, e in enumerate(expected)
+    )
+    check("模板顺序/配置正确", ok, str([(t["name"], t["shape"], t["ocpus"], t["memory_gb"]) for t in tpl])[:200])
 
     account_id = _make_account()
     body = dict(TASK_BODY, account_id=account_id)
@@ -141,10 +153,19 @@ with TestClient(app) as client:
     r = client.post("/api/sniper", json=dict(body, account_id=99999))
     check("建任务账号不存在 → 404", r.status_code == 404, r.text[:120])
 
-    # 正常建任务
+    # 正常建任务（默认 boot_volume_gb=50）
     r = client.post("/api/sniper", json=body)
     check("建任务成功", r.status_code == 200 and r.json()["status"] == "pending", r.text[:200])
+    check("默认硬盘 50GB", r.json().get("boot_volume_gb") == 50, r.text[:200])
     task1 = r.json()["id"]
+
+    # 自定义硬盘容量
+    r = client.post("/api/sniper", json=dict(body, boot_volume_gb=100, shape="VM.Standard.E2.1.Micro"))
+    check("自定义硬盘 100GB", r.status_code == 200 and r.json().get("boot_volume_gb") == 100, r.text[:200])
+
+    # 硬盘容量越界 → 422
+    r = client.post("/api/sniper", json=dict(body, boot_volume_gb=10, shape="VM.Standard.E5.Flex"))
+    check("硬盘 <50GB → 422", r.status_code == 422, r.text[:120])
 
     # 启动任务（worker 会尝试连 OCI，沙箱出网被拦截，走网络异常分支）
     r = client.post(f"/api/sniper/{task1}/start")
