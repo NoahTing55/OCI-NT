@@ -38,16 +38,16 @@
         </template>
       </el-table-column>
       <!-- 别名：点击单元格直接改 -->
-      <el-table-column label="自定义名称" min-width="120" class-name="alias-col">
+      <el-table-column label="自定义名称" width="100" class-name="alias-col">
         <template #default="{ row }">
           <el-input v-if="isEditing(row.id, 'name')" v-model="cellVal" size="small" ref="cellInputRef"
             @keyup.enter="saveCell(row, 'name')" @blur="saveCell(row, 'name')" />
           <span v-else class="cell-editable" @click="startEdit(row, 'name')" :title="'点击修改：' + row.name">{{ row.name }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="region" label="区域" width="140" />
+      <el-table-column prop="region" label="主区域" width="140" />
       <!-- 成本：点击单元格直接改 -->
-      <el-table-column label="成本" width="100" align="center">
+      <el-table-column label="账号成本" width="100" align="center">
         <template #default="{ row }">
           <el-input-number v-if="isEditing(row.id, 'cost')" v-model="cellVal" size="small" :min="0" :precision="2"
             @keyup.enter="saveCell(row, 'cost')" @blur="saveCell(row, 'cost')" ref="cellInputRef" style="width: 96px" />
@@ -59,7 +59,7 @@
         <template #default="{ row }"><el-tag size="small" class="days-chip">{{ aliveDays(row) }}</el-tag></template>
       </el-table-column>
       <!-- 抢机任务状态 -->
-      <el-table-column label="抢机任务" width="110" align="center">
+      <el-table-column label="开机任务" width="110" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small" class="task-badge"><span class="spin-dot"></span>抢机中</el-tag>
           <el-tag v-else-if="row.snipe_task_status === 'paused'" type="warning" size="small">已暂停</el-tag>
@@ -81,7 +81,7 @@
           <el-link type="primary" @click="goInstances(row.id)">{{ row.instance_count ?? 0 }}</el-link>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100" align="center">
+      <el-table-column label="账号状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="STATUS[row.status]?.[1] || ''" size="small">{{ STATUS[row.status]?.[0] || row.status }}</el-tag>
         </template>
@@ -92,6 +92,7 @@
       <!-- 操作收进下拉菜单 -->
       <el-table-column label="操作" width="70" align="center" fixed="right">
         <template #default="{ row }">
+          <el-button size="small" type="warning" @click="goCreateInstance(row.id)" style="margin-right: 4px"><el-icon><Aim /></el-icon>创建实例</el-button>
           <el-dropdown trigger="click" @command="(cmd) => handleOp(cmd, row)">
             <el-button size="small">···</el-button>
             <template #dropdown>
@@ -242,6 +243,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Aim } from '@element-plus/icons-vue'
 import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary } from '../api/client.js'
 
 const router = useRouter()
