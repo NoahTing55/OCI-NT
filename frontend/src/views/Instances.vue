@@ -139,7 +139,7 @@ const filters = ref({ account_id: null, region: '', state: '' })
 const stateType = (s) =>
   ({ RUNNING: 'success', STOPPED: '', TERMINATED: 'info', STOPPING: 'warning', STARTING: 'warning' }[s] || 'info')
 
-const load = async () => {
+const load = async (retry = true) => {
   loading.value = true
   try {
     const params = {}
@@ -149,6 +149,10 @@ const load = async () => {
     const data = await listInstances(params)
     instances.value = data.items
     errors.value = data.errors
+    // 首次加载为空时自动重试一次（OCI 首次聚合查询慢，缓存未热）
+    if (retry && (!data.items || data.items.length === 0) && !Object.keys(params).length) {
+      setTimeout(() => load(false), 3000)
+    }
   } catch (e) {
     ElMessage.error('加载失败：' + (e.response?.data?.detail || e.message))
   } finally {
