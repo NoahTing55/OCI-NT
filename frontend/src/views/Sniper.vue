@@ -112,6 +112,11 @@
             <el-button :loading="fetching.ad" @click="fetchAds">获取</el-button>
           </div>
         </el-form-item>
+        <el-form-item label="硬盘容量">
+          <el-input-number v-model="form.boot_volume_gb" :min="50" :max="16384" :step="10" style="width: 130px" />
+          <span style="margin-left: 4px">GB</span>
+          <span style="color: #909399; font-size: 12px; margin-left: 8px">启动卷大小（50-16384）</span>
+        </el-form-item>
         <el-form-item label="放行所有端口">
           <el-switch v-model="form.open_all_ports" />
           <span style="color: #909399; font-size: 12px; margin-left: 8px">开机后自动在安全列表添加全端口放行规则</span>
@@ -238,7 +243,7 @@ const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
   availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
-  target_count: 1, interval_seconds: 60, open_all_ports: true,
+  target_count: 1, interval_seconds: 60, open_all_ports: true, boot_volume_gb: 50,
 })
 
 // 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
@@ -448,7 +453,7 @@ const openCreate = async () => {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
     availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
-    target_count: 1, interval_seconds: 60, open_all_ports: true,
+    target_count: 1, interval_seconds: 60, open_all_ports: true, boot_volume_gb: 50,
   })
   clearOciOptions()
   try {
@@ -467,6 +472,7 @@ const applyTemplate = () => {
   form.value.shape = t.shape
   form.value.ocpus = t.ocpus
   form.value.memory_gb = t.memory_gb
+  form.value.boot_volume_gb = 50  // 模板默认硬盘 50GB，可再手动改
 }
 
 // 卡片点击：选中并填入模板（shape 变化会触发 shapeArch watcher 自动刷新操作系统列表）
