@@ -24,7 +24,7 @@
             <el-icon><User /></el-icon><span>账号管理</span>
           </el-menu-item>
           <el-menu-item index="/proxies">
-            <el-icon><Globe /></el-icon><span>代理管理</span>
+            <el-icon><Connection /></el-icon><span>代理管理</span>
           </el-menu-item>
           <el-menu-item index="/instances">
             <el-icon><Server /></el-icon><span>实例运维</span>
@@ -54,7 +54,7 @@
 // 主布局：侧边栏图标 + 渐变 header
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Cloudy, DataBoard, User, Globe, Server, Share, Aim, Lock, Setting } from '@element-plus/icons-vue'
+import { Cloudy, DataBoard, User, Connection, Server, Share, Aim, Lock, Setting } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const username = computed(() => localStorage.getItem('oci_user') || '')
