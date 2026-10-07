@@ -463,7 +463,6 @@ class OciClient:
                 continue
             # billingType 必须是 Paid（Pay As You Go），LimitedFree（试用）不算
             billing = str(s.get("billingType", "")).upper()
-            logger.info("Shape检查: %s, memory=%s, billingType=%s", name, s.get("memoryInGBs"), billing)
             if billing != "PAID":
                 continue
             try:
@@ -478,7 +477,9 @@ class OciClient:
         try:
             resp = await self.request("GET", "identity", f"/20160918/tenancies/{self.tenancy_ocid}")
             if resp.status_code == 200:
-                return resp.json().get("name")
+                data = resp.json()
+                logger.info("Tenancy字段: %s", sorted(data.keys()))
+                return data.get("name")
         except Exception:
             pass
         return None
