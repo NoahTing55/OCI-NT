@@ -221,7 +221,7 @@ import {
 
 const STATUS_MAP = {
   pending: '待启动', running: '抢机中', paused: '已暂停',
-  success: '已抢到', stopped: '已停止', failed: '失败',
+  success: '已完成', stopped: '已停止', failed: '失败',
 }
 const statusText = (s) => STATUS_MAP[s] || s
 const statusType = (s) =>
