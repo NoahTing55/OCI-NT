@@ -46,6 +46,8 @@ class OciClient:
         self.user_ocid = user_ocid
         self.fingerprint = fingerprint
         self.region = region
+        self._proxy_url = proxy_url
+        self._private_key_pem = private_key_pem
         # keyId 格式：tenancy_ocid/user_ocid/fingerprint
         self.key_id = f"{tenancy_ocid}/{user_ocid}/{fingerprint}"
         self._private_key = serialization.load_pem_private_key(
@@ -473,41 +475,52 @@ class OciClient:
         return False
 
     async def get_subscription_plan_type(self) -> "str | None":
-        """查订阅 plan_type（搬用 OCI-Noah 的 read_subscription_metadata 逻辑）。
+        """查订阅 plan_type（照搬 OCI-Noah 的 read_subscription_metadata）。
 
-        调 osp-gateway GET /20190601/subscriptions?compartmentId={tenancyId}&ospHomeRegion={region}&limit=100，
+        用官方 oci SDK 的 SubscriptionServiceClient（走账号代理），
         取评分最高的订阅（PAYG=30 > FREE_TIER=20 > UNKNOWN=10）的 plan_type。
-        返回 "PAYG" / "FREE_TIER" / None。走账号代理，失败返回 None 不抛异常。
+        返回 "PAYG" / "FREE_TIER" / None。失败返回 None 不抛异常。
         """
         try:
-            # osp-gateway endpoint 模板（照搬 OCI SDK）：
-            # https://osp-oci-integ.osp.{region}.oci.{secondLevelDomain}
-            url = (
-                f"https://osp-oci-integ.osp.{self.region}.oci.oraclecloud.com"
-                f"/20190601/subscriptions"
-                f"?compartmentId={self.tenancy_ocid}"
-                f"&ospHomeRegion={self.region}"
-                f"&limit=100"
+            import oci
+
+            # 照搬 OCI-Noah：osp_config 用 home region
+            osp_config = {
+                "tenancy": self.tenancy_ocid,
+                "user": self.user_ocid,
+                "fingerprint": self.fingerprint,
+                "key_content": self._private_key_pem,
+                "region": self.region,
+            }
+            client = oci.osp_gateway.SubscriptionServiceClient(
+                osp_config, timeout=(10, 30)
             )
-            body = None
-            headers = self._sign_headers("GET", url, body)
-            resp = await self._client.request("GET", url, headers=headers)
-            if resp.status_code != 200:
-                return None
-            items = resp.json().get("items", []) or []
+            # 照搬 OCI-Noah：代理设到 SDK session
+            if self._proxy_url:
+                client.base_client.session.proxies = {
+                    "http": self._proxy_url,
+                    "https": self._proxy_url,
+                }
+            resp = client.list_subscriptions(
+                osp_home_region=self.region,
+                compartment_id=self.tenancy_ocid,
+                limit=100,
+                retry_strategy=oci.retry.NoneRetryStrategy(),
+            )
+            items = list(getattr(resp.data, "items", None) or [])
             if not items:
                 return None
-            # 评分选最优：PAYG > FREE_TIER > UNKNOWN（搬用 OCI-Noah subscription_score）
-            def _score(s: dict) -> int:
-                pt = str(s.get("planType", "")).upper()
-                us = str(s.get("upgradeState", "")).upper()
+            # 评分选最优（照搬 OCI-Noah subscription_score）
+            def _score(s) -> int:
+                pt = str(getattr(s, "plan_type", "") or "").upper()
+                us = str(getattr(s, "upgrade_state", "") or "").upper()
                 if pt == "PAYG" or us == "UPGRADED":
                     return 30
                 if pt == "FREE_TIER":
                     return 20
                 return 10
             best = max(items, key=_score)
-            return best.get("planType")
+            return getattr(best, "plan_type", None)
         except Exception:
             return None
 

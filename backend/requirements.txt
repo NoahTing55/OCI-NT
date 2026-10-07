@@ -16,3 +16,5 @@ PyJWT==2.10.1
 pyotp==2.9.0
 qrcode==7.4.2
 Pillow==11.0.0
+# 账号类型识别：照搬 OCI-Noah，用官方 SDK 调 osp-gateway
+oci==2.187.2
