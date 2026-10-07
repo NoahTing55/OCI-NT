@@ -67,7 +67,7 @@ class AccountOut(BaseModel):
     cost: float = 0  # 账号成本（OCI-Start 式，可点击修改）
     registered_at: datetime | None = None  # 真实注册时间（存活天数优先用它）
     account_type: str = ""  # free 免费 / paid 付费 / "" 未知
-    tenancy_name: str = ""  # 租户名称（存活检查时自动写入）
+    tenancy_name: str | None = ""  # 租户名称（存活检查时自动写入，老数据为 NULL）
 
 
 class BindProxyIn(BaseModel):
