@@ -478,8 +478,9 @@ class OciClient:
             resp = await self.request("GET", "identity", f"/20160918/tenancies/{self.tenancy_ocid}")
             if resp.status_code == 200:
                 data = resp.json()
-                logger.info("Tenancy字段: %s", sorted(data.keys()))
-                return data.get("name")
+                logger.info("Tenancy详情: name=%s desc=%s tags=%s",
+                            data.get("name"), data.get("description"),
+                            data.get("freeformTags"))
         except Exception:
             pass
         return None
