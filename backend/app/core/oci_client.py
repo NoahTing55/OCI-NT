@@ -472,6 +472,60 @@ class OciClient:
                 continue
         return False
 
+    async def get_subscription_plan_type(self) -> "str | None":
+        """查订阅 plan_type（搬用 OCI-Noah 的 read_subscription_metadata 逻辑）。
+
+        调 osp-gateway GET /20190601/subscriptions?compartmentId={tenancyId}&ospHomeRegion={region}&limit=100，
+        取评分最高的订阅（PAYG=30 > FREE_TIER=20 > UNKNOWN=10）的 plan_type。
+        返回 "PAYG" / "FREE_TIER" / None。走账号代理，失败返回 None 不抛异常。
+        """
+        try:
+            # osp-gateway 的 region 用账号主区域
+            url = (
+                f"https://osp-gateway.{self.region}.oraclecloud.com"
+                f"/20190601/subscriptions"
+                f"?compartmentId={self.tenancy_ocid}"
+                f"&ospHomeRegion={self.region}"
+                f"&limit=100"
+            )
+            body = None
+            headers = self._sign_headers("GET", url, body)
+            resp = await self._client.request("GET", url, headers=headers)
+            if resp.status_code != 200:
+                logger.debug("查订阅 plan_type 失败：HTTP %s", resp.status_code)
+                return None
+            items = resp.json().get("items", []) or []
+            if not items:
+                return None
+            # 评分选最优：PAYG > FREE_TIER > UNKNOWN（搬用 OCI-Noah subscription_score）
+            def _score(s: dict) -> int:
+                pt = str(s.get("planType", "")).upper()
+                us = str(s.get("upgradeState", "")).upper()
+                if pt == "PAYG" or us == "UPGRADED":
+                    return 30
+                if pt == "FREE_TIER":
+                    return 20
+                return 10
+            best = max(items, key=_score)
+            return best.get("planType")
+        except Exception as e:
+            logger.debug("查订阅 plan_type 异常：%s", str(e)[:100])
+            return None
+
+    @staticmethod
+    def classify_account_type(plan_type: "str | None", upgrade_state: "str | None" = None) -> str:
+        """搬用 OCI-Noah 的 classify_account_type。
+
+        PAYG 或 upgrade_state=UPGRADED → upgraded；FREE_TIER → free；其他 → unknown。
+        """
+        pt = plan_type.upper() if isinstance(plan_type, str) else ""
+        us = upgrade_state.upper() if isinstance(upgrade_state, str) else ""
+        if pt == "PAYG" or us == "UPGRADED":
+            return "upgraded"
+        if pt == "FREE_TIER":
+            return "free"
+        return "unknown"
+
     async def get_tenancy_name(self) -> "str | None":
         """查租户显示名称：GET /20160918/tenancies/{tenancyId} 取 name 字段。失败返回 None，不抛异常。"""
         try:
@@ -483,40 +537,34 @@ class OciClient:
         return None
 
     async def get_account_info(self) -> dict:
-        """识别账号信息（Free Trial=免费，Pay As You Go=升级）。
+        """识别账号信息（搬用 OCI-Noah 的 read_subscription_metadata 逻辑）。
 
         返回 {"registered_at": datetime|None, "account_type": "free"|"upgraded"|None}。
         注册时间：根 compartment 的 timeCreated。
-        账号类型（按 OCI-Start OciClassLoader 思路 + 保守策略）：
-          - ListShapes 查 E3/E4/E5（memory > 1.0，billingType=Paid），不能开 → free；
-          - 能开 + 注册超 30 天 → upgraded（试用期已过，必为付费）；
-          - 能开 + 注册不超 30 天 → free（保守默认；新付费号需手动改为升级，
-            因 OCI API 无法区分新试用号和新付费号）。
+        账号类型：优先用 osp-gateway 订阅 plan_type（PAYG=升级，FREE_TIER=免费）；
+          查不到时回退到 ListShapes 查 E3/E4/E5 大内存 AMD（能开=升级，不能=免费）。
         任何失败返回空值，不抛异常。
         """
         result: dict = {"registered_at": None, "account_type": None}
         try:
             # 注册时间：根 compartment 的 timeCreated
             comp = await self.get_compartment(self.tenancy_ocid)
-            registered_at = None
             if comp:
-                registered_at = self._parse_ocid_time(comp.get("timeCreated"))
-                result["registered_at"] = registered_at
+                result["registered_at"] = self._parse_ocid_time(comp.get("timeCreated"))
 
-            # 账号类型
-            shapes = await self.list_shapes(self.tenancy_ocid)
-            can_amd = self._can_create_large_amd(shapes)
-            if not can_amd:
-                result["account_type"] = "free"
-            elif self._is_older_than_days(registered_at, 30):
-                # 超 30 天还能开付费 AMD → 必为 PAYG
-                result["account_type"] = "upgraded"
+            # 账号类型：osp-gateway 订阅 plan_type 优先（搬用 OCI-Noah）
+            plan_type = await self.get_subscription_plan_type()
+            classified = self.classify_account_type(plan_type)
+            if classified in ("upgraded", "free"):
+                result["account_type"] = classified
             else:
-                # 30 天内：保守判为 free（试用/新付费无法区分），用户可手动改
-                result["account_type"] = "free"
+                # 回退：ListShapes 查大内存 AMD
+                shapes = await self.list_shapes(self.tenancy_ocid)
+                can_amd = self._can_create_large_amd(shapes)
+                result["account_type"] = "upgraded" if can_amd else "free"
 
-            logger.info("账号信息识别：type=%s, registered_at=%s",
-                        result["account_type"], result["registered_at"])
+            logger.info("账号信息识别：type=%s plan_type=%s, registered_at=%s",
+                        result["account_type"], plan_type, result["registered_at"])
         except Exception as e:
             logger.debug("识别账号信息异常：%s", str(e)[:100])
         return result
