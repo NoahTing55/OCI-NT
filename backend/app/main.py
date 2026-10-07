@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import accounts, account_summary, auth, batch, cloudflare, health, instances, network, oci_options, proxies, sniper
+from app.api import accounts, account_summary, auth, batch, cloudflare, health, instances, network, oci_options, proxies, region_subscription, sniper
 from app.api import settings as settings_api
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
@@ -77,6 +77,7 @@ auth_dep = [Depends(get_current_operator)]
 
 app.include_router(auth.router, prefix="/api/auth", tags=["登录鉴权"])
 app.include_router(accounts.router, prefix="/api/accounts", tags=["账号管理"], dependencies=auth_dep)
+app.include_router(region_subscription.router, prefix="/api", tags=["区域订阅"], dependencies=auth_dep)
 app.include_router(account_summary.router, prefix="/api/account-summary", tags=["账户摘要"], dependencies=auth_dep)
 app.include_router(proxies.router, prefix="/api/proxies", tags=["代理管理"], dependencies=auth_dep)
 app.include_router(health.router, prefix="/api/health", tags=["存活检查"], dependencies=auth_dep)

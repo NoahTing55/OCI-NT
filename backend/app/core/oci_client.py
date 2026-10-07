@@ -568,3 +568,30 @@ class OciClient:
     async def get_subscription_type(self, home_region: str | None = None) -> str | None:
         """查账号订阅类型：free 免费 / paid 付费 / None 未知（兼容旧调用）。"""
         return (await self.get_subscription_info(home_region))["type"]
+
+    # ---------------- 区域订阅（升级账户） ----------------
+    async def list_region_subscriptions(self, tenancy_ocid: str) -> list[dict]:
+        """GET /20160918/regionSubscriptions：查租户已订阅区域（含 regionName、status）。"""
+        resp = await self.request(
+            "GET", "identity", f"/20160918/regionSubscriptions?tenancyId={tenancy_ocid}"
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询区域订阅失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+
+    async def create_region_subscription(self, tenancy_ocid: str, region_name: str) -> dict:
+        """POST /20160918/regionSubscriptions：订阅新区域（仅升级账户可用）。"""
+        resp = await self.request(
+            "POST", "identity", "/20160918/regionSubscriptions",
+            json_body={"tenancyId": tenancy_ocid, "regionName": region_name},
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"订阅区域失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json() if resp.text else {}
+
+    async def list_all_regions(self) -> list[dict]:
+        """GET /20160918/regions：查全部可用区域（含 regionName、regionKey）。"""
+        resp = await self.request("GET", "identity", "/20160918/regions")
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询区域列表失败：HTTP {resp.status_code} {resp.text[:200]}")
+        return resp.json()

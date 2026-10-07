@@ -66,7 +66,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="区域" required>
-          <el-input v-model="form.region" placeholder="如 ap-seoul-1" @change="onRegionChange" />
+          <el-select v-model="form.region" placeholder="如 ap-seoul-1" filterable allow-create
+            style="width: 100%" @change="onRegionChange">
+            <el-option v-for="r in regionOptions" :key="r" :value="r" :label="r" />
+          </el-select>
         </el-form-item>
         <el-form-item label="抢机数量">
           <el-input-number v-model="form.target_count" :min="1" :max="100" style="width: 160px" />
@@ -223,6 +226,7 @@ import {
   getOciImages,
   getOciSubnets,
   getOciCompartments,
+  listRegionSubscriptions,
 } from '../api/client'
 
 const STATUS_MAP = {
@@ -302,10 +306,33 @@ const onRegionChange = () => {
   fetchImages()
 }
 
+// 区域下拉回退列表（订阅接口失败时用）
+const FALLBACK_REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
+const regionOptions = ref([...FALLBACK_REGIONS])
+
+// 拉取账号的已订阅区域（升级账户），失败时回退硬编码列表
+const loadRegionOptions = async (accountId) => {
+  const a = accounts.value.find((x) => x.id === accountId)
+  // 非升级账户直接用回退列表
+  if (!a || a.account_type !== 'upgraded') {
+    regionOptions.value = [...FALLBACK_REGIONS]
+    return
+  }
+  try {
+    const subs = await listRegionSubscriptions(accountId)
+    const names = (subs || []).map((s) => s.region_name).filter(Boolean)
+    if (names.length) regionOptions.value = names
+    else regionOptions.value = [...FALLBACK_REGIONS]
+  } catch {
+    regionOptions.value = [...FALLBACK_REGIONS]
+  }
+}
+
 // 选账号后自动带出该账号的默认区域，之前拉取的 OCI 选项失效清空，镜像自动重拉
 const onAccountChange = () => {
   const a = accounts.value.find((x) => x.id === form.value.account_id)
   if (a && a.region) form.value.region = a.region
+  loadRegionOptions(form.value.account_id)
   clearOciOptions()
   fetchImages()
   fetchComps()  // 选账号后自动加载 compartment 列表，不用手动点获取

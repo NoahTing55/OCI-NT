@@ -16,6 +16,10 @@ export const deleteProxy = (id) => api.delete(`/proxies/${id}`).then((r) => r.da
 
 // 账户摘要
 export const getAccountSummary = () => api.get('/account-summary').then((r) => r.data)
+// 区域订阅（升级账户）
+export const listRegionSubscriptions = (accountId) => api.get(`/accounts/${accountId}/region-subscriptions`).then((r) => r.data)
+export const subscribeRegion = (accountId, region) => api.post(`/accounts/${accountId}/region-subscriptions`, { region }).then((r) => r.data)
+export const listOciRegions = () => api.get('/oci-regions').then((r) => r.data)
 
 // 存活检查
 export const checkAccount = (id) => api.post(`/health/check/${id}`).then((r) => r.data)

@@ -105,6 +105,7 @@
                 <el-dropdown-item command="edit">编辑</el-dropdown-item>
                 <el-dropdown-item command="bind">绑定代理</el-dropdown-item>
                 <el-dropdown-item command="check">存活检查</el-dropdown-item>
+                <el-dropdown-item v-if="row.account_type === 'upgraded'" command="regions">区域订阅</el-dropdown-item>
                 <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -232,15 +233,38 @@
         <el-button type="primary" @click="submitBind" :loading="binding">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 区域订阅（仅升级账户） -->
+    <el-dialog v-model="regionsVisible" :title="`区域订阅 - ${regionsAccountName}`" width="520px">
+      <div class="import-sub">已订阅区域</div>
+      <div v-loading="regionsLoading" style="min-height: 40px; margin-bottom: 16px">
+        <el-tag v-for="r in subscribedRegions" :key="r.region_name" style="margin: 0 8px 8px 0"
+          :type="r.is_home_region ? 'success' : ''">
+          {{ r.region_name }}{{ r.is_home_region ? '（主区域）' : '' }}
+        </el-tag>
+        <span v-if="!regionsLoading && !subscribedRegions.length" style="color: #909399">暂无数据</span>
+      </div>
+      <div class="import-sub">订阅新区域</div>
+      <div style="display: flex; gap: 8px">
+        <el-select v-model="newRegion" placeholder="选择要订阅的区域" filterable style="flex: 1">
+          <el-option v-for="r in unsubscribedRegions" :key="r.region_name" :value="r.region_name" :label="r.region_name" />
+        </el-select>
+        <el-button type="primary" @click="doSubscribe" :loading="subscribing" :disabled="!newRegion">订阅</el-button>
+      </div>
+      <div style="font-size: 12px; color: #909399; margin-top: 8px">订阅后该区域可用于新建实例；仅升级账户可用。</div>
+      <template #footer>
+        <el-button @click="regionsVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
-import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary } from '../api/client.js'
+import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary, listRegionSubscriptions, subscribeRegion, listOciRegions } from '../api/client.js'
 
 const router = useRouter()
 const REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
@@ -472,6 +496,7 @@ const handleOp = (cmd, row) => {
   else if (cmd === 'edit') openEdit(row)
   else if (cmd === 'bind') openBind(row)
   else if (cmd === 'check') checkOne(row)
+  else if (cmd === 'regions') openRegions(row)
   else if (cmd === 'delete') remove(row)
 }
 // 存活天数：按自然日计算（避免时区/小时差导致少算一天）
@@ -598,6 +623,61 @@ const submitBind = async () => {
     ElMessage.error('绑定失败：' + (e.response?.data?.detail || e.message))
   } finally {
     binding.value = false
+  }
+}
+
+// ---------- 区域订阅（仅升级账户） ----------
+const regionsVisible = ref(false)
+const regionsAccount = ref(null)
+const regionsAccountName = ref('')
+const subscribedRegions = ref([])
+const allRegions = ref([])
+const newRegion = ref('')
+const regionsLoading = ref(false)
+const subscribing = ref(false)
+// 未订阅区域 = 全部区域去掉已订阅的
+const unsubscribedRegions = computed(() => {
+  const subbed = new Set(subscribedRegions.value.map((r) => r.region_name))
+  return allRegions.value.filter((r) => !subbed.has(r.region_name))
+})
+
+const openRegions = async (row) => {
+  regionsAccount.value = row
+  regionsAccountName.value = row.name || `账号 #${row.id}`
+  newRegion.value = ''
+  regionsVisible.value = true
+  await loadRegions()
+}
+
+const loadRegions = async () => {
+  if (!regionsAccount.value) return
+  regionsLoading.value = true
+  try {
+    const [subs, regions] = await Promise.all([
+      listRegionSubscriptions(regionsAccount.value.id),
+      listOciRegions().catch(() => []),
+    ])
+    subscribedRegions.value = subs || []
+    allRegions.value = regions || []
+  } catch (e) {
+    ElMessage.error('加载区域订阅失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    regionsLoading.value = false
+  }
+}
+
+const doSubscribe = async () => {
+  if (!newRegion.value || !regionsAccount.value) return
+  subscribing.value = true
+  try {
+    await subscribeRegion(regionsAccount.value.id, newRegion.value)
+    ElMessage.success(`已订阅区域 ${newRegion.value}`)
+    newRegion.value = ''
+    await loadRegions()
+  } catch (e) {
+    ElMessage.error('订阅失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    subscribing.value = false
   }
 }
 
