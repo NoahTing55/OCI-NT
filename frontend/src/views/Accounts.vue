@@ -38,14 +38,14 @@
         </template>
       </el-table-column>
       <!-- 别名：点击单元格直接改 -->
-      <el-table-column label="自定义名称" width="100" class-name="alias-col">
+      <el-table-column label="自定义名称" min-width="130" class-name="alias-col">
         <template #default="{ row }">
           <el-input v-if="isEditing(row.id, 'name')" v-model="cellVal" size="small" ref="cellInputRef"
             @keyup.enter="saveCell(row, 'name')" @blur="saveCell(row, 'name')" />
           <span v-else class="cell-editable" @click="startEdit(row, 'name')" :title="'点击修改：' + row.name">{{ row.name }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="region" label="主区域" width="140" />
+      <el-table-column prop="region" label="主区域" width="150" />
       <!-- 成本：点击单元格直接改 -->
       <el-table-column label="账号成本" width="100" align="center">
         <template #default="{ row }">
@@ -67,7 +67,7 @@
         </template>
       </el-table-column>
       <!-- 账号类型：免费/试用/升级/未知（对标 OCI-Start） -->
-      <el-table-column label="账号类型" width="90" align="center">
+      <el-table-column label="账号类型" min-width="120" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.account_type === 'free' || row.account_type === 'trial'" type="success" size="small">个人免费账户</el-tag>
           <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级账户</el-tag>
@@ -86,7 +86,7 @@
           <el-tag :type="STATUS[row.status]?.[1] || ''" size="small">{{ STATUS[row.status]?.[0] || row.status }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" width="110" align="center">
+      <el-table-column label="创建时间" width="120" align="center">
         <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
       </el-table-column>
       <!-- 操作收进下拉菜单 -->
