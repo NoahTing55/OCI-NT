@@ -61,7 +61,7 @@
       <!-- 抢机任务状态 -->
       <el-table-column label="开机任务" width="110" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small" class="task-badge"><span class="spin-dot"></span>抢机中</el-tag>
+          <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small" class="task-badge"><span class="spin-dot"></span>运行中</el-tag>
           <el-tag v-else-if="row.snipe_task_status === 'paused'" type="warning" size="small">已暂停</el-tag>
           <el-tag v-else type="info" size="small">无</el-tag>
         </template>
@@ -92,7 +92,7 @@
       <!-- 操作收进下拉菜单 -->
             <el-table-column label="实例操作" width="110" align="center">
         <template #default="{ row }">
-          <el-button size="small" type="warning" @click="goCreateInstance(row.id)"><el-icon><Aim /></el-icon>创建实例</el-button>
+          <el-button size="small" type="warning" @click="goCreateInstance()"><el-icon><Aim /></el-icon>创建实例</el-button>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="70" align="center">
@@ -423,9 +423,9 @@ const loadSummary = async () => {
 const goInstances = (accountId) => {
   router.push({ path: '/instances', query: { account_id: accountId } })
 }
-// 跳转抢机页并预选账号（Sniper.vue 的 onMounted 会读取 account_id 自动打开新建对话框）
-const goCreateInstance = (accountId) => {
-  router.push({ path: '/sniper', query: { account_id: accountId } })
+// 跳转开机管理页（列表），不自动弹新建框
+const goCreateInstance = () => {
+  router.push({ path: '/sniper' })
 }
 // ---------- 单元格点击编辑（别名/成本，OCI-Start 式：点击变输入框，回车/失焦保存） ----------
 const editingCell = ref({ id: null, field: null })
@@ -460,7 +460,7 @@ const saveCell = async (row, field) => {
 const fmtCost = (v) => Number(v ?? 0).toFixed(2)
 // 操作下拉菜单分发
 const handleOp = (cmd, row) => {
-  if (cmd === 'create') goCreateInstance(row.id)
+  if (cmd === 'create') goCreateInstance()
   else if (cmd === 'edit') openEdit(row)
   else if (cmd === 'bind') openBind(row)
   else if (cmd === 'check') checkOne(row)
