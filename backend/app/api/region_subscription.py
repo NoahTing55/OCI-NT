@@ -51,12 +51,10 @@ async def list_region_subscriptions(account_id: int, db: Session = Depends(get_d
         ]
     except RuntimeError as e:
         msg = str(e)
-        # 免费账户调订阅接口会 404/403，给友好提示
+        # 订阅接口 404/403（免费账户、无额外订阅或权限问题）时返回空列表，
+        # 前端用账号主区域兜底显示，不报错
         if "404" in msg or "403" in msg or "NotAuthorizedOrNotFound" in msg:
-            raise HTTPException(
-                status_code=400,
-                detail="该账号无权限查询区域订阅（免费账户仅限主区域，无需订阅）",
-            )
+            return []
         raise HTTPException(status_code=400, detail=msg)
     finally:
         await client.aclose()

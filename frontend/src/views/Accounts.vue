@@ -654,11 +654,16 @@ const loadRegions = async () => {
   if (!regionsAccount.value) return
   regionsLoading.value = true
   try {
-    const [subs, regions] = await Promise.all([
-      listRegionSubscriptions(regionsAccount.value.id),
-      listOciRegions().catch(() => []),
-    ])
-    subscribedRegions.value = subs || []
+    // 订阅接口可能 404（无额外订阅或权限问题），失败时用主区域兜底，不报错
+    const subs = await listRegionSubscriptions(regionsAccount.value.id).catch(() => null)
+    const regions = await listOciRegions().catch(() => [])
+    if (subs && subs.length) {
+      subscribedRegions.value = subs
+    } else {
+      // 兜底：只显示主区域为已订阅
+      const home = regionsAccount.value.region
+      subscribedRegions.value = home ? [{ region_name: home, is_home_region: true, status: 'READY' }] : []
+    }
     allRegions.value = regions || []
   } catch (e) {
     ElMessage.error('加载区域订阅失败：' + (e.response?.data?.detail || e.message))
