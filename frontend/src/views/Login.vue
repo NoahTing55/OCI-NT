@@ -110,4 +110,6 @@ async function onInit() {
 .login-card { width: 380px; }
 .login-card h2 { text-align: center; margin-bottom: 20px; }
 .hint { color: #909399; font-size: 13px; text-align: center; margin-bottom: 12px; }
+/* 登录/初始化表单标签对齐：固定宽度 + 两端对齐，"用户名"/"密码"/"动态验证码"冒号对齐 */
+.login-card .el-form-item__label { width: 70px; text-align: justify; text-align-last: justify; }
 </style>

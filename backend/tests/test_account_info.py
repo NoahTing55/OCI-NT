@@ -77,7 +77,7 @@ class FakeResp:
         return self._data
 
 
-def make_client(time_created=None, shapes=None, comp_status=200, shape_status=200):
+def make_client(time_created=None, shapes=None, comp_status=200, shape_status=200, sub_status=500):
     c = OciClient.__new__(OciClient)
     c.tenancy_ocid = "ocid1.tenancy.oc1..x"
     c.region = "ap-seoul-1"
@@ -85,6 +85,8 @@ def make_client(time_created=None, shapes=None, comp_status=200, shape_status=20
     async def fake_request(method, service, path, json_body=None):
         if "/compartments/" in path:
             return FakeResp(comp_status, {"timeCreated": time_created} if time_created else {})
+        if "/regionSubscriptions" in path:
+            return FakeResp(sub_status, [])
         if "/shapes" in path:
             return FakeResp(shape_status, shapes or [])
         return FakeResp(404, {})
@@ -99,25 +101,33 @@ async def run_e2e():
     amd_shapes = [shape("VM.Standard.E5.Flex", 24.0)]
     free_shapes = [shape("VM.Standard.E2.1.Micro", 1.0), shape("VM.Standard.A1.Flex", 24.0)]
 
-    # 老号 + 能开 AMD → upgraded
-    r = await make_client(old_ts, amd_shapes).get_account_info()
-    check("老号+AMD → upgraded", r["account_type"] == "upgraded", r)
+    # 订阅探测 200 → upgraded（优先于 shapes）
+    r = await make_client(old_ts, free_shapes, sub_status=200).get_account_info()
+    check("订阅200 → upgraded", r["account_type"] == "upgraded", r)
     check("registered_at 解析", r["registered_at"] is not None and r["registered_at"].year == int(old_ts[:4]) and int(old_ts[5:7]) == r["registered_at"].month, r)
 
-    # 新号 + 能开 AMD → trial（OCI-Start 原逻辑）
-    r = await make_client(new_ts, amd_shapes).get_account_info()
-    check("新号+AMD → trial", r["account_type"] == "trial", r)
+    # 订阅探测 404 → free（免费号）
+    r = await make_client(old_ts, amd_shapes, sub_status=404).get_account_info()
+    check("订阅404 → free", r["account_type"] == "free", r)
 
-    # 老号 + 不能开 AMD → free
-    r = await make_client(old_ts, free_shapes).get_account_info()
-    check("老号无AMD → free", r["account_type"] == "free", r)
+    # 订阅探测 403 → free
+    r = await make_client(new_ts, amd_shapes, sub_status=403).get_account_info()
+    check("订阅403 → free（无 trial 档）", r["account_type"] == "free", r)
 
-    # compartment 查不到 → 全 None
-    r = await make_client(old_ts, amd_shapes, comp_status=404).get_account_info()
-    check("compartment 404 → None", r["account_type"] is None and r["registered_at"] is None, r)
+    # 订阅探测无结果（500）→ 回退 shapes：有 AMD → upgraded
+    r = await make_client(old_ts, amd_shapes, sub_status=500).get_account_info()
+    check("回退 shapes 有 AMD → upgraded", r["account_type"] == "upgraded", r)
 
-    # shapes 查不到 → 按无 AMD 算 free（compartment 成功）
-    r = await make_client(old_ts, [], shape_status=403).get_account_info()
+    # 订阅探测无结果（500）→ 回退 shapes：无 AMD → free
+    r = await make_client(old_ts, free_shapes, sub_status=500).get_account_info()
+    check("回退 shapes 无 AMD → free", r["account_type"] == "free", r)
+
+    # compartment 查不到 → registered_at 为 None，但订阅探测仍可定类型
+    r = await make_client(old_ts, amd_shapes, comp_status=404, sub_status=200).get_account_info()
+    check("compartment 404 → registered_at None + 订阅定类型", r["registered_at"] is None and r["account_type"] == "upgraded", r)
+
+    # shapes 查不到 → 按无 AMD 算 free（compartment 成功，订阅无结果）
+    r = await make_client(old_ts, [], shape_status=403, sub_status=500).get_account_info()
     check("shapes 失败 → free", r["account_type"] == "free" and r["registered_at"] is not None, r)
 
     # 网络异常不抛

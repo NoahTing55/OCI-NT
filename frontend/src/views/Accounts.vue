@@ -45,6 +45,7 @@
           <span v-else class="cell-editable" @click="startEdit(row, 'name')" :title="'点击修改：' + row.name">{{ row.name }}</span>
         </template>
       </el-table-column>
+      <el-table-column prop="tenancy_name" label="租户名称" min-width="140" show-overflow-tooltip />
       <el-table-column prop="region" label="主区域" width="150" />
       <!-- 成本：点击单元格直接改 -->
       <el-table-column label="账号成本" width="100" align="center">

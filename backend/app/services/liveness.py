@@ -77,17 +77,21 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
 
     status_code = None
     err = None
-    acct_info = {"account_type": None, "registered_at": None}
+    acct_info = {"account_type": None, "registered_at": None, "tenancy_name": None}
     try:
         resp = await client.get_user()
         status_code = resp.status_code
-        # 存活检查顺带识别账号信息（类型+注册时间，失败不影响主流程）
-        # 对标 OCI-Start OciClassLoader：根 compartment timeCreated 做注册时间，
-        # shapes 里有无大内存 AMD E3/E4/E5 + 是否超 1 个月判断 free/trial/upgraded
+        # 存活检查顺带识别账号信息（类型+注册时间+租户名，失败不影响主流程）
+        # 账号类型：区域订阅接口探测优先（200 → upgraded，404/403 → free），异常回退 shapes 逻辑
         if status_code == 200:
             try:
                 logger.info("账号 %s 开始识别账号信息", account.name)
                 acct_info = await client.get_account_info()
+                # 租户名：调 tenancies 接口取 name，失败不影响
+                try:
+                    acct_info["tenancy_name"] = await client.get_tenancy_name()
+                except Exception:
+                    pass
                 logger.info("账号 %s 账号信息：%s", account.name, acct_info)
             except Exception:
                 logger.warning("账号 %s 识别账号信息异常", account.name, exc_info=True)
@@ -109,6 +113,9 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     # 根 compartment timeCreated 即账号注册时间；用户手动填过的优先保留
     if acct_info["registered_at"] and not account.registered_at:
         account.registered_at = acct_info["registered_at"]
+    # 租户名：有值就更新
+    if acct_info.get("tenancy_name"):
+        account.tenancy_name = acct_info["tenancy_name"]
     db.commit()
     logger.info("账号「%s」存活检查：%s（%s）", account.name, STATUS_TEXT[new_status], message)
 
