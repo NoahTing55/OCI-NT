@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="toolbar">
-      <el-button type="primary" @click="openCreate">新建抢机任务</el-button>
+      <el-button type="primary" @click="openCreate">新建实例</el-button>
       <el-button @click="load" :loading="loading">刷新</el-button>
       <span class="toolbar-tip">同一账号同一 shape 同时只允许一个进行中的任务</span>
     </div>
@@ -39,7 +39,7 @@
     </el-table>
 
     <!-- 新建任务：分组布局（模板 → 基础 → 实例 → 高级折叠） -->
-    <el-dialog v-model="createVisible" :title="isEdit ? '编辑抢机任务' : '新建抢机任务'" width="640px">
+    <el-dialog v-model="createVisible" :title="isEdit ? '编辑实例任务' : '新建实例'" width="640px">
       <el-form :model="form" label-width="100px">
         <!-- 分组1：选择模板（2×2 卡片网格） -->
         <div class="form-group-title">选择模板</div>
@@ -558,7 +558,7 @@ const pauseTask = async (row) => {
 
 const delTask = async (row) => {
   try {
-    await ElMessageBox.confirm(`删除抢机任务 #${row.id}？日志将一并删除。`, '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`删除实例任务 #${row.id}？日志将一并删除。`, '确认', { type: 'warning' })
     await deleteSnipeTask(row.id)
     ElMessage.success('已删除')
     load()
@@ -607,7 +607,7 @@ onUnmounted(stopLogPoll)
 </script>
 
 <style scoped>
-/* ========== 新建抢机任务对话框美化 ========== */
+/* ========== 新建实例对话框美化 ========== */
 /* 对话框头部 / 内容 / 底部 */
 :deep(.el-dialog__header) {
   padding: 18px 24px 14px;

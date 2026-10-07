@@ -33,7 +33,7 @@
             <el-icon><Share /></el-icon><span>网络 / 换 IP</span>
           </el-menu-item>
           <el-menu-item index="/sniper">
-            <el-icon><Aim /></el-icon><span>抢机任务</span>
+            <el-icon><Aim /></el-icon><span>开机管理</span>
           </el-menu-item>
           <el-menu-item index="/security">
             <el-icon><Lock /></el-icon><span>安全设置</span>
