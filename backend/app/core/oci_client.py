@@ -463,26 +463,6 @@ class OciClient:
                     continue
         return False
 
-    async def _detect_type_by_subscription(self) -> "str | None":
-        """用区域订阅接口探测账号类型。
-
-        免费账户调该接口必返回 404/403，升级账户返回 200。
-        返回 "upgraded" / "free"；其他情况返回 None（调用方回退到 shapes 逻辑）。
-        不抛异常。
-        """
-        try:
-            resp = await self.request(
-                "GET", "identity",
-                f"/20160918/regionSubscriptions?tenancyId={self.tenancy_ocid}"
-            )
-            if resp.status_code == 200:
-                return "upgraded"
-            if resp.status_code in (403, 404):
-                return "free"
-        except Exception:
-            pass
-        return None
-
     async def get_tenancy_name(self) -> "str | None":
         """查租户显示名称：GET /20160918/tenancies/{tenancyId} 取 name 字段。失败返回 None，不抛异常。"""
         try:
@@ -494,12 +474,15 @@ class OciClient:
         return None
 
     async def get_account_info(self) -> dict:
-        """识别账号信息。
+        """按 OCI-Start OciClassLoader 原逻辑识别账号信息。
 
         返回 {"registered_at": datetime|None, "account_type": "free"|"upgraded"|None}。
         注册时间：根 compartment 的 timeCreated。
-        账号类型：优先用区域订阅接口探测（200 → upgraded，404/403 → free）；
-          探测无结果时回退到 ListShapes 查大内存 AMD E3/E4/E5（能开 → upgraded，不能 → free）。
+        账号类型：ListShapes（compartmentId=tenancy OCID）查付费 AMD
+          E3(VM.Standard3.Flex)/E4(VM.Standard.E4.Flex)/E5(VM.Standard.E5.Flex)
+          且 memoryInGBs > 1.0：
+            能开 → upgraded（OCI-Start 的 UPGRADE/TRIAL 两档合并为 upgraded）；
+            不能开 → free。
         任何失败返回空值，不抛异常。
         """
         result: dict = {"registered_at": None, "account_type": None}
@@ -509,15 +492,10 @@ class OciClient:
             if comp:
                 result["registered_at"] = self._parse_ocid_time(comp.get("timeCreated"))
 
-            # 账号类型：区域订阅接口探测优先
-            sub_type = await self._detect_type_by_subscription()
-            if sub_type is not None:
-                result["account_type"] = sub_type
-            else:
-                # 回退：ListShapes 查大内存 AMD（只有 free / upgraded 两档）
-                shapes = await self.list_shapes(self.tenancy_ocid)
-                can_amd = self._can_create_large_amd(shapes)
-                result["account_type"] = "upgraded" if can_amd else "free"
+            # 账号类型：ListShapes 查付费 AMD（OCI-Start 原逻辑）
+            shapes = await self.list_shapes(self.tenancy_ocid)
+            can_amd = self._can_create_large_amd(shapes)
+            result["account_type"] = "upgraded" if can_amd else "free"
 
             logger.info("账号信息识别：type=%s, registered_at=%s",
                         result["account_type"], result["registered_at"])
