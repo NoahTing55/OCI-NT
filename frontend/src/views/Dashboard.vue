@@ -74,12 +74,12 @@
 <script setup>
 // 总览页：统计卡片 + 配额预警 + 最近动态（只读聚合，不改业务逻辑）
 import { ref, onMounted } from 'vue'
-import { User, Server, Aim, CircleCheck } from '@element-plus/icons-vue'
+import { User, Monitor, Aim, CircleCheck } from '@element-plus/icons-vue'
 import { listAccounts, listInstances, listSnipeTasks, getAccountSummary } from '../api/client'
 
 const statCards = ref([
   { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)' },
-  { label: '实例总数', value: '-', icon: Server, bg: 'linear-gradient(135deg,#67c23a,#85ce61)' },
+  { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#67c23a,#85ce61)' },
   { label: '运行中抢机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#e6a23c,#eebe77)' },
   { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#f56c6c,#f78989)' },
 ])
