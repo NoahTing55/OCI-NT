@@ -93,6 +93,7 @@ class SnipeTask(Base):
     success_count = Column(Integer, default=0)  # 已抢到台数
     interval_seconds = Column(Integer, default=60)  # 无容量时重试间隔（秒），默认 60
     open_all_ports = Column(Boolean, default=True)  # 开机后是否放行所有端口（安全列表加全端口规则），默认 True
+    boot_volume_gb = Column(Integer, default=50)  # 启动卷大小（GB），OCI 限制 50-16384，默认 50
     status = Column(String(32), default="pending")  # pending / running / paused / success / stopped / failed
     attempts = Column(Integer, default=0)
     last_error = Column(Text, default="")

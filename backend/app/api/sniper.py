@@ -5,7 +5,7 @@
 - POST /{id}/pause：CAS 置 paused 并唤醒 worker；
 - DELETE /{id}：running 任务需先暂停才能删除；
 - GET /{id}/logs：分页查任务日志（前端轮询）；
-- GET /templates：内置场景模板（ARM 4C24G 等），前端一键填入表单。
+- GET /templates：内置场景模板（免费 AMD 1C1G / ARM 1C6G / ARM 2C12G / E5 1C6G），前端一键填入表单。
 """
 from datetime import datetime
 
@@ -20,16 +20,17 @@ from app.workers.sniper import sniper_manager
 router = APIRouter()
 
 # 内置场景模板：前端"一键填入"用。不含区域/密钥/OCID，只有公开的 shape 配置。
-# 两类：ARM（A1 4C24G）、免费 AMD（E2.1.Micro 1C1G）。区域跟随所选账号。
+# 顺序固定：免费 AMD 1C1G → ARM 1C6G → ARM 2C12G → E5 1C6G。区域跟随所选账号。
+# 内置抢机模板（顺序固定，前端卡片按此顺序展示）
 TEMPLATES = [
-    {"name": "ARM 4C24G",
-     "shape": "VM.Standard.A1.Flex", "ocpus": 4, "memory_gb": 24},
     {"name": "免费 AMD 1C1G",
      "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
-    {"name": "E5 2C12G",
-     "shape": "VM.Standard.E5.Flex", "ocpus": 2, "memory_gb": 12},
-    {"name": "E5 4C24G",
-     "shape": "VM.Standard.E5.Flex", "ocpus": 4, "memory_gb": 24},
+    {"name": "ARM 1C6G",
+     "shape": "VM.Standard.A1.Flex", "ocpus": 1, "memory_gb": 6},
+    {"name": "ARM 2C12G",
+     "shape": "VM.Standard.A1.Flex", "ocpus": 2, "memory_gb": 12},
+    {"name": "E5 1C6G",
+     "shape": "VM.Standard.E5.Flex", "ocpus": 1, "memory_gb": 6},
 ]
 
 STATUS_TEXT = {
@@ -58,6 +59,7 @@ def _to_out(task: SnipeTask, account_name: str = "") -> SnipeTaskOut:
         success_count=task.success_count or 0,
         interval_seconds=task.interval_seconds or 60,
         open_all_ports=task.open_all_ports if task.open_all_ports is not None else True,
+        boot_volume_gb=task.boot_volume_gb or 50,
         root_password=task.root_password or "",
         started_at=task.started_at,
         finished_at=task.finished_at,
@@ -112,6 +114,7 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
         target_count=data.target_count,
         interval_seconds=data.interval_seconds,
         open_all_ports=data.open_all_ports,
+        boot_volume_gb=data.boot_volume_gb,
         status="pending",
     )
     db.add(task)

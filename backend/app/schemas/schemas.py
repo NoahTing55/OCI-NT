@@ -267,6 +267,7 @@ class SnipeTaskCreate(BaseModel):
     target_count: int = Field(default=1, ge=1, le=100, description="目标抢机台数，一次抢 N 台")
     interval_seconds: int = Field(default=60, ge=5, le=3600, description="无可用容量时的重试间隔（秒）")
     open_all_ports: bool = Field(default=True, description="开机后是否放行所有端口（安全列表加全端口规则）")
+    boot_volume_gb: int = Field(default=50, ge=50, le=16384, description="启动卷大小（GB），OCI 限制 50-16384")
 
 
 class SnipeTaskOut(BaseModel):
@@ -291,6 +292,7 @@ class SnipeTaskOut(BaseModel):
     success_count: int = 0
     interval_seconds: int = 60
     open_all_ports: bool = True
+    boot_volume_gb: int = 50
     root_password: str = ""
     started_at: datetime | None = None
     finished_at: datetime | None = None
