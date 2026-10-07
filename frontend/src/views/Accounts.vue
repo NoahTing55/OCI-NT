@@ -109,8 +109,57 @@
     </el-table>
 
     <!-- 新建账号 -->
-    <el-dialog v-model="createVisible" title="新建账号" width="560px">
+    <el-dialog v-model="createVisible" title="新建账号" width="600px">
       <el-tabs v-model="createTab">
+        <el-tab-pane label="配置文件导入" name="import">
+          <!-- 步骤 1：OCI API 配置 -->
+          <div class="import-step">
+            <span class="step-num">1</span>
+            <span class="step-title">OCI API 配置</span>
+          </div>
+          <div class="step-desc">粘贴完整 Config，私钥可上传或直接粘贴在配置后。</div>
+
+          <div class="import-sub">导入 Config 文件</div>
+          <div class="file-drop">
+            <div class="file-row">
+              <el-button size="small" @click="triggerConfigSelect">选择文件</el-button>
+              <span class="file-name" :class="{ empty: !configFileName }">{{ configFileName || '未选择任何文件' }}</span>
+              <!-- 原生 file 输入，避免 el-upload 的额外请求；读取后自动解析 -->
+              <input ref="configFileInput" type="file" accept=".config,config" style="display:none" @change="onConfigFileChange" />
+            </div>
+            <div class="file-hint">可直接选择文件名为 config 的 OCI 配置；也可以同时选择 PEM 私钥。<br />未选择文件，也可以在下方直接粘贴 Config。</div>
+          </div>
+
+          <div class="import-sub">完整 OCI Config</div>
+          <el-input v-model="importForm.config" type="textarea" :rows="6"
+            placeholder="粘贴 ~/.oci/config 内容，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
+          <div class="region-hint">
+            区域识别&nbsp;&nbsp;<span v-if="detectedRegion">已识别区域：<b>{{ detectedRegion }}</b></span><span v-else>等待输入 OCI Config</span><br />
+            粘贴配置后自动识别 region，并在导入时再次由后端校验。
+          </div>
+
+          <!-- 步骤 2：PEM 私钥文件 -->
+          <div class="import-step">
+            <span class="step-num">2</span>
+            <span class="step-title">PEM 私钥文件</span>
+          </div>
+          <div class="file-drop">
+            <div class="file-row">
+              <el-button size="small" @click="triggerPemSelect">选择文件</el-button>
+              <span class="file-name" :class="{ empty: !pemFileName }">{{ pemFileName || '未选择任何文件' }}</span>
+              <input ref="pemFileInput" type="file" accept=".pem,.key" style="display:none" @change="onPemFileChange" />
+            </div>
+            <div class="file-hint">如果 Config 中只有 key_file 路径，请在这里选择对应的 PEM 文件。</div>
+          </div>
+          <div class="import-sub">私钥 PEM（可选）</div>
+          <el-input v-model="importForm.privateKey" type="textarea" :rows="4"
+            placeholder="-----BEGIN PRIVATE KEY-----" show-password />
+
+          <div style="margin-top:16px">
+            <el-button type="primary" @click="parseConfig">解析并填入</el-button>
+            <span style="font-size:12px;color:#909399;margin-left:8px">解析 [DEFAULT] 段的 user / fingerprint / tenancy / region</span>
+          </div>
+        </el-tab-pane>
         <el-tab-pane label="手动填写" name="manual">
       <el-form :model="form" label-width="110px">
         <el-form-item label="别名"><el-input v-model="form.name" placeholder="如 香港-01" /></el-form-item>
@@ -128,22 +177,6 @@
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
-        </el-tab-pane>
-        <el-tab-pane label="配置文件导入" name="import">
-          <el-form label-width="110px">
-            <el-form-item label="config 内容">
-              <el-input v-model="importForm.config" type="textarea" :rows="7"
-                placeholder="粘贴 ~/.oci/config 内容，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
-            </el-form-item>
-            <el-form-item label="私钥 PEM">
-              <el-input v-model="importForm.privateKey" type="textarea" :rows="5"
-                placeholder="-----BEGIN PRIVATE KEY-----" show-password />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="parseConfig">解析并填入</el-button>
-              <span style="font-size:12px;color:#909399;margin-left:8px">解析 [DEFAULT] 段的 user / fingerprint / tenancy / region</span>
-            </el-form-item>
-          </el-form>
         </el-tab-pane>
       </el-tabs>
       <el-form :model="form" label-width="110px" style="margin-top: 4px">
@@ -247,8 +280,55 @@ const editId = ref(null)
 const editForm = ref({ name: '', region: '', remark: '', registered_at: '' })
 
 // ---------- 配置文件导入（纯前端解析，零后端改动） ----------
-const createTab = ref('manual')
+// 默认首选项卡为文件导入，手动填写作为备选
+const createTab = ref('import')
 const importForm = ref({ config: '', privateKey: '' })
+
+// 文件选择器（原生 input，避免 el-upload 的额外请求）
+const configFileInput = ref(null)
+const pemFileInput = ref(null)
+const configFileName = ref('')
+const pemFileName = ref('')
+const detectedRegion = ref('') // 解析出的区域，回显在"区域识别"提示区
+
+const triggerConfigSelect = () => configFileInput.value?.click()
+const triggerPemSelect = () => pemFileInput.value?.click()
+
+// FileReader 读文本文件
+const readTextFile = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(reader.result)
+  reader.onerror = () => reject(reader.error)
+  reader.readAsText(file)
+})
+
+// 选了 Config 文件：填入 textarea 并自动解析
+const onConfigFileChange = async (e) => {
+  const file = e.target.files?.[0]
+  e.target.value = '' // 清空以便重复选择同一文件
+  if (!file) return
+  try {
+    configFileName.value = file.name
+    importForm.value.config = String(await readTextFile(file))
+    parseConfig() // 自动解析并跳到手动填写页核对
+  } catch (err) {
+    ElMessage.error('读取文件失败：' + (err?.message || err))
+  }
+}
+
+// 选了 PEM 私钥文件：填入私钥框
+const onPemFileChange = async (e) => {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  try {
+    pemFileName.value = file.name
+    importForm.value.privateKey = String(await readTextFile(file)).trim()
+    ElMessage.success('私钥已载入')
+  } catch (err) {
+    ElMessage.error('读取文件失败：' + (err?.message || err))
+  }
+}
 
 // 简单 ini 解析：取 [DEFAULT]（无段头时按整段）中的 key=value
 const parseConfig = () => {
@@ -274,6 +354,7 @@ const parseConfig = () => {
     // region 可能是 ap-seoul-1 或 oc1.ap-seoul-1 格式，取最后一段
     const r = kv.region.split('.').pop()
     form.value.region = REGIONS.includes(r) ? r : kv.region
+    detectedRegion.value = form.value.region // 回显到"区域识别"提示区
   }
   if (importForm.value.privateKey.trim()) {
     form.value.private_key = importForm.value.privateKey.trim()
@@ -398,7 +479,11 @@ const fmtDate = (v) => {
 
 const openCreate = () => {
   form.value.proxy_id = defaultProxyId()
-  createTab.value = 'manual'
+  createTab.value = 'import' // 默认打开文件导入
+  importForm.value = { config: '', privateKey: '' }
+  configFileName.value = ''
+  pemFileName.value = ''
+  detectedRegion.value = ''
   createVisible.value = true
 }
 
@@ -639,4 +724,39 @@ onMounted(load)
 
 /* 别名列紧凑间距 */
 .alias-col .cell { padding-left: 8px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 新建账号-导入页：步骤头（序号圆圈 + 标题） */
+.import-step { display: flex; align-items: center; margin: 20px 0 6px; }
+.import-step:first-child { margin-top: 2px; }
+.step-num {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #67c23a; color: #fff;
+  font-size: 14px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-right: 10px; flex-shrink: 0;
+}
+.step-title { font-size: 15px; font-weight: 700; color: #303133; }
+.step-desc { font-size: 12px; color: #909399; margin: 0 0 4px 36px; }
+.import-sub { font-size: 13px; color: #303133; font-weight: 600; margin: 12px 0 8px; }
+
+/* 文件选择虚线框（浅绿背景） */
+.file-drop {
+  border: 1.5px dashed #a9d18e;
+  background: #f6fdf2;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 6px;
+}
+.file-row { display: flex; align-items: center; gap: 10px; }
+.file-name { font-size: 13px; color: #606266; word-break: break-all; }
+.file-name.empty { color: #a8abb2; }
+.file-hint { font-size: 12px; color: #909399; margin-top: 8px; line-height: 1.7; }
+
+/* 区域识别提示条 */
+.region-hint {
+  background: #f4f4f5; border-radius: 6px;
+  padding: 10px 12px; font-size: 12px; color: #909399;
+  margin-top: 10px; line-height: 1.7;
+}
+.region-hint b { color: #67c23a; }
 </style>
