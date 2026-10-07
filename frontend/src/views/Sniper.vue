@@ -21,13 +21,15 @@
       </el-table-column>
       <el-table-column prop="attempts" label="尝试" width="70" />
       <el-table-column prop="last_error" label="最后错误" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="created_at" label="创建时间" width="170" />
+      <el-table-column label="创建时间" width="150">
+        <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <div class="op-btns">
             <el-button size="small" type="success" v-if="!['running', 'success'].includes(row.status)" @click="startTask(row)">启动</el-button>
             <el-button size="small" type="warning" v-if="row.status === 'running'" @click="pauseTask(row)">暂停</el-button>
-            <el-tooltip :content="row.status === 'running' ? '任务抢机中，不可编辑' : row.status === 'success' ? '任务已完成，不可编辑' : '编辑任务'" placement="top">
+            <el-tooltip :content="row.status === 'running' ? '任务运行中，不可编辑' : row.status === 'success' ? '任务已完成，不可编辑' : '编辑任务'" placement="top">
               <el-button size="small" :disabled="['running', 'success'].includes(row.status)" @click="openEdit(row)">编辑</el-button>
             </el-tooltip>
             <el-button size="small" @click="openLogs(row)">日志</el-button>
@@ -222,7 +224,7 @@ import {
 } from '../api/client'
 
 const STATUS_MAP = {
-  pending: '待启动', running: '抢机中', paused: '已暂停',
+  pending: '待启动', running: '运行中', paused: '已暂停',
   success: '已完成', stopped: '已停止', failed: '失败',
 }
 const statusText = (s) => STATUS_MAP[s] || s
