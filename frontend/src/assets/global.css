@@ -1,0 +1,108 @@
+/* 全局样式：借鉴 R-Bot 卡片式现代感 + OCI-Start 简洁实用 */
+
+/* 页面白色圆角卡片 */
+.page-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+/* 卡片标题栏：左侧蓝色竖条 + 标题 */
+.card-title {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 16px;
+}
+.card-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: #409eff;
+  border-radius: 2px;
+  margin-right: 8px;
+}
+
+/* 统计卡片 */
+.stat-card {
+  cursor: default;
+  transition: box-shadow 0.2s;
+}
+.stat-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+.stat-card .stat-body {
+  display: flex;
+  align-items: center;
+}
+.stat-card .stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+.stat-card .stat-icon .el-icon {
+  font-size: 24px;
+  color: #fff;
+}
+.stat-card .stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.2;
+}
+.stat-card .stat-label {
+  font-size: 13px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+/* 表格头部 */
+.el-table th.el-table__cell {
+  background: #fafbfc !important;
+  font-size: 13px;
+  color: #606266;
+  font-weight: 600;
+}
+.el-table .el-table__row:hover > td.el-table__cell {
+  background: #f0f7ff !important;
+}
+
+/* 按钮圆角统一 */
+.el-button {
+  border-radius: 6px;
+}
+
+/* 顶部操作栏统一样式 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.toolbar .toolbar-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 4px;
+}
+
+/* 进度条加粗 */
+.el-progress--line .el-progress-bar__outer {
+  border-radius: 4px;
+}
+.el-progress--line .el-progress-bar__inner {
+  border-radius: 4px;
+}
+
+/* 主内容区背景 */
+.el-main {
+  background: #f5f7fa;
+}
