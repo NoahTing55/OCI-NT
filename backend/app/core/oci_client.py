@@ -478,42 +478,56 @@ class OciClient:
             resp = await self.request("GET", "identity", f"/20160918/tenancies/{self.tenancy_ocid}")
             if resp.status_code == 200:
                 data = resp.json()
-                logger.info("Tenancy详情: name=%s desc=%s tags=%s",
-                            data.get("name"), data.get("description"),
-                            data.get("freeformTags"))
         except Exception:
             pass
         return None
 
     async def get_account_info(self) -> dict:
-        """按 OCI-Start OciClassLoader 原逻辑识别账号信息。
+        """识别账号信息（Free Trial=免费，Pay As You Go=升级）。
 
         返回 {"registered_at": datetime|None, "account_type": "free"|"upgraded"|None}。
         注册时间：根 compartment 的 timeCreated。
-        账号类型：ListShapes（compartmentId=tenancy OCID）查付费 AMD
-          E3(VM.Standard3.Flex)/E4(VM.Standard.E4.Flex)/E5(VM.Standard.E5.Flex)
-          且 memoryInGBs > 1.0：
-            能开 → upgraded（OCI-Start 的 UPGRADE/TRIAL 两档合并为 upgraded）；
-            不能开 → free。
+        账号类型（按 OCI-Start OciClassLoader 思路 + 保守策略）：
+          - ListShapes 查 E3/E4/E5（memory > 1.0，billingType=Paid），不能开 → free；
+          - 能开 + 注册超 30 天 → upgraded（试用期已过，必为付费）；
+          - 能开 + 注册不超 30 天 → free（保守默认；新付费号需手动改为升级，
+            因 OCI API 无法区分新试用号和新付费号）。
         任何失败返回空值，不抛异常。
         """
         result: dict = {"registered_at": None, "account_type": None}
         try:
             # 注册时间：根 compartment 的 timeCreated
             comp = await self.get_compartment(self.tenancy_ocid)
+            registered_at = None
             if comp:
-                result["registered_at"] = self._parse_ocid_time(comp.get("timeCreated"))
+                registered_at = self._parse_ocid_time(comp.get("timeCreated"))
+                result["registered_at"] = registered_at
 
-            # 账号类型：ListShapes 查付费 AMD（OCI-Start 原逻辑）
+            # 账号类型
             shapes = await self.list_shapes(self.tenancy_ocid)
             can_amd = self._can_create_large_amd(shapes)
-            result["account_type"] = "upgraded" if can_amd else "free"
+            if not can_amd:
+                result["account_type"] = "free"
+            elif self._is_older_than_days(registered_at, 30):
+                # 超 30 天还能开付费 AMD → 必为 PAYG
+                result["account_type"] = "upgraded"
+            else:
+                # 30 天内：保守判为 free（试用/新付费无法区分），用户可手动改
+                result["account_type"] = "free"
 
             logger.info("账号信息识别：type=%s, registered_at=%s",
                         result["account_type"], result["registered_at"])
         except Exception as e:
             logger.debug("识别账号信息异常：%s", str(e)[:100])
         return result
+
+    @staticmethod
+    def _is_older_than_days(dt, days: int) -> bool:
+        """判断时间是否早于 N 天前。"""
+        if not dt:
+            return False
+        from datetime import datetime, timedelta
+        return dt < datetime.utcnow() - timedelta(days=days)
 
     # ---------------- 账号类型（订阅） ----------------
     async def get_tenancy_home_region(self) -> str | None:
