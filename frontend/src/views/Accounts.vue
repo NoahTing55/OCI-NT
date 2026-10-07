@@ -90,9 +90,13 @@
         <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
       </el-table-column>
       <!-- 操作收进下拉菜单 -->
-      <el-table-column label="操作" width="70" align="center" fixed="right">
+            <el-table-column label="实例操作" width="110" align="center">
         <template #default="{ row }">
-          <el-button size="small" type="warning" @click="goCreateInstance(row.id)" style="margin-right: 4px"><el-icon><Aim /></el-icon>创建实例</el-button>
+          <el-button size="small" type="warning" @click="goCreateInstance(row.id)"><el-icon><Aim /></el-icon>创建实例</el-button>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="70" align="center">
+        <template #default="{ row }">
           <el-dropdown trigger="click" @command="(cmd) => handleOp(cmd, row)">
             <el-button size="small">···</el-button>
             <template #dropdown>
