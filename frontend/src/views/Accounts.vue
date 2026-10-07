@@ -509,32 +509,43 @@ onMounted(load)
 .summary-cards {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
   margin-top: 12px;
 }
 .summary-card {
-  width: 300px;
+  width: 320px;
   cursor: pointer;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.15);
 }
 .summary-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f2f5;
 }
 .summary-name {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #303133;
 }
 .summary-stats {
   display: flex;
-  gap: 16px;
-  margin-bottom: 10px;
+  gap: 20px;
+  margin-bottom: 12px;
 }
 .stat-num {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 700;
   color: #303133;
+  line-height: 1.2;
 }
 .stat-sub, .stat-unit {
   font-size: 12px;
@@ -550,7 +561,14 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 8px;
+}
+.quota-row .el-progress--line .el-progress-bar__outer {
+  height: 10px !important;
+  border-radius: 5px;
+}
+.quota-row .el-progress--line .el-progress-bar__inner {
+  border-radius: 5px;
 }
 .quota-label {
   font-size: 12px;

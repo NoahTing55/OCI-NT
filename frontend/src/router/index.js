@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import Dashboard from '../views/Dashboard.vue'
 import Accounts from '../views/Accounts.vue'
 import Proxies from '../views/Proxies.vue'
 import Instances from '../views/Instances.vue'
@@ -12,7 +13,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: Login },
-    { path: '/', redirect: '/accounts' },
+    { path: '/', redirect: '/dashboard' },
+    { path: '/dashboard', component: Dashboard },
     { path: '/accounts', component: Accounts },
     { path: '/proxies', component: Proxies },
     { path: '/instances', component: Instances },

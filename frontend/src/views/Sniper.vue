@@ -1,11 +1,9 @@
 <template>
   <div>
-    <div style="margin-bottom: 12px">
+    <div class="toolbar">
       <el-button type="primary" @click="openCreate">新建抢机任务</el-button>
       <el-button @click="load" :loading="loading">刷新</el-button>
-      <span style="margin-left: 8px; font-size: 12px; color: #909399">
-        同一账号同一 shape 同时只允许一个进行中的任务
-      </span>
+      <span class="toolbar-tip">同一账号同一 shape 同时只允许一个进行中的任务</span>
     </div>
 
     <el-table :data="tasks" v-loading="loading" border>
