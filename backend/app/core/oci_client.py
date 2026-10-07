@@ -492,7 +492,7 @@ class OciClient:
             headers = self._sign_headers("GET", url, body)
             resp = await self._client.request("GET", url, headers=headers)
             if resp.status_code != 200:
-                logger.debug("查订阅 plan_type 失败：HTTP %s", resp.status_code)
+                logger.info("查订阅 plan_type 失败：HTTP %s url=%s", resp.status_code, url)
                 return None
             items = resp.json().get("items", []) or []
             if not items:
@@ -509,7 +509,7 @@ class OciClient:
             best = max(items, key=_score)
             return best.get("planType")
         except Exception as e:
-            logger.debug("查订阅 plan_type 异常：%s", str(e)[:100])
+            logger.info("查订阅 plan_type 异常：%s %s", type(e).__name__, str(e)[:200])
             return None
 
     @staticmethod
