@@ -31,7 +31,6 @@
     </div>
 
     <div style="margin: 8px 0">
-      <el-button size="small" type="success" :disabled="!selected.length" @click="runBatch('power_on')">批量开机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('power_off')">批量关机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('reboot')">批量重启</el-button>
       <el-button size="small" type="danger" :disabled="!selected.length" @click="runBatch('terminate')">批量终止</el-button>
