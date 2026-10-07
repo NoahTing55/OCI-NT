@@ -464,10 +464,12 @@ class OciClient:
         return False
 
     async def get_account_info(self) -> dict:
-        """按 OCI-Start 真实方法识别账号信息（简化为两种类型）。
+        """按 OCI-Start OciClassLoader 真实方法识别账号信息。
 
-        返回 {"registered_at": datetime|None, "account_type": "free"|"upgraded"|None}。
-        能开 E3/E4/E5 大内存 AMD → upgraded（个人升级号），否则 → free（个人免费号）。
+        返回 {"registered_at": datetime|None, "account_type": "free"|"trial"|"upgraded"|None}。
+        注册时间：根 compartment 的 timeCreated。
+        账号类型：ListShapes 查 E3/E4/E5 大内存 AMD（>1GB）：
+          能开 + 注册超 1 个月 → upgraded；能开 + 不超 → trial；不能开 → free。
         任何失败返回空值，不抛异常。
         """
         result: dict = {"registered_at": None, "account_type": None}
@@ -483,8 +485,12 @@ class OciClient:
             shapes = await self.list_shapes(self.tenancy_ocid)
             can_amd = self._can_create_large_amd(shapes)
 
-            # 只分两种：能开大内存 AMD → 升级号，否则 → 免费号
-            result["account_type"] = "upgraded" if can_amd else "free"
+            if can_amd and is_old:
+                result["account_type"] = "upgraded"
+            elif can_amd:
+                result["account_type"] = "trial"
+            else:
+                result["account_type"] = "free"
             logger.info("账号信息识别：type=%s, registered_at=%s",
                         result["account_type"], result["registered_at"])
         except Exception as e:

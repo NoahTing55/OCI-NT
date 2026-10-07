@@ -38,7 +38,7 @@
         </template>
       </el-table-column>
       <!-- 别名：点击单元格直接改 -->
-      <el-table-column label="别名" min-width="110" class-name="alias-col">
+      <el-table-column label="自定义名称" width="50" class-name="alias-col">
         <template #default="{ row }">
           <el-input v-if="isEditing(row.id, 'name')" v-model="cellVal" size="small" ref="cellInputRef"
             @keyup.enter="saveCell(row, 'name')" @blur="saveCell(row, 'name')" />
@@ -69,8 +69,8 @@
       <!-- 账号类型：免费/试用/升级/未知（对标 OCI-Start） -->
       <el-table-column label="账号类型" width="90" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.account_type === 'free'" type="success" size="small">个人免费号</el-tag>
-          <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级号</el-tag>
+          <el-tag v-if="row.account_type === 'free' || row.account_type === 'trial'" type="success" size="small">个人免费账户</el-tag>
+          <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级账户</el-tag>
           <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
           <el-tag v-else type="info" size="small">未知</el-tag>
         </template>

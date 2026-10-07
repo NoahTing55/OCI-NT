@@ -4,7 +4,7 @@
 - 注册时间：GET /20160918/compartments/{tenancyId} 取 timeCreated
 - 账号类型：shapes 里有无 AMD E3/E4/E5（memoryInGBs > 1.0）+ 是否超 1 个月
   - 能开大内存 AMD + 超 1 个月 → upgraded
-  - 能开大内存 AMD → upgraded（不分新老）
+  - 能开大内存 AMD + 超 1 个月 → upgraded；能开 + 不超 → trial；不能开 → free（OCI-Start OciClassLoader）
   - 不能 → free
 
 运行：python backend/tests/test_account_info.py（plain assert，无需 pytest）
@@ -104,9 +104,9 @@ async def run_e2e():
     check("老号+AMD → upgraded", r["account_type"] == "upgraded", r)
     check("registered_at 解析", r["registered_at"] is not None and r["registered_at"].year == old_ts[:4] and int(old_ts[5:7]) == r["registered_at"].month, r)
 
-    # 新号 + 能开 AMD → upgraded（只分两种）
+    # 新号 + 能开 AMD → trial（OCI-Start 原逻辑）
     r = await make_client(new_ts, amd_shapes).get_account_info()
-    check("新号+AMD → upgraded", r["account_type"] == "upgraded", r)
+    check("新号+AMD → trial", r["account_type"] == "trial", r)
 
     # 老号 + 不能开 AMD → free
     r = await make_client(old_ts, free_shapes).get_account_info()
