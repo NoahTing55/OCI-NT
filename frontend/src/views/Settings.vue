@@ -24,6 +24,14 @@
             :min="item.min ?? 0"
             :step="1"
           />
+          <el-time-picker
+            v-else-if="item.type === 'time'"
+            v-model="form[item.key]"
+            format="HH:mm"
+            value-format="HH:mm"
+            placeholder="选择时间"
+            style="width: 160px"
+          />
           <el-input v-else v-model="form[item.key]" style="width: 420px" />
           <div class="desc">{{ item.desc }}</div>
           <div v-if="item.secret && item.is_set" class="desc">状态：已设置</div>

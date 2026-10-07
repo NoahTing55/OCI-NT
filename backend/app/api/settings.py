@@ -17,7 +17,7 @@ from app.workers.scheduler import reschedule_jobs
 router = APIRouter()
 
 # 变更后需要实时重排 APScheduler 任务的设置键
-SCHEDULE_KEYS = {"CHECK_INTERVAL_MINUTES", "PROXY_SPEEDTEST_MINUTES"}
+SCHEDULE_KEYS = {"CHECK_DAILY_AT", "PROXY_SPEEDTEST_MINUTES"}
 
 
 @router.get("")

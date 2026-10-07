@@ -1,9 +1,10 @@
 """系统设置服务：Web 可配项的读写。
 
 设计原则：
-- 能 Web 化（本模块管理）：TG_BOT_TOKEN、TG_CHAT_ID、CHECK_INTERVAL_MINUTES、
+- 能 Web 化（本模块管理）：TG_BOT_TOKEN、TG_CHAT_ID、CHECK_DAILY_AT、
   PROXY_SPEEDTEST_MINUTES、SNIPE_LOG_RETENTION_DAYS、INSTANCE_CACHE_TTL、
   JWT_EXPIRE_MINUTES；
+- CHECK_INTERVAL_MINUTES 已废弃（保留兼容旧值，不再用于调度、不在前端展示）；
 - 必须保留 .env（启动前就需要，DB 不可用）：MASTER_KEY、DATABASE_URL、
   REDIS_URL、JWT_SECRET_KEY、ADMIN_USERNAME/ADMIN_PASSWORD —— 不在本模块管理。
 
@@ -23,9 +24,10 @@ from app.models.models import SystemSetting
 logger = logging.getLogger(__name__)
 
 # Web 可配项定义：
-#   group: 前端分区分组；type: str/int（决定校验与转换）；
+#   group: 前端分区分组；type: str/int/time（决定校验与转换，time 为 "HH:MM"）；
 #   secret: 是否敏感（入库加密、API 不回明文）；
-#   default: 代码默认值；min: 整数最小值；label/desc: 前端展示。
+#   default: 代码默认值；min: 整数最小值；label/desc: 前端展示；
+#   deprecated: 已废弃（保留兼容旧值，不在前端展示）。
 WEB_SETTINGS = {
     "TG_BOT_TOKEN": {
         "group": "notify", "type": "str", "secret": True, "default": "",
@@ -37,10 +39,16 @@ WEB_SETTINGS = {
         "label": "Chat ID",
         "desc": "接收通知的聊天 ID。留空则回退到环境变量 TG_CHAT_ID。",
     },
+    "CHECK_DAILY_AT": {
+        "group": "schedule", "type": "time", "secret": False, "default": "08:00",
+        "label": "每天存活检查时间",
+        "desc": "每天定时执行全量账号存活检查（服务器本地时间）。修改后定时任务自动重排，即时生效。",
+    },
     "CHECK_INTERVAL_MINUTES": {
         "group": "schedule", "type": "int", "secret": False, "default": 360, "min": 1,
+        "deprecated": True,
         "label": "存活检查间隔（分钟）",
-        "desc": "全量账号存活检查间隔。修改后定时任务自动重排，即时生效。",
+        "desc": "已废弃：存活检查已改为每天定时执行，此项不再生效。",
     },
     "PROXY_SPEEDTEST_MINUTES": {
         "group": "schedule", "type": "int", "secret": False, "default": 30, "min": 1,
@@ -79,11 +87,25 @@ _CACHE_TTL_SEC = 60  # 内存缓存有效期（秒）
 _cache: dict = {}  # key -> (value, expire_ts)
 
 
+def _parse_hhmm(raw) -> tuple:
+    """解析 "HH:MM" 时间字符串，返回 (hour, minute)。非法抛 ValueError。"""
+    import re
+    s = str(raw or "").strip()
+    m = re.match(r"^([01]\d|2[0-3]):([0-5]\d)$", s)
+    if not m:
+        raise ValueError(f"时间格式非法，应为 HH:MM（如 08:00）， got: {raw!r}")
+    return int(m.group(1)), int(m.group(2))
+
+
 def _coerce(key: str, raw) -> object:
     """按 WEB_SETTINGS 的 type 把值转成目标类型。"""
     spec = WEB_SETTINGS[key]
     if spec["type"] == "int":
         return int(str(raw).strip())
+    if spec["type"] == "time":
+        # 校验格式；非法时抛 ValueError，get_setting 会回退代码默认值
+        _parse_hhmm(raw)
+        return str(raw).strip()
     return str(raw)
 
 
@@ -98,6 +120,12 @@ def _validate(key: str, value) -> str:
         if iv < spec.get("min", 0):
             raise ValueError(f"{spec['label']}不能小于 {spec['min']}")
         return str(iv)
+    if spec["type"] == "time":
+        try:
+            _parse_hhmm(value)
+        except ValueError:
+            raise ValueError(f"{spec['label']}格式非法，应为 HH:MM（如 08:00）")
+        return str(value).strip()
     return str(value or "").strip()
 
 
@@ -215,6 +243,8 @@ def get_all_masked() -> list:
     """
     groups: dict = {}
     for key, spec in WEB_SETTINGS.items():
+        if spec.get("deprecated"):
+            continue  # 已废弃项不在前端展示
         group = spec["group"]
         if spec["secret"]:
             value = "已设置" if is_set(key) else ""
