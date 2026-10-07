@@ -44,8 +44,8 @@ check("None → False", OciClient._is_older_than_one_month(None) is False)
 
 
 # ---------- 3. _can_create_large_amd ----------
-def shape(name, mem):
-    return {"shape": name, "memoryInGBs": mem}
+def shape(name, mem, billing="PAID"):
+    return {"shape": name, "memoryInGBs": mem, "billingType": billing}
 
 
 check("E5 大内存 → True",
@@ -58,6 +58,10 @@ check("大小写不敏感",
       OciClient._can_create_large_amd([shape("vm.standard.e5.flex", 24.0)]) is True)
 check("E5 但内存 1.0 → False（OCI-Start 要求 > 1.0）",
       OciClient._can_create_large_amd([shape("VM.Standard.E5.Flex", 1.0)]) is False)
+check("E5 LimitedFree（试用）→ False",
+      OciClient._can_create_large_amd([shape("VM.Standard.E5.Flex", 24.0, "LimitedFree")]) is False)
+check("E5 AlwaysFree → False",
+      OciClient._can_create_large_amd([shape("VM.Standard.E5.Flex", 24.0, "AlwaysFree")]) is False)
 check("只有 E2 → False",
       OciClient._can_create_large_amd([shape("VM.Standard.E2.1.Micro", 1.0)]) is False)
 check("只有 A1 → False",
@@ -116,6 +120,11 @@ async def run_e2e():
     # 新号有 AMD 也算 upgraded（无 trial 档，合并）
     r = await make_client(new_ts, e5_shapes).get_account_info()
     check("新号有 AMD → upgraded（无 trial）", r["account_type"] == "upgraded", r)
+
+    # 试用账号：E5 + LimitedFree → free（Free Trial 算免费）
+    trial_shapes = [shape("VM.Standard.E5.Flex", 24.0, "LimitedFree")]
+    r = await make_client(new_ts, trial_shapes).get_account_info()
+    check("试用(LimitedFree) → free", r["account_type"] == "free", r)
 
     # 无付费 AMD → free
     r = await make_client(old_ts, free_shapes).get_account_info()

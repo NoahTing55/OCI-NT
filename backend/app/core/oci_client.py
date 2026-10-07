@@ -452,15 +452,24 @@ class OciClient:
 
     @classmethod
     def _can_create_large_amd(cls, shapes: list) -> bool:
-        """检查 shapes 里是否有付费 AMD（E3/E4/E5）且 memoryInGBs > 1.0。"""
+        """检查 shapes 里是否有付费 AMD（E3/E4/E5）且 memoryInGBs > 1.0 且 billingType=Paid。
+
+        按 OCI-Start AccountTypeEnum：BillingType.Paid 才是真正的付费（Pay As You Go）账号；
+        Free Trial 账号也能看到 E3/E4/E5，但 billingType 是 LimitedFree，应判为免费。
+        """
         for s in shapes:
             name = str(s.get("shape", "")).lower()
-            if name in cls._PAID_AMD_SHAPES:
-                try:
-                    if float(s.get("memoryInGBs") or 0) > 1.0:
-                        return True
-                except (TypeError, ValueError):
-                    continue
+            if name not in cls._PAID_AMD_SHAPES:
+                continue
+            # billingType 必须是 Paid（Pay As You Go），LimitedFree（试用）不算
+            billing = str(s.get("billingType", "")).upper()
+            if billing != "PAID":
+                continue
+            try:
+                if float(s.get("memoryInGBs") or 0) > 1.0:
+                    return True
+            except (TypeError, ValueError):
+                continue
         return False
 
     async def get_tenancy_name(self) -> "str | None":
