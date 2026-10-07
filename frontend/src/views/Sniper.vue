@@ -206,6 +206,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+const route = useRoute()
 const router = useRouter()
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -603,7 +604,7 @@ const stopLogPoll = () => {
 
 // 从账号管理"创建实例"跳转过来：预选账号并自动打开新建对话框
 const handleAccountQuery = async () => {
-  const qid = Number(useRoute().query.account_id)
+  const qid = Number(route.query.account_id)
   if (qid) {
     await openCreate()
     form.value.account_id = qid
@@ -617,7 +618,7 @@ onMounted(async () => {
   await handleAccountQuery()
 })
 // 路由复用时（如已在开机管理页点创建实例），onMounted 不触发，用 watch 补
-watch(() => useRoute().query.account_id, async (v) => {
+watch(() => route.query.account_id, async (v) => {
   if (v) await handleAccountQuery()
 })
 onUnmounted(stopLogPoll)

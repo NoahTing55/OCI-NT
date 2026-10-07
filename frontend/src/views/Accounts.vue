@@ -113,11 +113,9 @@
       </el-table-column>
     </el-table>
 
-    <!-- 新建账号 -->
-    <el-dialog v-model="createVisible" title="新建账号" width="600px">
-      <el-tabs v-model="createTab">
-        <el-tab-pane label="配置文件导入" name="import">
-          <!-- 步骤 1：OCI API 配置 -->
+    <!-- 导入 API：Config + PEM 一次填完，单栏无分栏 -->
+    <el-dialog v-model="createVisible" title="导入 API" width="620px">
+      <!-- 步骤 1：OCI API 配置 -->
           <div class="import-step">
             <span class="step-num">1</span>
             <span class="step-title">OCI API 配置</span>
@@ -160,30 +158,24 @@
           <el-input v-model="importForm.privateKey" type="textarea" :rows="4"
             placeholder="-----BEGIN PRIVATE KEY-----" show-password />
 
-          <div style="margin-top:16px">
-            <el-button type="primary" @click="parseConfig">解析并填入</el-button>
-            <span style="font-size:12px;color:#909399;margin-left:8px">解析 [DEFAULT] 段的 user / fingerprint / tenancy / region</span>
+          <!-- 解析结果：由 Config 自动解析，可手动修改 -->
+          <div class="import-sub" style="display:flex;align-items:center;justify-content:space-between">
+            <span>解析结果</span>
+            <el-button size="small" @click="parseConfig">重新解析</el-button>
           </div>
-        </el-tab-pane>
-        <el-tab-pane label="手动填写" name="manual">
-      <el-form :model="form" label-width="110px">
-        <el-form-item label="别名"><el-input v-model="form.name" placeholder="如 香港-01" /></el-form-item>
-        <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
-        <el-form-item label="User OCID"><el-input v-model="form.user_ocid" placeholder="ocid1.user.oc1.." /></el-form-item>
-        <el-form-item label="指纹"><el-input v-model="form.fingerprint" placeholder="aa:bb:cc:.." /></el-form-item>
-        <el-form-item label="私钥 PEM">
-          <el-input v-model="form.private_key" type="textarea" :rows="5" placeholder="-----BEGIN PRIVATE KEY-----" show-password />
-          <div style="font-size:12px;color:#909399">只在提交瞬间传输，服务端加密入库，永不回显</div>
-        </el-form-item>
-        <el-form-item label="区域">
-          <el-select v-model="form.region" style="width:100%">
-            <el-option v-for="r in REGIONS" :key="r" :value="r" :label="r" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
-      </el-form>
-        </el-tab-pane>
-      </el-tabs>
+          <div style="font-size:12px;color:#909399;margin-bottom:8px">以下字段由 Config 自动解析，可手动修改；私钥已同步到上方私钥框，只在提交瞬间传输，服务端加密入库，永不回显</div>
+          <el-form :model="form" label-width="110px">
+            <el-form-item label="别名"><el-input v-model="form.name" placeholder="如 香港-01" /></el-form-item>
+            <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
+            <el-form-item label="User OCID"><el-input v-model="form.user_ocid" placeholder="ocid1.user.oc1.." /></el-form-item>
+            <el-form-item label="指纹"><el-input v-model="form.fingerprint" placeholder="aa:bb:cc:.." /></el-form-item>
+            <el-form-item label="区域">
+              <el-select v-model="form.region" style="width:100%">
+                <el-option v-for="r in REGIONS" :key="r" :value="r" :label="r" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
+          </el-form>
       <el-form :model="form" label-width="110px" style="margin-top: 4px">
         <el-form-item label="绑定代理">
           <el-select v-model="form.proxy_id" placeholder="选择代理" style="width: 100%">
@@ -285,9 +277,8 @@ const editSubmitting = ref(false)
 const editId = ref(null)
 const editForm = ref({ name: '', region: '', remark: '', registered_at: '' })
 
-// ---------- 配置文件导入（纯前端解析，零后端改动） ----------
-// 默认首选项卡为文件导入，手动填写作为备选
-const createTab = ref('import')
+// ---------- API 导入（纯前端解析，零后端改动） ----------
+// 单栏界面：Config + PEM + 解析结果一次填完，无 tab 分栏
 const importForm = ref({ config: '', privateKey: '' })
 
 // 文件选择器（原生 input，避免 el-upload 的额外请求）
@@ -316,7 +307,7 @@ const onConfigFileChange = async (e) => {
   try {
     configFileName.value = file.name
     importForm.value.config = String(await readTextFile(file))
-    parseConfig() // 自动解析并跳到手动填写页核对
+    parseConfig() // 自动解析并填入下方表单
   } catch (err) {
     ElMessage.error('读取文件失败：' + (err?.message || err))
   }
@@ -368,11 +359,10 @@ const parseConfig = () => {
   if (!form.value.name && kv.tenancy) {
     form.value.name = 'oci-' + kv.tenancy.replace(/[^a-zA-Z0-9]/g, '').slice(-6)
   }
-  createTab.value = 'manual'
-  ElMessage.success('已解析并填入，请检查后保存')
+  ElMessage.success('已解析并填入下方表单，请检查后保存')
 }
 
-// config 和 PEM 都有内容时自动解析，无需手动点按钮（防抖 + 内容变化才触发）
+// config 和 PEM 都有内容时自动解析并填入下方表单，无需手动点按钮（防抖 + 内容变化才触发）
 let autoParseTimer = null
 let lastAutoParseKey = ''
 watch(
@@ -503,7 +493,6 @@ const fmtDate = (v) => {
 
 const openCreate = () => {
   form.value.proxy_id = defaultProxyId()
-  createTab.value = 'import' // 默认打开文件导入
   importForm.value = { config: '', privateKey: '' }
   configFileName.value = ''
   pemFileName.value = ''
