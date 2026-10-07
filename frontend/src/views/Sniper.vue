@@ -228,6 +228,11 @@ const STATUS_MAP = {
   success: '已完成', stopped: '已停止', failed: '失败',
 }
 const statusText = (s) => STATUS_MAP[s] || s
+// 格式化时间：2026-10-07T05:24:25 → 2026-10-07 05:24
+const fmtTime = (v) => {
+  if (!v) return '-'
+  return String(v).replace('T', ' ').slice(0, 16)
+}
 const statusType = (s) =>
   ({ running: 'primary', success: 'success', failed: 'danger', paused: 'warning' }[s] || 'info')
 const levelColor = (l) => ({ info: '#9cdcfe', warning: '#dcdcaa', error: '#f48771' }[l] || '#d4d4d4')
