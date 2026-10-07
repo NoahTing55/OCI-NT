@@ -18,13 +18,11 @@ class SubscribeIn(BaseModel):
     region: str
 
 
-def _get_upgraded_account(db: Session, account_id: int) -> Account:
-    """取账号并校验为升级账户，否则 400/404 中文提示。"""
+def _get_account(db: Session, account_id: int) -> Account:
+    """取账号，不存在时 404 中文提示（免费/升级账户均可订阅区域）。"""
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
-    if (account.account_type or "") != "upgraded":
-        raise HTTPException(status_code=400, detail="仅升级账户可订阅新区域")
     return account
 
 
@@ -39,7 +37,7 @@ def _first_account(db: Session) -> Account:
 @router.get("/accounts/{account_id}/region-subscriptions")
 async def list_region_subscriptions(account_id: int, db: Session = Depends(get_db)):
     """查指定账号已订阅区域列表。"""
-    account = _get_upgraded_account(db, account_id)
+    account = _get_account(db, account_id)
     client = build_client_for_account(account)
     try:
         subs = await client.list_region_subscriptions(account.tenancy_ocid)
@@ -62,7 +60,7 @@ async def subscribe_region(
     account_id: int, data: SubscribeIn, db: Session = Depends(get_db)
 ):
     """给升级账户订阅新区域。"""
-    account = _get_upgraded_account(db, account_id)
+    account = _get_account(db, account_id)
     region = (data.region or "").strip()
     if not region:
         raise HTTPException(status_code=400, detail="区域不能为空")

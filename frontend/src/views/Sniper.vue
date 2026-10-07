@@ -310,11 +310,9 @@ const onRegionChange = () => {
 const FALLBACK_REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
 const regionOptions = ref([...FALLBACK_REGIONS])
 
-// 拉取账号的已订阅区域（升级账户），失败时回退硬编码列表
+// 拉取账号的已订阅区域，失败时回退硬编码列表
 const loadRegionOptions = async (accountId) => {
-  const a = accounts.value.find((x) => x.id === accountId)
-  // 非升级账户直接用回退列表
-  if (!a || a.account_type !== 'upgraded') {
+  if (!accountId) {
     regionOptions.value = [...FALLBACK_REGIONS]
     return
   }

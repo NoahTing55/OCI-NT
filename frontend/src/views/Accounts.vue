@@ -105,7 +105,7 @@
                 <el-dropdown-item command="edit">编辑</el-dropdown-item>
                 <el-dropdown-item command="bind">绑定代理</el-dropdown-item>
                 <el-dropdown-item command="check">存活检查</el-dropdown-item>
-                <el-dropdown-item v-if="row.account_type === 'upgraded'" command="regions">区域订阅</el-dropdown-item>
+                <el-dropdown-item command="regions">区域订阅</el-dropdown-item>
                 <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
