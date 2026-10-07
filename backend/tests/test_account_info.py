@@ -102,7 +102,7 @@ async def run_e2e():
     # 老号 + 能开 AMD → upgraded
     r = await make_client(old_ts, amd_shapes).get_account_info()
     check("老号+AMD → upgraded", r["account_type"] == "upgraded", r)
-    check("registered_at 解析", r["registered_at"] is not None and r["registered_at"].year == old_ts[:4] and int(old_ts[5:7]) == r["registered_at"].month, r)
+    check("registered_at 解析", r["registered_at"] is not None and r["registered_at"].year == int(old_ts[:4]) and int(old_ts[5:7]) == r["registered_at"].month, r)
 
     # 新号 + 能开 AMD → trial（OCI-Start 原逻辑）
     r = await make_client(new_ts, amd_shapes).get_account_info()

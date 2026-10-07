@@ -65,7 +65,7 @@ check("4 个新列全部补上", set(NEW_COLS) <= cols_of("snipe_tasks"))
 check("accounts.cost 列补上", set(ACCOUNT_NEW_COLS) <= cols_of("accounts"))
 with engine.connect() as conn:
     version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-check("版本记录为 0011（当前 head）", version == "0011", str(version))
+check("版本记录为 0012（当前 head）", version == "0012", str(version))
 check("老库已有数据表未被破坏（accounts 表存在）", "accounts" in set(inspect(engine).get_table_names()))
 
 # 3. 幂等：再跑一次无异常、无副作用
@@ -75,7 +75,7 @@ after = cols_of("snipe_tasks")
 check("第二次运行幂等（列集合不变）", before == after)
 with engine.connect() as conn:
     version2 = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-check("第二次运行版本仍为 0011", version2 == "0011", str(version2))
+check("第二次运行版本仍为 0012", version2 == "0012", str(version2))
 
 # 4. 全新空库：无表时 upgrade 应直接到 head（不抛异常）
 engine.dispose()
