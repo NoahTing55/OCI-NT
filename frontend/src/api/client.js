@@ -49,6 +49,7 @@ export const cfSyncAll = () => api.post('/cloudflare/sync-all').then((r) => r.da
 // 抢机任务
 export const listSnipeTasks = () => api.get('/sniper').then((r) => r.data)
 export const createSnipeTask = (data) => api.post('/sniper', data).then((r) => r.data)
+export const updateSnipeTask = (id, data) => api.put(`/sniper/${id}`, data).then((r) => r.data)
 export const startSnipeTask = (id) => api.post(`/sniper/${id}/start`).then((r) => r.data)
 export const pauseSnipeTask = (id) => api.post(`/sniper/${id}/pause`).then((r) => r.data)
 export const deleteSnipeTask = (id) => api.delete(`/sniper/${id}`).then((r) => r.data)

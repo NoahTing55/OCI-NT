@@ -27,8 +27,11 @@
       <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <div class="op-btns">
-            <el-button size="small" type="success" v-if="row.status !== 'running'" @click="startTask(row)">启动</el-button>
+            <el-button size="small" type="success" v-if="!['running', 'success'].includes(row.status)" @click="startTask(row)">启动</el-button>
             <el-button size="small" type="warning" v-if="row.status === 'running'" @click="pauseTask(row)">暂停</el-button>
+            <el-tooltip :content="row.status === 'running' ? '任务抢机中，不可编辑' : row.status === 'success' ? '任务已完成，不可编辑' : '编辑任务'" placement="top">
+              <el-button size="small" :disabled="['running', 'success'].includes(row.status)" @click="openEdit(row)">编辑</el-button>
+            </el-tooltip>
             <el-button size="small" @click="openLogs(row)">日志</el-button>
             <el-button size="small" v-if="row.root_password" @click="showPassword(row)">密码</el-button>
             <el-button size="small" type="danger" :disabled="row.status === 'running'" @click="delTask(row)">删除</el-button>
@@ -38,7 +41,7 @@
     </el-table>
 
     <!-- 新建任务：分组布局（模板 → 基础 → 实例 → 高级折叠） -->
-    <el-dialog v-model="createVisible" title="新建抢机任务" width="640px">
+    <el-dialog v-model="createVisible" :title="isEdit ? '编辑抢机任务' : '新建抢机任务'" width="640px">
       <el-form :model="form" label-width="100px">
         <!-- 分组1：选择模板（2×2 卡片网格） -->
         <div class="form-group-title">选择模板</div>
@@ -160,7 +163,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="submitCreate">创建</el-button>
+        <el-button type="primary" :loading="creating" @click="submitCreate">{{ isEdit ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 
@@ -208,6 +211,7 @@ import {
   listAccounts,
   listSnipeTasks,
   createSnipeTask,
+  updateSnipeTask,
   startSnipeTask,
   pauseSnipeTask,
   deleteSnipeTask,
@@ -238,6 +242,8 @@ const loading = ref(false)
 
 const createVisible = ref(false)
 const creating = ref(false)
+const isEdit = ref(false)
+const editingId = ref(null)
 const templateIdx = ref(null)
 const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
@@ -448,12 +454,35 @@ const load = async () => {
 }
 
 const openCreate = async () => {
+  isEdit.value = false
+  editingId.value = null
   templateIdx.value = null
   Object.assign(form.value, {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
     availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
     target_count: 1, interval_seconds: 60, open_all_ports: true, boot_volume_gb: 50,
+  })
+  clearOciOptions()
+  try {
+    accounts.value = await listAccounts()
+    templates.value = await getSnipeTemplates()
+  } catch (e) {
+    ElMessage.error('加载账号/模板失败：' + (e.response?.data?.detail || e.message))
+  }
+  createVisible.value = true
+}
+
+// 编辑任务：填入现有值（root 密码不回填，留空表示不修改）
+const openEdit = async (row) => {
+  isEdit.value = true
+  editingId.value = row.id
+  templateIdx.value = null
+  Object.assign(form.value, {
+    account_id: row.account_id, region: row.region || '', shape: row.shape || 'VM.Standard.A1.Flex',
+    ocpus: row.ocpus ?? 4, memory_gb: row.memory_gb ?? 24, image_ocid: row.image_ocid || '', subnet_ocid: row.subnet_ocid || '',
+    availability_domain: row.availability_domain || '', display_name: row.display_name || '', compartment_ocid: '', root_password: '',
+    target_count: row.target_count ?? 1, interval_seconds: row.interval_seconds ?? 60, open_all_ports: row.open_all_ports ?? true, boot_volume_gb: row.boot_volume_gb ?? 50,
   })
   clearOciOptions()
   try {
@@ -489,12 +518,21 @@ const submitCreate = async () => {
   }
   creating.value = true
   try {
-    await createSnipeTask(form.value)
-    ElMessage.success('任务已创建（待启动）')
+    if (isEdit.value) {
+      // 编辑模式：组装 payload，root 密码留空表示不修改，compartment_ocid 不提交
+      const payload = { ...form.value }
+      delete payload.compartment_ocid
+      if (!payload.root_password) delete payload.root_password
+      await updateSnipeTask(editingId.value, payload)
+      ElMessage.success('任务已更新')
+    } else {
+      await createSnipeTask(form.value)
+      ElMessage.success('任务已创建（待启动）')
+    }
     createVisible.value = false
     load()
   } catch (e) {
-    ElMessage.error('创建失败：' + (e.response?.data?.detail || e.message))
+    ElMessage.error((isEdit.value ? '保存失败：' : '创建失败：') + (e.response?.data?.detail || e.message))
   } finally {
     creating.value = false
   }
