@@ -205,7 +205,8 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+const router = useRouter()
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAccounts,
@@ -600,15 +601,24 @@ const stopLogPoll = () => {
   }
 }
 
-onMounted(async () => {
-  await load()
-  // 从账号管理"创建实例"跳转过来：预选账号并自动打开新建对话框
+// 从账号管理"创建实例"跳转过来：预选账号并自动打开新建对话框
+const handleAccountQuery = async () => {
   const qid = Number(useRoute().query.account_id)
   if (qid) {
     await openCreate()
     form.value.account_id = qid
     onAccountChange()
+    // 用完清除 query，避免刷新页面重复弹框
+    router.replace({ path: '/sniper' })
   }
+}
+onMounted(async () => {
+  await load()
+  await handleAccountQuery()
+})
+// 路由复用时（如已在开机管理页点创建实例），onMounted 不触发，用 watch 补
+watch(() => useRoute().query.account_id, async (v) => {
+  if (v) await handleAccountQuery()
 })
 onUnmounted(stopLogPoll)
 </script>
