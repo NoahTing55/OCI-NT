@@ -50,7 +50,9 @@
         </template>
       </el-table-column>
       <el-table-column prop="tenancy_name" label="租户名称" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="region" label="主区域" width="150" />
+      <el-table-column label="主区域" width="180">
+        <template #default="{ row }">{{ fmtRegion(row.region) }}</template>
+      </el-table-column>
       <!-- 成本：点击单元格直接改 -->
       <el-table-column label="账号成本" width="100" align="center">
         <template #default="{ row }">
@@ -320,7 +322,7 @@
       </div>
       <div class="import-sub">选择要订阅的区域</div>
       <el-select v-model="batchRegion" placeholder="选择要订阅的区域" filterable style="width: 100%">
-        <el-option v-for="r in allRegions" :key="r.region_name" :value="r.region_name" :label="r.region_name" />
+        <el-option v-for="r in allRegions" :key="r.region_name" :value="r.region_name" :label="fmtRegion(r.region_name)" />
       </el-select>
       <!-- 批量结果明细 -->
       <div v-if="batchResults.length" style="margin-top: 16px">
@@ -342,6 +344,26 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
+
+// 区域中文名映射
+const REGION_CN = {
+  "us-phoenix-1": "凤凰城", "us-ashburn-1": "阿什本", "us-sanjose-1": "圣何塞", "us-chicago-1": "芝加哥",
+  "ap-singapore-1": "新加坡", "ap-singapore-2": "新加坡西", "ap-tokyo-1": "东京", "ap-osaka-1": "大阪",
+  "ap-seoul-1": "首尔", "ap-chuncheon-1": "春川", "ap-mumbai-1": "孟买", "ap-hyderabad-1": "海得拉巴",
+  "ap-sydney-1": "悉尼", "ap-melbourne-1": "墨尔本", "ap-batam-1": "巴淡岛", "ap-kulai-2": "古来",
+  "eu-frankfurt-1": "法兰克福", "eu-paris-1": "巴黎", "eu-marseille-1": "马赛", "eu-milan-1": "米兰",
+  "eu-turin-1": "都灵", "eu-amsterdam-1": "阿姆斯特丹", "eu-madrid-1": "马德里", "eu-madrid-3": "马德里西",
+  "eu-stockholm-1": "斯德哥尔摩", "eu-zurich-1": "苏黎世", "eu-jovanovac-1": "约瓦诺瓦茨",
+  "uk-london-1": "伦敦", "uk-cardiff-1": "卡迪夫",
+  "ca-toronto-1": "多伦多", "ca-montreal-1": "蒙特利尔",
+  "sa-saopaulo-1": "圣保罗", "sa-vinhedo-1": "维涅杜", "sa-santiago-1": "圣地亚哥",
+  "sa-valparaiso-1": "瓦尔帕莱索", "sa-bogota-1": "波哥大",
+  "me-dubai-1": "迪拜", "me-abudhabi-1": "阿布扎比", "me-jeddah-1": "吉达", "me-riyadh-1": "利雅得",
+  "il-jerusalem-1": "耶路撒冷",
+  "mx-monterrey-1": "蒙特雷", "mx-queretaro-1": "克雷塔罗",
+  "af-johannesburg-1": "约翰内斯堡", "af-casablanca-1": "卡萨布兰卡",
+}
+const fmtRegion = (r) => r ? `${r} ${REGION_CN[r] || ''}`.trim() : '-' 
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
