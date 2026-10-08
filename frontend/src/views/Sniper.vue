@@ -77,11 +77,11 @@
             <el-option v-for="r in regionOptions" :key="r" :value="r" :label="fmtRegion(r)" />
           </el-select>
         </el-form-item>
-        <el-form-item label="抢机数量">
+        <el-form-item label="开机数量">
           <el-input-number v-model="form.target_count" :min="1" :max="100" style="width: 160px" />
           <span style="color: #909399; font-size: 12px; margin-left: 8px">同一账号连续抢 N 台（每台实例名自动加序号）</span>
         </el-form-item>
-        <el-form-item label="抢机间隔">
+        <el-form-item label="开机间隔">
           <el-button-group class="interval-btns" style="margin-right: 8px">
             <el-button size="small" :type="form.interval_seconds === 30 ? 'primary' : ''" @click="form.interval_seconds = 30">30s</el-button>
             <el-button size="small" :type="form.interval_seconds === 60 ? 'primary' : ''" @click="form.interval_seconds = 60">60s</el-button>
@@ -799,7 +799,7 @@ onUnmounted(stopLogPoll)
   color: #909399;
   line-height: 1.6;
 }
-/* 抢机间隔快捷按钮：选中态加粗更明显 */
+/* 开机间隔快捷按钮：选中态加粗更明显 */
 .interval-btns .el-button--primary {
   font-weight: 600;
 }

@@ -65,7 +65,7 @@
       <el-table-column label="存活天数" width="90" align="center">
         <template #default="{ row }"><el-tag size="small" class="days-chip">{{ aliveDays(row) }}</el-tag></template>
       </el-table-column>
-      <!-- 抢机任务状态 -->
+      <!-- 开机任务状态 -->
       <el-table-column label="开机任务" width="110" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.snipe_task_status === 'running'" type="success" size="small" class="task-badge"><span class="spin-dot"></span>运行中</el-tag>
@@ -1186,7 +1186,7 @@ watch(accounts, () => initColumnResize());
 .days-chip {
   font-weight: 600;
 }
-/* 抢机中：旋转圆点 */
+/* 开机中：旋转圆点 */
 .spin-dot {
   display: inline-block;
   width: 7px;

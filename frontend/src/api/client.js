@@ -53,10 +53,10 @@ export const syncBinding = (id) => api.post(`/cloudflare/bindings/${id}/sync`).t
 export const cfCheck = () => api.get('/cloudflare/check').then((r) => r.data)
 export const cfSyncAll = () => api.post('/cloudflare/sync-all').then((r) => r.data)
 
-// 抢机任务
+// 开机任务
 export const listSnipeTasks = () => api.get('/sniper').then((r) => r.data)
 export const createSnipeTask = (data) => api.post('/sniper', data).then((r) => r.data)
-// 批量创建抢机任务：同一配置应用到多个账号
+// 批量创建开机任务：同一配置应用到多个账号
 export const batchCreateSnipeTasks = (data) => api.post('/sniper/batch-create', data).then((r) => r.data)
 export const updateSnipeTask = (id, data) => api.put(`/sniper/${id}`, data).then((r) => r.data)
 export const startSnipeTask = (id) => api.post(`/sniper/${id}/start`).then((r) => r.data)
@@ -65,7 +65,7 @@ export const deleteSnipeTask = (id) => api.delete(`/sniper/${id}`).then((r) => r
 export const getSnipeLogs = (id, params) => api.get(`/sniper/${id}/logs`, { params }).then((r) => r.data)
 export const getSnipeTemplates = () => api.get('/sniper/templates').then((r) => r.data)
 
-// OCI 选项查询（抢机/批量创建表单级联下拉：可用域、平台镜像、子网、compartment）
+// OCI 选项查询（开机/批量创建表单级联下拉：可用域、平台镜像、子网、compartment）
 export const getOciAvailabilityDomains = (params) =>
   api.get('/oci-options/availability-domains', { params }).then((r) => r.data)
 export const getOciImages = (params) =>

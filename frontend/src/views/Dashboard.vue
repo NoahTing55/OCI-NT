@@ -45,7 +45,7 @@
         <el-card class="page-card" :body-style="{ padding: '20px' }" shadow="never">
           <div class="card-title">最近动态</div>
           <div v-if="recentTasks.length === 0" style="color: #909399; font-size: 13px; padding: 12px 0">
-            暂无抢机任务
+            暂无开机任务
           </div>
           <div
             v-for="t in recentTasks"
@@ -62,7 +62,7 @@
           </div>
           <div style="margin-top: 12px; text-align: right">
             <el-link type="primary" :underline="false" @click="$router.push('/sniper')" style="font-size: 13px">
-              查看全部抢机任务 →
+              查看全部开机任务 →
             </el-link>
           </div>
         </el-card>
@@ -80,7 +80,7 @@ import { listAccounts, listInstances, listSnipeTasks, getAccountSummary } from '
 const statCards = ref([
   { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)' },
   { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#67c23a,#85ce61)' },
-  { label: '运行中抢机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#e6a23c,#eebe77)' },
+  { label: '运行中开机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#e6a23c,#eebe77)' },
   { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#f56c6c,#f78989)' },
 ])
 const quotaWarnings = ref([])
@@ -88,7 +88,7 @@ const recentTasks = ref([])
 
 // 状态文案与颜色（与 Sniper.vue 保持一致）
 const STATUS_MAP = {
-  pending: '待启动', running: '抢机中', paused: '已暂停',
+  pending: '待启动', running: '开机中', paused: '已暂停',
   success: '已完成', stopped: '已停止', failed: '失败',
 }
 const statusText = (s) => STATUS_MAP[s] || s
@@ -141,7 +141,7 @@ onMounted(async () => {
     warnings.sort((a, b) => b.pct - a.pct)
     quotaWarnings.value = warnings.slice(0, 8)
 
-    // 最近 5 条抢机任务
+    // 最近 5 条开机任务
     const sorted = [...(tasks || [])].sort((a, b) =>
       String(b.created_at || '').localeCompare(String(a.created_at || '')),
     )
