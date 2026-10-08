@@ -131,18 +131,17 @@
           <div class="step-desc">粘贴完整 Config，私钥可上传或直接粘贴在配置后。</div>
 
           <div class="import-sub">导入 Config 文件</div>
-          <div class="file-drop drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropConfigBox">
+          <div class="file-drop drop-zone slim" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropConfigBox">
             <div class="file-row">
               <el-button size="small" @click="triggerConfigSelect">选择文件</el-button>
-              <span class="file-name" :class="{ empty: !configFileName }">{{ configFileName || '未选择任何文件' }}</span>
+              <span class="file-name" :class="{ empty: !configFileName }">{{ configFileName || '可拖拽 config 文件到此处' }}</span>
               <input ref="configFileInput" type="file" accept=".config,config" style="display:none" @change="onConfigFileChange" />
             </div>
-            <div class="file-hint">可选择文件、或直接拖拽 config 文件到此处；也可在下方粘贴 Config。</div>
           </div>
 
           <div class="import-sub">完整 OCI Config</div>
-          <el-input v-model="importForm.config" type="textarea" :rows="5"
-            placeholder="粘贴 ~/.oci/config 内容，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
+          <el-input v-model="importForm.config" type="textarea" :rows="3"
+            placeholder="粘贴 ~/.oci/config 内容" />
           <div class="region-hint">
             区域识别&nbsp;&nbsp;<span v-if="detectedRegion">已识别区域：<b>{{ detectedRegion }}</b></span><span v-else>等待输入 OCI Config</span><br />
             粘贴配置后自动识别 region，并在导入时再次由后端校验。
@@ -153,24 +152,21 @@
             <span class="step-num">2</span>
             <span class="step-title">PEM 私钥文件</span>
           </div>
-          <div class="file-drop drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropPemBox">
+          <div class="file-drop drop-zone slim" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropPemBox">
             <div class="file-row">
               <el-button size="small" @click="triggerPemSelect">选择文件</el-button>
-              <span class="file-name" :class="{ empty: !pemFileName }">{{ pemFileName || '未选择任何文件' }}</span>
+              <span class="file-name" :class="{ empty: !pemFileName }">{{ pemFileName || '可拖拽 PEM 文件到此处' }}</span>
               <input ref="pemFileInput" type="file" accept=".pem,.key" style="display:none" @change="onPemFileChange" />
             </div>
-            <div class="file-hint">可选择文件、或直接拖拽 PEM 文件到此处。</div>
           </div>
-          <div class="import-sub">私钥 PEM（可选）</div>
-          <el-input v-model="importForm.privateKey" type="textarea" :rows="3"
-            placeholder="-----BEGIN PRIVATE KEY-----" show-password />
+
 
           <!-- 解析结果：由 Config 自动解析，可手动修改 -->
           <div class="import-sub" style="display:flex;align-items:center;justify-content:space-between">
             <span>解析结果</span>
             <el-button size="small" @click="parseConfig">重新解析</el-button>
           </div>
-          <div style="font-size:12px;color:#909399;margin-bottom:8px">以下字段由 Config 自动解析，可手动修改；私钥已同步到上方私钥框，只在提交瞬间传输，服务端加密入库，永不回显</div>
+
           <el-form :model="form" label-width="110px">
             <el-form-item label="自定义名称"><el-input v-model="form.name" placeholder="如 Phoenix-01，留空按 {城市}-{id}-{日期} 自动生成" /></el-form-item>
             <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
@@ -184,7 +180,7 @@
             <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
           </el-form>
       <el-form :model="form" label-width="110px" style="margin-top: 4px">
-        <el-form-item label="绑定代理">
+        <el-form-item label="选择代理">
           <el-select v-model="form.proxy_id" placeholder="选择代理" style="width: 100%">
             <el-option :value="null" label="直连（不使用代理）" />
             <el-option
@@ -199,7 +195,7 @@
               <span v-else style="float: right; color: #67c23a; font-size: 12px">{{ p.status === 'ok' ? `延迟 ${p.latency_ms ?? '-'}ms` : '未使用' }}</span>
             </el-option>
           </el-select>
-          <div style="font-size:12px;color:#909399">默认选中第一个未使用的代理；一代理只能绑一个账号</div>
+
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1087,6 +1083,13 @@ watch(accounts, () => initColumnResize());
   font-weight: 600;
   font-size: 14px;
   color: #303133;
+}
+/* 文件拖拽区（slim 紧凑版） */
+.drop-zone.slim {
+  padding: 8px 12px;
+}
+.drop-zone.slim .file-hint {
+  display: none;
 }
 /* 文件拖拽区 */
 .drop-zone {
