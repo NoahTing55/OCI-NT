@@ -203,10 +203,7 @@
 
     <!-- 批量导入账号：多份 config 一次导入 -->
     <el-dialog v-model="batchImportVisible" title="批量导入账号" width="620px" class="batch-dialog">
-      <div style="font-size:12px;color:#909399;margin-bottom:10px">
-        每组填写一份账号：自定义名称（可空，按 {城市}-{id}-{日期} 自动生成，如 Phoenix-3-20261008）+ Config 内容 + 私钥内容。
-        文本框支持粘贴，也可把 config / PEM 文件直接拖拽到对应文本框。点"添加一组"可继续添加。
-      </div>
+
       <div v-for="(item, idx) in batchItems" :key="idx" class="batch-item">
         <div class="batch-item-head">
           <span class="batch-item-title">账号 {{ idx + 1 }}</span>
