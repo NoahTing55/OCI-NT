@@ -6,6 +6,7 @@ import json
 import logging
 
 from app.core.deps import get_db
+from app.core.oci_factory import build_client_for_account
 from app.core.redis_client import get_sync_redis
 from app.core.security import encrypt_text
 from app.models.models import Account, Proxy, SnipeTask
@@ -148,8 +149,28 @@ def _create_account_core(data: AccountCreate, db: Session) -> Account:
     return account
 
 
+async def _auto_detect_account_info(account: Account, db: Session):
+    """导入后自动识别账号信息：类型 + 注册时间 + 租户名（失败不抛异常）。"""
+    try:
+        client = build_client_for_account(account)
+        try:
+            info = await client.get_account_info()
+            if info.get("account_type"):
+                account.account_type = info["account_type"]
+            if info.get("registered_at"):
+                account.registered_at = info["registered_at"]
+            tenancy_name = await client.get_tenancy_name()
+            if tenancy_name:
+                account.tenancy_name = tenancy_name
+            db.commit()
+        finally:
+            await client.aclose()
+    except Exception as e:
+        logger.warning("账号 %s 自动识别信息失败：%s", account.id, str(e)[:100])
+
+
 @router.post("", response_model=AccountOut)
-def create_account(data: AccountCreate, db: Session = Depends(get_db)):
+async def create_account(data: AccountCreate, db: Session = Depends(get_db)):
     # 自定义名称为空时先用临时名，拿到 id 后按 {城市}-{id}-{日期} 生成
     use_auto_name = not (data.name or "").strip()
     if use_auto_name:
@@ -159,6 +180,9 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
         account.name = generate_account_name(account.region, account.id)
         db.commit()
         db.refresh(account)
+    # 导入后自动识别账号类型和注册时间
+    await _auto_detect_account_info(account, db)
+    db.refresh(account)
     return _to_out(account)
 
 
@@ -204,7 +228,7 @@ def _parse_oci_config(config_text: str) -> dict:
 
 
 @router.post("/batch-import", response_model=BatchImportResponse)
-def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(get_db)):
+async def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(get_db)):
     """批量导入账号：每个条目解析 config + 私钥，逐个创建。
 
     成功返回账号 id 列表，失败返回明细（不影响其他条目）。
@@ -232,6 +256,8 @@ def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(get_db
                 # 按规则生成：{城市}-{id}-{日期}，如 Phoenix-3-20261008
                 account.name = generate_account_name(cfg["region"], account.id)
                 db.commit()
+            # 自动识别账号类型和注册时间（失败不影响导入）
+            await _auto_detect_account_info(account, db)
             created.append(account.id)
         except HTTPException as e:
             failed.append({"name": name or f"第{idx + 1}个", "error": e.detail})
