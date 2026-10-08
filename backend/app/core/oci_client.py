@@ -540,6 +540,7 @@ class OciClient:
             resp = await self.request("GET", "identity", f"/20160918/tenancies/{self.tenancy_ocid}")
             if resp.status_code == 200:
                 data = resp.json()
+                return data.get("name")
         except Exception:
             pass
         return None
