@@ -158,11 +158,7 @@
           </div>
 
 
-          <!-- 解析结果：由 Config 自动解析，可手动修改 -->
-          <div class="import-sub" style="display:flex;align-items:center;justify-content:space-between">
-            <span>解析结果</span>
-            <el-button size="small" @click="parseConfig">重新解析</el-button>
-          </div>
+
 
           <el-form :model="form" label-width="110px">
             <el-form-item label="自定义名称"><el-input v-model="form.name" placeholder="如 Phoenix-01，留空按 {城市}-{id}-{日期} 自动生成" /></el-form-item>
