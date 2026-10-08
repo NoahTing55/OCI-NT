@@ -50,8 +50,8 @@
         </template>
       </el-table-column>
       <el-table-column prop="tenancy_name" label="租户名称" min-width="140" show-overflow-tooltip />
-      <el-table-column label="主区域" width="180">
-        <template #default="{ row }">{{ fmtRegion(row.region) }}</template>
+      <el-table-column label="主区域" width="120">
+        <template #default="{ row }">{{ REGION_CN[row.region] || row.region }}</template>
       </el-table-column>
       <!-- 成本：点击单元格直接改 -->
       <el-table-column label="账号成本" width="100" align="center">
@@ -364,7 +364,7 @@ const REGION_CN = {
   "mx-monterrey-1": "蒙特雷", "mx-queretaro-1": "克雷塔罗",
   "af-johannesburg-1": "约翰内斯堡", "af-casablanca-1": "卡萨布兰卡",
 }
-const fmtRegion = (r) => r ? `${r} ${REGION_CN[r] || ''}`.trim() : '-' 
+const fmtRegion = (r) => r ? `${REGION_CN[r] ? REGION_CN[r] + ' ' : ''}${r}` : '-' 
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
