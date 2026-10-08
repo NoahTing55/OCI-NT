@@ -1,8 +1,10 @@
 <template>
   <div>
     <el-button type="primary" @click="openCreate">新建账号</el-button>
+    <el-button @click="openBatchImport">批量导入</el-button>
     <el-button @click="checkAll" :loading="checkingAll">全部存活检查</el-button>
     <el-button @click="loadSummary" :loading="summaryLoading">刷新摘要</el-button>
+    <el-button type="warning" @click="openBatchSubscribe" :disabled="!selectedAccounts.length">批量订阅区域</el-button>
 
     <!-- 账户摘要卡片 -->
     <div v-if="summary.length" class="summary-cards">
@@ -27,7 +29,9 @@
     </div>
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
-    <el-table ref="acctTableRef" :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table">
+    <el-table ref="acctTableRef" :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table" @selection-change="onSelectionChange">
+      <!-- 多选列：批量订阅区域用 -->
+      <el-table-column type="selection" width="45" align="center" />
       <!-- 🛡️ 代理绑定状态：点击快速配置代理 -->
       <el-table-column width="52" align="center">
         <template #header><span title="绑定代理" style="opacity: .55">🛡️</span></template>
@@ -203,6 +207,49 @@
       </template>
     </el-dialog>
 
+    <!-- 批量导入账号：多份 config 一次导入 -->
+    <el-dialog v-model="batchImportVisible" title="批量导入账号" width="720px">
+      <div style="font-size:12px;color:#909399;margin-bottom:10px">
+        每组填写一份账号：自定义名称（可空，自动生成）+ Config 内容 + 私钥内容。点"添加一组"可继续添加。
+      </div>
+      <div v-for="(item, idx) in batchItems" :key="idx" class="batch-item">
+        <div class="batch-item-head">
+          <span class="batch-item-title">账号 {{ idx + 1 }}</span>
+          <el-button size="small" type="danger" link @click="removeBatchItem(idx)" v-if="batchItems.length > 1">删除</el-button>
+        </div>
+        <el-form label-width="90px" size="small">
+          <el-form-item label="自定义名称">
+            <el-input v-model="item.name" placeholder="可空，自动生成如 oci-abc123" />
+          </el-form-item>
+          <el-form-item label="Config 内容">
+            <el-input v-model="item.config_text" type="textarea" :rows="4"
+              placeholder="粘贴 ~/.oci/config 内容" />
+          </el-form-item>
+          <el-form-item label="私钥内容">
+            <el-input v-model="item.private_key" type="textarea" :rows="3"
+              placeholder="-----BEGIN PRIVATE KEY-----" show-password />
+          </el-form-item>
+        </el-form>
+      </div>
+      <el-button @click="addBatchItem" style="margin-top:4px">+ 添加一组</el-button>
+      <!-- 导入结果 -->
+      <div v-if="batchResult" class="batch-result">
+        <div v-if="batchResult.created.length" class="batch-ok">
+          成功导入 {{ batchResult.created.length }} 个账号
+        </div>
+        <div v-if="batchResult.failed.length" class="batch-fail">
+          <div>失败 {{ batchResult.failed.length }} 个：</div>
+          <div v-for="f in batchResult.failed" :key="f.name" class="batch-fail-item">
+            {{ f.name }}：{{ f.error }}
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="batchImportVisible = false">关闭</el-button>
+        <el-button type="primary" @click="submitBatchImport" :loading="batchSubmitting">开始导入</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 编辑账号（别名/区域/备注，不涉及密钥） -->
     <el-dialog v-model="editVisible" title="编辑账号" width="480px">
       <el-form :model="editForm" label-width="80px">
@@ -257,6 +304,34 @@
         <el-button @click="regionsVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量订阅区域（扩区）：勾选多个账号，一键订阅同一个新区域 -->
+    <el-dialog v-model="batchSubVisible" title="批量订阅区域" width="560px">
+      <div class="import-sub">将为以下 {{ selectedAccounts.length }} 个账号订阅新区域</div>
+      <div style="margin-bottom: 16px">
+        <el-tag v-for="a in selectedAccounts" :key="a.id" style="margin: 0 8px 8px 0">
+          {{ a.name || `账号 #${a.id}` }}
+        </el-tag>
+      </div>
+      <div class="import-sub">选择要订阅的区域</div>
+      <el-select v-model="batchRegion" placeholder="选择要订阅的区域" filterable style="width: 100%">
+        <el-option v-for="r in allRegions" :key="r.region_name" :value="r.region_name" :label="r.region_name" />
+      </el-select>
+      <!-- 批量结果明细 -->
+      <div v-if="batchResults.length" style="margin-top: 16px">
+        <div class="import-sub">订阅结果</div>
+        <div v-for="r in batchResults" :key="r.account_id" style="display: flex; gap: 8px; align-items: center; padding: 4px 0">
+          <span style="flex: 1">{{ r.account_name }}</span>
+          <el-tag v-if="r.success" type="success" size="small">成功</el-tag>
+          <el-tag v-else type="danger" size="small" :title="r.error">失败</el-tag>
+          <span v-if="!r.success" style="font-size: 12px; color: #f56c6c; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" :title="r.error">{{ r.error }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="batchSubVisible = false">关闭</el-button>
+        <el-button type="primary" @click="doBatchSubscribe" :loading="batchSubscribing" :disabled="!batchRegion || !selectedAccounts.length">开始订阅</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -265,7 +340,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
-import { listAccounts, createAccount, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary, listRegionSubscriptions, subscribeRegion, listOciRegions } from '../api/client.js'
+import { listAccounts, createAccount, batchImportAccounts, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary, listRegionSubscriptions, subscribeRegion, batchSubscribeRegions, listOciRegions } from '../api/client.js'
 
 const router = useRouter()
 const REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
@@ -542,6 +617,50 @@ const submitCreate = async () => {
   }
 }
 
+// ---------- 批量导入账号 ----------
+const batchImportVisible = ref(false)
+const batchItems = ref([{ name: '', config_text: '', private_key: '' }])
+const batchSubmitting = ref(false)
+const batchResult = ref(null)
+
+const openBatchImport = () => {
+  batchItems.value = [{ name: '', config_text: '', private_key: '' }]
+  batchResult.value = null
+  batchImportVisible.value = true
+}
+const addBatchItem = () => {
+  if (batchItems.value.length >= 100) return ElMessage.warning('一次最多导入 100 个')
+  batchItems.value.push({ name: '', config_text: '', private_key: '' })
+}
+const removeBatchItem = (idx) => {
+  batchItems.value.splice(idx, 1)
+}
+const submitBatchImport = async () => {
+  const valid = batchItems.value.filter(i => i.config_text.trim() && i.private_key.trim())
+  if (!valid.length) return ElMessage.error('请至少填写一组完整的 Config 和私钥')
+  batchSubmitting.value = true
+  batchResult.value = null
+  try {
+    const res = await batchImportAccounts(valid.map(i => ({
+      name: i.name.trim(),
+      config_text: i.config_text,
+      private_key: i.private_key,
+    })))
+    batchResult.value = res
+    if (res.created.length) {
+      ElMessage.success(`成功导入 ${res.created.length} 个账号`)
+      load()
+    }
+    if (res.failed.length && !res.created.length) {
+      ElMessage.error('全部导入失败，见下方明细')
+    }
+  } catch (e) {
+    ElMessage.error('导入失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
 const openEdit = (row) => {
   editId.value = row.id
   editForm.value = { name: row.name || '', region: row.region || '', remark: row.remark || '',
@@ -684,6 +803,55 @@ const doSubscribe = async () => {
     ElMessage.error('订阅失败：' + (e.response?.data?.detail || e.message))
   } finally {
     subscribing.value = false
+  }
+}
+
+// ---------- 批量订阅区域（扩区） ----------
+const selectedAccounts = ref([])  // 表格多选中的账号
+const batchSubVisible = ref(false)
+const batchRegion = ref('')
+const batchResults = ref([])
+const batchSubscribing = ref(false)
+
+// 表格多选变化
+const onSelectionChange = (rows) => {
+  selectedAccounts.value = rows || []
+}
+
+// 打开批量订阅对话框：复用 /api/oci-regions 的区域列表
+const openBatchSubscribe = async () => {
+  if (!selectedAccounts.value.length) {
+    ElMessage.warning('请先勾选要订阅区域的账号')
+    return
+  }
+  batchRegion.value = ''
+  batchResults.value = []
+  batchSubVisible.value = true
+  if (!allRegions.value.length) {
+    allRegions.value = await listOciRegions().catch(() => []) || []
+  }
+}
+
+// 执行批量订阅，展示每个账号的成功/失败明细
+const doBatchSubscribe = async () => {
+  if (!batchRegion.value || !selectedAccounts.value.length) return
+  batchSubscribing.value = true
+  batchResults.value = []
+  try {
+    const accountIds = selectedAccounts.value.map((a) => a.id)
+    const data = await batchSubscribeRegions(accountIds, batchRegion.value)
+    batchResults.value = data.results || []
+    const okCount = batchResults.value.filter((r) => r.success).length
+    const failCount = batchResults.value.length - okCount
+    if (failCount === 0) {
+      ElMessage.success(`批量订阅成功：${okCount} 个账号已订阅 ${batchRegion.value}`)
+    } else {
+      ElMessage.warning(`批量订阅完成：成功 ${okCount} 个，失败 ${failCount} 个`)
+    }
+  } catch (e) {
+    ElMessage.error('批量订阅失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    batchSubscribing.value = false
   }
 }
 
@@ -878,6 +1046,39 @@ watch(accounts, () => initColumnResize());
 /* 别名列紧凑间距 */
 .alias-col .cell { padding-left: 8px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* 批量导入 */
+.batch-item {
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fafbfc;
+}
+.batch-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.batch-item-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.batch-result {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.batch-ok {
+  color: #67c23a;
+  margin-bottom: 6px;
+}
+.batch-fail {
+  color: #f56c6c;
+}
+.batch-fail-item {
+  margin: 2px 0 2px 12px;
+  font-size: 12px;
+}
 /* 新建账号-导入页：步骤头（序号圆圈 + 标题） */
 .import-step { display: flex; align-items: center; margin: 20px 0 6px; }
 .import-step:first-child { margin-top: 2px; }

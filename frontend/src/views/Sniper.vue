@@ -61,7 +61,13 @@
         <!-- 分组2：基础配置 -->
         <div class="form-group-title">基础配置</div>
         <el-form-item label="账号" required>
-          <el-select v-model="form.account_id" placeholder="选择账号" style="width: 100%" @change="onAccountChange">
+          <!-- 新建模式：多选账号，支持批量创建任务 -->
+          <el-select v-if="!isEdit" v-model="selectedAccountIds" multiple collapse-tags collapse-tags-tooltip
+            placeholder="选择账号（可多选，批量创建）" style="width: 100%" @change="onAccountChange">
+            <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="`${a.name}（${a.region}）`" />
+          </el-select>
+          <!-- 编辑模式：单选 -->
+          <el-select v-else v-model="form.account_id" placeholder="选择账号" style="width: 100%" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="`${a.name}（${a.region}）`" />
           </el-select>
         </el-form-item>
@@ -216,6 +222,7 @@ import {
   listAccounts,
   listSnipeTasks,
   createSnipeTask,
+  batchCreateSnipeTasks,
   updateSnipeTask,
   startSnipeTask,
   pauseSnipeTask,
@@ -256,6 +263,8 @@ const creating = ref(false)
 const isEdit = ref(false)
 const editingId = ref(null)
 const templateIdx = ref(null)
+// 批量创建：新建模式下多选的账号 ID 列表
+const selectedAccountIds = ref([])
 const form = ref({
   account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
   ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
@@ -330,7 +339,12 @@ const loadRegionOptions = async (accountId) => {
 }
 
 // 选账号后自动带出该账号的默认区域，之前拉取的 OCI 选项失效清空，镜像自动重拉
+// 批量模式下用首选账号加载选项（区域/镜像/可用域等）
 const onAccountChange = () => {
+  // 新建多选模式：form.account_id 取首选账号，供下方选项加载逻辑使用
+  if (!isEdit.value) {
+    form.value.account_id = selectedAccountIds.value[0] ?? null
+  }
   const a = accounts.value.find((x) => x.id === form.value.account_id)
   if (a && a.region) form.value.region = a.region
   loadRegionOptions(form.value.account_id)
@@ -492,6 +506,7 @@ const openCreate = async () => {
   isEdit.value = false
   editingId.value = null
   templateIdx.value = null
+  selectedAccountIds.value = []
   Object.assign(form.value, {
     account_id: null, region: '', shape: 'VM.Standard.A1.Flex',
     ocpus: 4, memory_gb: 24, image_ocid: '', subnet_ocid: '',
@@ -546,7 +561,9 @@ const selectTemplate = (i) => {
 }
 
 const submitCreate = async () => {
-  if (!form.value.account_id || !form.value.region || !form.value.shape ||
+  // 新建多选模式：至少选一个账号；编辑模式：form.account_id 必填
+  const accountIds = isEdit.value ? [form.value.account_id].filter(Boolean) : selectedAccountIds.value
+  if (!accountIds.length || !form.value.region || !form.value.shape ||
       !form.value.image_ocid || !form.value.availability_domain) {
     ElMessage.warning('请填写必填项')
     return
@@ -560,6 +577,19 @@ const submitCreate = async () => {
       if (!payload.root_password) delete payload.root_password
       await updateSnipeTask(editingId.value, payload)
       ElMessage.success('任务已更新')
+    } else if (accountIds.length > 1) {
+      // 批量创建：同一配置应用到多个账号
+      const payload = { ...form.value }
+      delete payload.account_id
+      delete payload.compartment_ocid
+      const res = await batchCreateSnipeTasks({ account_ids: accountIds, task: payload })
+      const okNames = res.created.map((c) => c.account_name).join('、')
+      if (res.failed.length) {
+        const failInfo = res.failed.map((f) => `#${f.account_id}：${f.reason}`).join('；')
+        ElMessage.warning(`批量创建完成：成功 ${res.created.length} 个（${okNames}），失败 ${res.failed.length} 个：${failInfo}`)
+      } else {
+        ElMessage.success(`批量创建成功：${res.created.length} 个任务（${okNames}）`)
+      }
     } else {
       await createSnipeTask(form.value)
       ElMessage.success('任务已创建（待启动）')
@@ -635,6 +665,7 @@ const handleAccountQuery = async () => {
   const qid = Number(route.query.account_id)
   if (qid) {
     await openCreate()
+    selectedAccountIds.value = [qid]
     form.value.account_id = qid
     onAccountChange()
     // 用完清除 query，避免刷新页面重复弹框

@@ -5,6 +5,7 @@ const api = axios.create({ baseURL: '/api', timeout: 30000 })
 // 账号
 export const listAccounts = () => api.get('/accounts').then((r) => r.data)
 export const createAccount = (data) => api.post('/accounts', data).then((r) => r.data)
+export const batchImportAccounts = (accounts) => api.post('/accounts/batch-import', { accounts }).then((r) => r.data)
 export const updateAccount = (id, data) => api.put(`/accounts/${id}`, data).then((r) => r.data)
 export const deleteAccount = (id) => api.delete(`/accounts/${id}`).then((r) => r.data)
 export const bindProxy = (id, proxy_id) => api.post(`/accounts/${id}/bind-proxy`, { proxy_id }).then((r) => r.data)
@@ -19,6 +20,8 @@ export const getAccountSummary = () => api.get('/account-summary').then((r) => r
 // 区域订阅（升级账户）
 export const listRegionSubscriptions = (accountId) => api.get(`/accounts/${accountId}/region-subscriptions`).then((r) => r.data)
 export const subscribeRegion = (accountId, region) => api.post(`/accounts/${accountId}/region-subscriptions`, { region }).then((r) => r.data)
+// 批量订阅区域：多个账号一次订阅同一个新区域（扩区）
+export const batchSubscribeRegions = (accountIds, regionName) => api.post('/region-subscriptions/batch-subscribe', { account_ids: accountIds, region_name: regionName }).then((r) => r.data)
 export const listOciRegions = () => api.get('/oci-regions').then((r) => r.data)
 
 // 存活检查
@@ -53,6 +56,8 @@ export const cfSyncAll = () => api.post('/cloudflare/sync-all').then((r) => r.da
 // 抢机任务
 export const listSnipeTasks = () => api.get('/sniper').then((r) => r.data)
 export const createSnipeTask = (data) => api.post('/sniper', data).then((r) => r.data)
+// 批量创建抢机任务：同一配置应用到多个账号
+export const batchCreateSnipeTasks = (data) => api.post('/sniper/batch-create', data).then((r) => r.data)
 export const updateSnipeTask = (id, data) => api.put(`/sniper/${id}`, data).then((r) => r.data)
 export const startSnipeTask = (id) => api.post(`/sniper/${id}/start`).then((r) => r.data)
 export const pauseSnipeTask = (id) => api.post(`/sniper/${id}/pause`).then((r) => r.data)
