@@ -23,6 +23,31 @@ class AccountCreate(BaseModel):
     proxy_id: int | None = None
 
 
+# ---------------- 批量导入账号 ----------------
+class BatchImportItem(BaseModel):
+    """批量导入中的单个账号：别名 + config 文本 + 私钥文本。"""
+    name: str = Field(default="", max_length=100, description="自定义名称，可空，后端自动生成")
+    config_text: str = Field(..., description="~/.oci/config 文件内容")
+    private_key: str = Field(..., description="PEM 私钥明文")
+
+
+class BatchImportRequest(BaseModel):
+    """批量导入账号请求。"""
+    accounts: list[BatchImportItem] = Field(..., min_length=1, max_length=100)
+
+
+class BatchImportFail(BaseModel):
+    """单个导入失败的明细。"""
+    name: str
+    error: str
+
+
+class BatchImportResponse(BaseModel):
+    """批量导入结果。"""
+    created: list[int] = Field(default_factory=list, description="成功创建的账号 id")
+    failed: list[BatchImportFail] = Field(default_factory=list, description="失败明细")
+
+
 class AccountUpdate(BaseModel):
     name: str | None = None
     region: str | None = None
@@ -269,6 +294,16 @@ class SnipeTaskCreate(BaseModel):
     interval_seconds: int = Field(default=60, ge=5, le=3600, description="无可用容量时的重试间隔（秒）")
     open_all_ports: bool = Field(default=True, description="开机后是否放行所有端口（安全列表加全端口规则）")
     boot_volume_gb: int = Field(default=50, ge=50, le=16384, description="启动卷大小（GB），OCI 限制 50-16384")
+
+
+class SnipeTaskBatchCreate(BaseModel):
+    """批量创建抢机任务：同一份任务配置应用到多个账号，每个账号建一个任务。
+
+    task 为任务配置（与 SnipeTaskCreate 字段相同，但不需要 account_id，
+    后端会为每个 account_id 逐个填充并校验）。
+    """
+    account_ids: list[int] = Field(..., min_length=1, description="账号 ID 列表")
+    task: dict = Field(..., description="任务配置（SnipeTaskCreate 字段，不含 account_id）")
 
 
 class SnipeTaskUpdate(BaseModel):

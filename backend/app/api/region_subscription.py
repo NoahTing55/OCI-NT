@@ -18,6 +18,29 @@ class SubscribeIn(BaseModel):
     region: str
 
 
+class BatchSubscribeIn(BaseModel):
+    """批量订阅区域请求体：多个账号订阅同一个新区域。"""
+    account_ids: list[int]
+    region_name: str
+
+
+async def _do_subscribe_account_region(account: Account, region: str) -> tuple[bool, str]:
+    """给单个账号订阅区域的核心逻辑（单订阅与批量订阅共用）。
+
+    返回 (成功与否, 错误信息)：成功时错误信息为空字符串。
+    """
+    client = build_client_for_account(account)
+    try:
+        await client.create_region_subscription(account.tenancy_ocid, region)
+        logger.info("账号 %s 订阅新区域 %s 成功", account.id, region)
+        return True, ""
+    except RuntimeError as e:
+        logger.warning("账号 %s 订阅区域 %s 失败：%s", account.id, region, str(e)[:200])
+        return False, str(e)
+    finally:
+        await client.aclose()
+
+
 def _get_account(db: Session, account_id: int) -> Account:
     """取账号，不存在时 404 中文提示（免费/升级账户均可订阅区域）。"""
     account = db.query(Account).filter(Account.id == account_id).first()
@@ -69,15 +92,49 @@ async def subscribe_region(
     region = (data.region or "").strip()
     if not region:
         raise HTTPException(status_code=400, detail="区域不能为空")
-    client = build_client_for_account(account)
-    try:
-        result = await client.create_region_subscription(account.tenancy_ocid, region)
-        logger.info("账号 %s 订阅新区域 %s 成功", account_id, region)
-        return {"ok": True, "region": region, "result": result}
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        await client.aclose()
+    ok, err = await _do_subscribe_account_region(account, region)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err)
+    return {"ok": True, "region": region}
+
+
+@router.post("/region-subscriptions/batch-subscribe")
+async def batch_subscribe_regions(
+    data: BatchSubscribeIn, db: Session = Depends(get_db)
+):
+    """批量订阅区域：多个账号一次订阅同一个新区域（扩区）。
+
+    请求体：{"account_ids": [1,2,3], "region_name": "us-ashburn-1"}。
+    每个账号独立调用订阅接口，互不影响；返回每个账号的成功/失败明细。
+    """
+    region = (data.region_name or "").strip()
+    if not region:
+        raise HTTPException(status_code=400, detail="区域不能为空")
+    if not data.account_ids:
+        raise HTTPException(status_code=400, detail="请至少选择一个账号")
+
+    results = []
+    for account_id in data.account_ids:
+        account = db.query(Account).filter(Account.id == account_id).first()
+        if not account:
+            results.append({
+                "account_id": account_id,
+                "account_name": f"账号 #{account_id}",
+                "success": False,
+                "error": "账号不存在",
+            })
+            continue
+        ok, err = await _do_subscribe_account_region(account, region)
+        results.append({
+            "account_id": account.id,
+            "account_name": account.name or f"账号 #{account.id}",
+            "success": ok,
+            "error": err,
+        })
+    success_count = sum(1 for r in results if r["success"])
+    logger.info("批量订阅区域 %s：共 %d 个账号，成功 %d 个",
+                region, len(results), success_count)
+    return {"region": region, "results": results}
 
 
 # OCI 公共区域硬编码回退（API 失败时用）

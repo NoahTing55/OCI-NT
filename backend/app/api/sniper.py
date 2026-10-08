@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.models.models import Account, SnipeLog, SnipeTask
-from app.schemas.schemas import SnipeLogOut, SnipeTaskCreate, SnipeTaskOut, SnipeTaskUpdate
+from app.schemas.schemas import SnipeLogOut, SnipeTaskBatchCreate, SnipeTaskCreate, SnipeTaskOut, SnipeTaskUpdate
 from app.workers.sniper import sniper_manager
 
 router = APIRouter()
@@ -79,6 +79,50 @@ def list_templates():
 
 @router.post("", response_model=SnipeTaskOut)
 def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
+    """新建单个抢机任务。"""
+    task = _do_create_task(db, data)
+    account = db.get(Account, task.account_id)
+    return _to_out(task, account.name if account else "")
+
+
+@router.post("/batch-create")
+def batch_create_tasks(data: SnipeTaskBatchCreate, db: Session = Depends(get_db)):
+    """批量创建抢机任务：同一份任务配置应用到多个账号，每个账号创建一个任务。
+
+    请求体：{"account_ids": [1,2,3], "task": {...任务配置，不含 account_id...}}。
+    逐个账号复用单个创建逻辑，单个账号失败不影响其他账号。
+    返回：{"created": [{"id": 任务ID, "account_id": 账号ID, "account_name": 账号名}],
+            "failed": [{"account_id": 账号ID, "reason": 失败原因}]}。
+    """
+    created = []
+    failed = []
+    # 去重并保持顺序
+    seen = set()
+    account_ids = [aid for aid in data.account_ids if not (aid in seen or seen.add(aid))]
+    for account_id in account_ids:
+        try:
+            # 用 SnipeTaskCreate 做完整字段校验（account_id 由后端逐个填充）
+            task_data = SnipeTaskCreate(account_id=account_id, **data.task)
+            task = _do_create_task(db, task_data)
+            account = db.get(Account, account_id)
+            created.append({
+                "id": task.id,
+                "account_id": account_id,
+                "account_name": account.name if account else "",
+            })
+        except HTTPException as e:
+            failed.append({"account_id": account_id, "reason": e.detail})
+        except Exception as e:
+            # Pydantic 校验失败等：转成中文原因
+            failed.append({"account_id": account_id, "reason": "任务配置校验失败：%s" % str(e)[:200]})
+    return {"created": created, "failed": failed}
+
+
+def _do_create_task(db: Session, data: SnipeTaskCreate) -> SnipeTask:
+    """创建单个抢机任务的核心逻辑（单个创建和批量创建共用）。
+
+    抛 HTTPException 表示校验失败，调用方负责捕获处理。
+    """
     account = db.get(Account, data.account_id)
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
@@ -120,7 +164,7 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
     db.add(task)
     db.commit()
     db.refresh(task)
-    return _to_out(task, account.name)
+    return task
 
 @router.get("", response_model=list[SnipeTaskOut])
 def list_tasks(db: Session = Depends(get_db)):

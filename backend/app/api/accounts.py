@@ -9,7 +9,10 @@ from app.core.deps import get_db
 from app.core.redis_client import get_sync_redis
 from app.core.security import encrypt_text
 from app.models.models import Account, Proxy, SnipeTask
-from app.schemas.schemas import AccountCreate, AccountOut, AccountUpdate, BindProxyIn
+from app.schemas.schemas import (
+    AccountCreate, AccountOut, AccountUpdate, BindProxyIn,
+    BatchImportRequest, BatchImportResponse, BatchImportFail,
+)
 
 logger = logging.getLogger(__name__)
 # 与 app.services.instances.CACHE_PREFIX 保持一致（实例列表缓存 key 前缀）
@@ -77,8 +80,11 @@ def list_accounts(db: Session = Depends(get_db)):
         result.append(out)
     return result
 
-@router.post("", response_model=AccountOut)
-def create_account(data: AccountCreate, db: Session = Depends(get_db)):
+def _create_account_core(data: AccountCreate, db: Session) -> Account:
+    """创建账号的核心逻辑（单账号和批量导入共用）。
+
+    抛 HTTPException 表示失败，调用方负责捕获。
+    """
     if "PRIVATE KEY" not in data.private_key:
         raise HTTPException(status_code=400, detail="private_key 看起来不是 PEM 私钥")
     try:
@@ -109,7 +115,93 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
     db.add(account)
     db.commit()
     db.refresh(account)
+    return account
+
+
+@router.post("", response_model=AccountOut)
+def create_account(data: AccountCreate, db: Session = Depends(get_db)):
+    account = _create_account_core(data, db)
     return _to_out(account)
+
+
+def _parse_oci_config(config_text: str) -> dict:
+    """解析 ~/.oci/config 文本，返回 {user, fingerprint, tenancy, region}。
+
+    取 [DEFAULT] 段（无段头时整段视为 DEFAULT），抛 ValueError 表示解析失败。
+    """
+    import configparser
+    import io
+
+    text = config_text.strip()
+    if not text:
+        raise ValueError("config 内容为空")
+    parser = configparser.ConfigParser()
+    # 无段头时补一个 [DEFAULT] 段头
+    if not text.lstrip().startswith("["):
+        text = "[DEFAULT]\n" + text
+    try:
+        parser.read_file(io.StringIO(text))
+    except Exception as e:
+        raise ValueError(f"config 解析失败：{e}")
+    # 注意：configparser 的 DEFAULT 是特殊段，has_section("DEFAULT") 恒为 False，
+    # 但 parser.defaults() 可读到；其他命名段用 sections()[0]
+    if parser.defaults():
+        kv = {k.lower(): v.strip() for k, v in parser.defaults().items()}
+    elif parser.sections():
+        kv = {k.lower(): v.strip() for k, v in parser.items(parser.sections()[0])}
+    else:
+        raise ValueError("config 中没有有效段")
+    missing = [k for k in ("user", "fingerprint", "tenancy") if not kv.get(k)]
+    if missing:
+        raise ValueError(f"config 缺少字段：{', '.join(missing)}")
+    region = kv.get("region", "ap-seoul-1")
+    # region 可能是 oc1.ap-seoul-1 格式，取最后一段
+    region = region.split(".")[-1].strip()
+    return {
+        "user_ocid": kv["user"],
+        "fingerprint": kv["fingerprint"],
+        "tenancy_ocid": kv["tenancy"],
+        "region": region or "ap-seoul-1",
+    }
+
+
+@router.post("/batch-import", response_model=BatchImportResponse)
+def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(get_db)):
+    """批量导入账号：每个条目解析 config + 私钥，逐个创建。
+
+    成功返回账号 id 列表，失败返回明细（不影响其他条目）。
+    """
+    created: list[int] = []
+    failed: list[dict] = []
+    for idx, item in enumerate(data.accounts):
+        # 别名：为空则用 tenancy 后 6 位自动生成
+        name = item.name.strip()
+        try:
+            cfg = _parse_oci_config(item.config_text)
+            if not name:
+                suffix = "".join(c for c in cfg["tenancy_ocid"] if c.isalnum())[-6:]
+                name = f"oci-{suffix}"
+            account_data = AccountCreate(
+                name=name,
+                tenancy_ocid=cfg["tenancy_ocid"],
+                user_ocid=cfg["user_ocid"],
+                fingerprint=cfg["fingerprint"],
+                private_key=item.private_key.strip(),
+                region=cfg["region"],
+            )
+            account = _create_account_core(account_data, db)
+            created.append(account.id)
+        except HTTPException as e:
+            failed.append({"name": name or f"第{idx + 1}个", "error": e.detail})
+        except ValueError as e:
+            failed.append({"name": name or f"第{idx + 1}个", "error": str(e)})
+        except Exception as e:
+            logger.warning("批量导入第 %d 个账号异常：%s", idx + 1, e)
+            failed.append({"name": name or f"第{idx + 1}个", "error": f"未知错误：{e}"})
+    return BatchImportResponse(
+        created=created,
+        failed=[BatchImportFail(**f) for f in failed],
+    )
 
 @router.get("/{account_id}", response_model=AccountOut)
 def get_account(account_id: int, db: Session = Depends(get_db)):
