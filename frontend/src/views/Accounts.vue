@@ -225,14 +225,14 @@
           </el-form-item>
           <el-form-item label="Config 内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'config_text')">
-              <el-input v-model="item.config_text" type="textarea" :rows="3"
+              <el-input v-model="item.config_text" type="textarea" :rows="2"
                 placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此" />
               <div class="drop-hint">可拖拽 config 文件到此处</div>
             </div>
           </el-form-item>
           <el-form-item label="私钥内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
-              <el-input v-model="item.private_key" type="textarea" :rows="3"
+              <el-input v-model="item.private_key" type="textarea" :rows="2"
                 placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
               <div class="drop-hint">可拖拽 PEM 文件到此处</div>
             </div>
@@ -1091,9 +1091,13 @@ watch(accounts, () => initColumnResize());
 /* 文件拖拽区 */
 .drop-zone {
   position: relative;
+  width: 100%;
   border: 2px dashed transparent;
   border-radius: 6px;
   transition: border-color .2s, background .2s;
+}
+.drop-zone .el-textarea {
+  width: 100%;
 }
 .drop-zone.drag-over {
   border-color: #409eff;
