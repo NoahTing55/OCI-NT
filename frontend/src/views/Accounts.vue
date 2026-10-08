@@ -222,9 +222,11 @@
           <el-form-item label="Config 内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'config_text')">
               <el-input v-model="item.config_text" type="textarea" :rows="2"
-                placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此" />
+                placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此"
+                @input="parseBatchRegion(item)" />
               <div class="drop-hint">可拖拽 config 文件到此处</div>
             </div>
+            <div v-if="item.region" class="batch-region">区域：{{ fmtRegion(item.region) }}</div>
           </el-form-item>
           <el-form-item label="私钥内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
@@ -643,29 +645,37 @@ const submitCreate = async () => {
 
 // ---------- 批量导入账号 ----------
 const batchImportVisible = ref(false)
-const batchItems = ref([{ name: '', config_text: '', private_key: '' }])
+const batchItems = ref([{ name: '', config_text: '', private_key: '', region: '' }])
 const batchSubmitting = ref(false)
 const batchResult = ref(null)
 
 const openBatchImport = () => {
-  batchItems.value = [{ name: '', config_text: '', private_key: '' }]
+  batchItems.value = [{ name: '', config_text: '', private_key: '', region: '' }]
   batchResult.value = null
   batchImportVisible.value = true
 }
 const addBatchItem = () => {
   if (batchItems.value.length >= 100) return ElMessage.warning('一次最多导入 100 个')
-  batchItems.value.push({ name: '', config_text: '', private_key: '' })
+  batchItems.value.push({ name: '', config_text: '', private_key: '', region: '' })
 }
 const removeBatchItem = (idx) => {
   batchItems.value.splice(idx, 1)
 }
 // 拖拽文件到文本框：读取文件内容填入对应字段
+// 批量导入：从 config 文本解析区域
+const parseBatchRegion = (item) => {
+  const m = (item.config_text || '').match(/^\s*region\s*=\s*(\S+)/m)
+  if (m) item.region = m[1].trim()
+}
 const onDropFile = (e, item, field) => {
   const file = e.dataTransfer?.files?.[0]
   if (!file) return
   e.currentTarget.classList.remove('drag-over')
   const reader = new FileReader()
-  reader.onload = () => { item[field] = reader.result }
+  reader.onload = () => {
+    item[field] = reader.result
+    if (field === 'config_text') parseBatchRegion(item)
+  }
   reader.readAsText(file)
 }
 // 拖拽高亮
@@ -1064,6 +1074,12 @@ watch(accounts, () => initColumnResize());
 }
 .batch-item-head {
   margin-bottom: 8px;
+}
+.batch-region {
+  font-size: 12px;
+  color: #67c23a;
+  margin-top: 4px;
+  font-weight: 500;
 }
 /* 批量导入卡片美化 */
 .batch-item {
