@@ -232,14 +232,16 @@
           </el-form-item>
           <el-form-item label="Config 内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'config_text')">
-              <el-input v-model="item.config_text" type="textarea" :rows="4"
+              <el-input v-model="item.config_text" type="textarea" :rows="6"
                 placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此" />
+              <div class="drop-hint">可拖拽 config 文件到此处</div>
             </div>
           </el-form-item>
           <el-form-item label="私钥内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
-              <el-input v-model="item.private_key" type="textarea" :rows="3"
+              <el-input v-model="item.private_key" type="textarea" :rows="5"
                 placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
+              <div class="drop-hint">可拖拽 PEM 文件到此处</div>
             </div>
           </el-form-item>
         </el-form>
@@ -1041,6 +1043,25 @@ watch(accounts, () => initColumnResize());
   flex-shrink: 0;
 }
 
+/* 批量导入卡片美化 */
+.batch-item {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: #fafbfc;
+}
+.batch-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.batch-item-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
 /* 文件拖拽区 */
 .drop-zone {
   position: relative;
