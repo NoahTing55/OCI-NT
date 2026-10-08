@@ -131,22 +131,18 @@
           <div class="step-desc">粘贴完整 Config，私钥可上传或直接粘贴在配置后。</div>
 
           <div class="import-sub">导入 Config 文件</div>
-          <div class="file-drop">
+          <div class="file-drop drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropConfigBox">
             <div class="file-row">
               <el-button size="small" @click="triggerConfigSelect">选择文件</el-button>
               <span class="file-name" :class="{ empty: !configFileName }">{{ configFileName || '未选择任何文件' }}</span>
-              <!-- 原生 file 输入，避免 el-upload 的额外请求；读取后自动解析 -->
               <input ref="configFileInput" type="file" accept=".config,config" style="display:none" @change="onConfigFileChange" />
             </div>
-            <div class="file-hint">可直接选择文件名为 config 的 OCI 配置；也可以同时选择 PEM 私钥。<br />未选择文件，也可以在下方直接粘贴 Config。</div>
+            <div class="file-hint">可选择文件、或直接拖拽 config 文件到此处；也可在下方粘贴 Config。</div>
           </div>
 
           <div class="import-sub">完整 OCI Config</div>
-          <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropSingleFile(e, 'config')">
-            <el-input v-model="importForm.config" type="textarea" :rows="6"
-              placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
-            <div class="drop-hint">可拖拽 config 文件到此处</div>
-          </div>
+          <el-input v-model="importForm.config" type="textarea" :rows="5"
+            placeholder="粘贴 ~/.oci/config 内容，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
           <div class="region-hint">
             区域识别&nbsp;&nbsp;<span v-if="detectedRegion">已识别区域：<b>{{ detectedRegion }}</b></span><span v-else>等待输入 OCI Config</span><br />
             粘贴配置后自动识别 region，并在导入时再次由后端校验。
@@ -157,20 +153,17 @@
             <span class="step-num">2</span>
             <span class="step-title">PEM 私钥文件</span>
           </div>
-          <div class="file-drop">
+          <div class="file-drop drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropPemBox">
             <div class="file-row">
               <el-button size="small" @click="triggerPemSelect">选择文件</el-button>
               <span class="file-name" :class="{ empty: !pemFileName }">{{ pemFileName || '未选择任何文件' }}</span>
               <input ref="pemFileInput" type="file" accept=".pem,.key" style="display:none" @change="onPemFileChange" />
             </div>
-            <div class="file-hint">如果 Config 中只有 key_file 路径，请在这里选择对应的 PEM 文件。</div>
+            <div class="file-hint">可选择文件、或直接拖拽 PEM 文件到此处。</div>
           </div>
           <div class="import-sub">私钥 PEM（可选）</div>
-          <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropSingleFile(e, 'privateKey')">
-            <el-input v-model="importForm.privateKey" type="textarea" :rows="4"
-              placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
-            <div class="drop-hint">可拖拽 PEM 文件到此处</div>
-          </div>
+          <el-input v-model="importForm.privateKey" type="textarea" :rows="3"
+            placeholder="-----BEGIN PRIVATE KEY-----" show-password />
 
           <!-- 解析结果：由 Config 自动解析，可手动修改 -->
           <div class="import-sub" style="display:flex;align-items:center;justify-content:space-between">
@@ -216,7 +209,7 @@
     </el-dialog>
 
     <!-- 批量导入账号：多份 config 一次导入 -->
-    <el-dialog v-model="batchImportVisible" title="批量导入账号" width="720px">
+    <el-dialog v-model="batchImportVisible" title="批量导入账号" width="620px" class="batch-dialog">
       <div style="font-size:12px;color:#909399;margin-bottom:10px">
         每组填写一份账号：自定义名称（可空，按 {城市}-{id}-{日期} 自动生成，如 Phoenix-3-20261008）+ Config 内容 + 私钥内容。
         文本框支持粘贴，也可把 config / PEM 文件直接拖拽到对应文本框。点"添加一组"可继续添加。
@@ -232,14 +225,14 @@
           </el-form-item>
           <el-form-item label="Config 内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'config_text')">
-              <el-input v-model="item.config_text" type="textarea" :rows="6"
+              <el-input v-model="item.config_text" type="textarea" :rows="3"
                 placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此" />
               <div class="drop-hint">可拖拽 config 文件到此处</div>
             </div>
           </el-form-item>
           <el-form-item label="私钥内容">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
-              <el-input v-model="item.private_key" type="textarea" :rows="5"
+              <el-input v-model="item.private_key" type="textarea" :rows="3"
                 placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
               <div class="drop-hint">可拖拽 PEM 文件到此处</div>
             </div>
@@ -686,6 +679,28 @@ const onDragOver = (e) => {
 const onDragLeave = (e) => {
   e.currentTarget.classList.remove('drag-over')
 }
+// 单账号导入：拖拽文件到绿色虚线框
+const onDropConfigBox = (e) => {
+  e.currentTarget.classList.remove('drag-over')
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  configFileName.value = file.name
+  const reader = new FileReader()
+  reader.onload = () => {
+    importForm.value.config = reader.result
+    parseConfig()
+  }
+  reader.readAsText(file)
+}
+const onDropPemBox = (e) => {
+  e.currentTarget.classList.remove('drag-over')
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  pemFileName.value = file.name
+  const reader = new FileReader()
+  reader.onload = () => { importForm.value.privateKey = reader.result }
+  reader.readAsText(file)
+}
 // 单账号导入：拖拽文件到文本框
 const onDropSingleFile = (e, field) => {
   const file = e.dataTransfer?.files?.[0]
@@ -1043,6 +1058,17 @@ watch(accounts, () => initColumnResize());
   flex-shrink: 0;
 }
 
+/* 批量导入对话框紧凑 */
+.batch-dialog .el-dialog__body {
+  padding: 12px 20px;
+}
+.batch-item {
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.batch-item-head {
+  margin-bottom: 8px;
+}
 /* 批量导入卡片美化 */
 .batch-item {
   border: 1px solid #ebeef5;
