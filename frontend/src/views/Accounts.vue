@@ -128,7 +128,7 @@
             <span class="step-num">1</span>
             <span class="step-title">OCI API 配置</span>
           </div>
-          <div class="step-desc">粘贴完整 Config，私钥可上传或直接粘贴在配置后。</div>
+
 
           <div class="import-sub">导入 Config 文件</div>
           <div class="file-drop drop-zone slim" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropConfigBox">
