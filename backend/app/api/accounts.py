@@ -111,6 +111,18 @@ def list_accounts(db: Session = Depends(get_db)):
         result.append(out)
     return result
 
+def _auto_assign_proxy(db: Session) -> "int | None":
+    """找第一个未被绑定的代理 id，没有则返回 None（直连）。"""
+    proxy = (
+        db.query(Proxy)
+        .outerjoin(Account, Account.proxy_id == Proxy.id)
+        .filter(Account.id.is_(None))
+        .order_by(Proxy.id)
+        .first()
+    )
+    return proxy.id if proxy else None
+
+
 def _create_account_core(data: AccountCreate, db: Session) -> Account:
     """创建账号的核心逻辑（单账号和批量导入共用）。
 
@@ -122,9 +134,13 @@ def _create_account_core(data: AccountCreate, db: Session) -> Account:
         private_key_enc = encrypt_text(data.private_key)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    # 代理分配：未指定时自动分配第一个未使用的代理，没有则直连
+    proxy_id = data.proxy_id
+    if proxy_id is None:
+        proxy_id = _auto_assign_proxy(db)
     # 新建时直接绑定代理：检查代理存在且未被其他账号占用
-    if data.proxy_id is not None:
-        proxy = db.get(Proxy, data.proxy_id)
+    if proxy_id is not None:
+        proxy = db.get(Proxy, proxy_id)
         if not proxy:
             raise HTTPException(status_code=404, detail="代理不存在")
         if proxy.account is not None:
@@ -141,7 +157,7 @@ def _create_account_core(data: AccountCreate, db: Session) -> Account:
         region=data.region.strip(),
         compartment_ocid=data.compartment_ocid.strip(),
         remark=data.remark,
-        proxy_id=data.proxy_id,
+        proxy_id=proxy_id,
     )
     db.add(account)
     db.commit()
