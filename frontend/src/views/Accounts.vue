@@ -1108,9 +1108,12 @@ watch(accounts, () => initColumnResize());
 .drop-zone {
   position: relative;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 2px dashed transparent;
   border-radius: 6px;
   transition: border-color .2s, background .2s;
+  overflow: hidden;
 }
 .drop-zone .el-textarea {
   width: 100%;
