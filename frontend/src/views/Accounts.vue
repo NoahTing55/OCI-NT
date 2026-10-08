@@ -224,7 +224,7 @@
               <el-input v-model="item.config_text" type="textarea" :rows="2"
                 placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此"
                 @input="parseBatchRegion(item)" />
-              <div class="drop-hint">可拖拽 config 文件到此处</div>
+
             </div>
             <div v-if="item.region" class="batch-region">区域：{{ fmtRegion(item.region) }}</div>
           </el-form-item>
@@ -232,7 +232,7 @@
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
               <el-input v-model="item.private_key" type="textarea" :rows="2"
                 placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
-              <div class="drop-hint">可拖拽 PEM 文件到此处</div>
+
             </div>
           </el-form-item>
         </el-form>
@@ -1081,24 +1081,27 @@ watch(accounts, () => initColumnResize());
   margin-top: 4px;
   font-weight: 500;
 }
-/* 批量导入卡片美化 */
+/* 批量导入卡片美化（紧凑） */
 .batch-item {
   border: 1px solid #ebeef5;
   border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
   background: #fafbfc;
 }
 .batch-item-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 .batch-item-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   color: #303133;
+}
+.batch-form .el-form-item {
+  margin-bottom: 8px;
 }
 /* 文件拖拽区（slim 紧凑版） */
 .drop-zone.slim {
