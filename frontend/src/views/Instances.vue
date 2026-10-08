@@ -37,11 +37,11 @@
       <span style="margin-left: 8px; color: #909399; font-size: 12px">已选 {{ selected.length }} 台</span>
     </div>
 
-    <el-table :data="instances" v-loading="loading" border @selection-change="selected = $event">
+    <el-table :data="instances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140" />
-      <el-table-column prop="display_name" label="名称" width="160" />
+      <el-table-column prop="display_name" label="名称" min-width="160" />
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
           <el-tag :type="stateType(row.lifecycle_state)" size="small">{{ row.lifecycle_state }}</el-tag>
