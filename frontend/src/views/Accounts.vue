@@ -27,7 +27,7 @@
     </div>
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
-    <el-table :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table">
+    <el-table ref="acctTableRef" :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table">
       <!-- 🛡️ 代理绑定状态：点击快速配置代理 -->
       <el-table-column width="52" align="center">
         <template #header><span title="绑定代理" style="opacity: .55">🛡️</span></template>
@@ -687,7 +687,47 @@ const doSubscribe = async () => {
   }
 }
 
-onMounted(load)
+// 列宽拖拽：表头右边缘拉杆，拖动调整列宽
+const acctTableRef = ref(null);
+function initColumnResize() {
+  nextTick(() => {
+    const table = acctTableRef.value?.$el;
+    if (!table) return;
+    const headers = table.querySelectorAll('.el-table__header thead th');
+    headers.forEach((th) => {
+      if (th.querySelector('.col-resizer')) return;
+      const resizer = document.createElement('div');
+      resizer.className = 'col-resizer';
+      th.style.position = 'relative';
+      th.appendChild(resizer);
+      resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startWidth = th.offsetWidth;
+        const colIndex = Array.from(th.parentNode.children).indexOf(th);
+        const onMove = (ev) => {
+          const delta = ev.clientX - startX;
+          const newWidth = Math.max(50, startWidth + delta);
+          th.style.width = newWidth + 'px';
+          table.querySelectorAll('.el-table__body tbody tr').forEach((tr) => {
+            const td = tr.children[colIndex];
+            if (td) td.style.width = newWidth + 'px';
+          });
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+  });
+}
+
+onMounted(() => { load(); initColumnResize(); });
+watch(accounts, () => initColumnResize());
 </script>
 
 <style scoped>
@@ -772,6 +812,19 @@ onMounted(load)
   flex-shrink: 0;
 }
 
+/* 列宽拖拽拉杆 */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+.col-resizer:hover {
+  background: rgba(64, 158, 255, 0.35);
+}
 /* 表格紧凑精致 */
 .acct-table {
   font-size: 13px;
