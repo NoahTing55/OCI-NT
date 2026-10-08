@@ -142,10 +142,7 @@
           <div class="import-sub">完整 OCI Config</div>
           <el-input v-model="importForm.config" type="textarea" :rows="3"
             placeholder="粘贴 ~/.oci/config 内容" />
-          <div class="region-hint">
-            区域识别&nbsp;&nbsp;<span v-if="detectedRegion">已识别区域：<b>{{ detectedRegion }}</b></span><span v-else>等待输入 OCI Config</span><br />
-            粘贴配置后自动识别 region，并在导入时再次由后端校验。
-          </div>
+
 
           <!-- 步骤 2：PEM 私钥文件 -->
           <div class="import-step">
