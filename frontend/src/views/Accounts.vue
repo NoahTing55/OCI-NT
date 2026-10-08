@@ -142,9 +142,11 @@
           </div>
 
           <div class="import-sub">完整 OCI Config</div>
-          <el-input v-model="importForm.config" type="textarea" :rows="6"
-            placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1"
-            @dragover.prevent @drop.prevent="(e) => onDropSingleFile(e, 'config')" />
+          <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropSingleFile(e, 'config')">
+            <el-input v-model="importForm.config" type="textarea" :rows="6"
+              placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
+            <div class="drop-hint">可拖拽 config 文件到此处</div>
+          </div>
           <div class="region-hint">
             区域识别&nbsp;&nbsp;<span v-if="detectedRegion">已识别区域：<b>{{ detectedRegion }}</b></span><span v-else>等待输入 OCI Config</span><br />
             粘贴配置后自动识别 region，并在导入时再次由后端校验。
@@ -164,9 +166,11 @@
             <div class="file-hint">如果 Config 中只有 key_file 路径，请在这里选择对应的 PEM 文件。</div>
           </div>
           <div class="import-sub">私钥 PEM（可选）</div>
-          <el-input v-model="importForm.privateKey" type="textarea" :rows="4"
-            placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password
-            @dragover.prevent @drop.prevent="(e) => onDropSingleFile(e, 'privateKey')" />
+          <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropSingleFile(e, 'privateKey')">
+            <el-input v-model="importForm.privateKey" type="textarea" :rows="4"
+              placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
+            <div class="drop-hint">可拖拽 PEM 文件到此处</div>
+          </div>
 
           <!-- 解析结果：由 Config 自动解析，可手动修改 -->
           <div class="import-sub" style="display:flex;align-items:center;justify-content:space-between">
@@ -227,14 +231,16 @@
             <el-input v-model="item.name" placeholder="可空，自动生成如 Phoenix-3-20261008" />
           </el-form-item>
           <el-form-item label="Config 内容">
-            <el-input v-model="item.config_text" type="textarea" :rows="4"
-              placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此"
-              @dragover.prevent @drop.prevent="(e) => onDropFile(e, item, 'config_text')" />
+            <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'config_text')">
+              <el-input v-model="item.config_text" type="textarea" :rows="4"
+                placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此" />
+            </div>
           </el-form-item>
           <el-form-item label="私钥内容">
-            <el-input v-model="item.private_key" type="textarea" :rows="3"
-              placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password
-              @dragover.prevent @drop.prevent="(e) => onDropFile(e, item, 'private_key')" />
+            <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
+              <el-input v-model="item.private_key" type="textarea" :rows="3"
+                placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
+            </div>
           </el-form-item>
         </el-form>
       </div>
@@ -666,15 +672,24 @@ const removeBatchItem = (idx) => {
 const onDropFile = (e, item, field) => {
   const file = e.dataTransfer?.files?.[0]
   if (!file) return
+  e.currentTarget.classList.remove('drag-over')
   const reader = new FileReader()
   reader.onload = () => { item[field] = reader.result }
   reader.readAsText(file)
+}
+// 拖拽高亮
+const onDragOver = (e) => {
+  e.currentTarget.classList.add('drag-over')
+}
+const onDragLeave = (e) => {
+  e.currentTarget.classList.remove('drag-over')
 }
 // 单账号导入：拖拽文件到文本框
 const onDropSingleFile = (e, field) => {
   const file = e.dataTransfer?.files?.[0]
   if (!file) return
   const reader = new FileReader()
+  e.currentTarget.classList.remove('drag-over')
   reader.onload = () => {
     importForm[field] = reader.result
     if (field === 'config') parseConfig()
@@ -1026,6 +1041,39 @@ watch(accounts, () => initColumnResize());
   flex-shrink: 0;
 }
 
+/* 文件拖拽区 */
+.drop-zone {
+  position: relative;
+  border: 2px dashed transparent;
+  border-radius: 6px;
+  transition: border-color .2s, background .2s;
+}
+.drop-zone.drag-over {
+  border-color: #409eff;
+  background: rgba(64, 158, 255, .06);
+}
+.drop-hint {
+  font-size: 11px;
+  color: #a8abb2;
+  text-align: center;
+  padding: 4px 0 2px;
+}
+/* 导入对话框排版优化 */
+.import-step {
+  margin: 18px 0 10px;
+}
+.import-sub {
+  font-weight: 600;
+  margin: 14px 0 8px;
+  font-size: 13px;
+}
+.file-drop {
+  margin-bottom: 6px;
+}
+.region-hint {
+  margin: 8px 0 4px;
+  line-height: 1.6;
+}
 /* 列宽拖拽拉杆 */
 .col-resizer {
   position: absolute;
