@@ -69,7 +69,7 @@
           </el-button>
         </el-form-item>
       </el-form>
-      <div style="font-size: 12px; color: #909399">在实例子网的安全列表添加 protocol=all、来源 0.0.0.0/0 的入站规则（已存在则跳过）</div>
+      <div style="font-size: 12px; color: #909399"></div>
     </el-card>
 
     <!-- CF Token -->

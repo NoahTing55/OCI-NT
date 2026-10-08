@@ -602,7 +602,7 @@ class SniperManager:
             db.close()
         self._log(task_id, "error", "任务失败停止：" + msg)
         await telegram.send_message(
-            "【抢机失败】账号 %s %s @ %s：%s" % (cfg["account_name"], cfg["shape"], cfg["region"], msg)
+            "【开机失败】账号 %s %s @ %s：%s" % (cfg["account_name"], cfg["shape"], cfg["region"], msg)
         )
 
     def _mark_account_key_invalid(self, cfg: dict):

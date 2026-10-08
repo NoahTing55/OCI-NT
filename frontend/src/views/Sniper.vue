@@ -56,7 +56,6 @@
             <div class="tpl-card-desc">{{ t.ocpus }}C / {{ t.memory_gb }}G</div>
           </div>
         </div>
-        <div style="color: #909399; font-size: 12px; margin: 4px 0 12px">点击卡片填入配置，可再手动调整</div>
 
         <!-- 分组2：基础配置 -->
         <div class="form-group-title">基础配置</div>
@@ -79,7 +78,7 @@
         </el-form-item>
         <el-form-item label="开机数量">
           <el-input-number v-model="form.target_count" :min="1" :max="100" style="width: 160px" />
-          <span style="color: #909399; font-size: 12px; margin-left: 8px">同一账号连续抢 N 台（每台实例名自动加序号）</span>
+          <span style="color: #909399; font-size: 12px; margin-left: 8px">同一账号连续开机 N 台（每台实例名自动加序号）</span>
         </el-form-item>
         <el-form-item label="开机间隔">
           <el-button-group class="interval-btns" style="margin-right: 8px">

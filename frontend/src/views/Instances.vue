@@ -15,7 +15,7 @@
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="load" :loading="loading">刷新</el-button>
+        <el-button type="primary" @click="() => load(true, true)" :loading="loading">刷新</el-button>
       </el-form-item>
     </el-form>
 
@@ -139,19 +139,22 @@ const filters = ref({ account_id: null, region: '', state: '' })
 const stateType = (s) =>
   ({ RUNNING: 'success', STOPPED: '', TERMINATED: 'info', STOPPING: 'warning', STARTING: 'warning' }[s] || 'info')
 
-const load = async (retry = true) => {
+const load = async (retry = true, force = false) => {
   loading.value = true
   try {
     const params = {}
     if (filters.value.account_id) params.account_id = filters.value.account_id
     if (filters.value.region) params.region = filters.value.region
     if (filters.value.state) params.state = filters.value.state
+    // 手动点"刷新"时带 force=1，绕开 24 小时缓存直查 OCI
+    if (force) params.force = 1
     const data = await listInstances(params)
     instances.value = data.items
     errors.value = data.errors
     // 首次加载为空时自动重试一次（OCI 首次聚合查询慢，缓存未热）
-    if (retry && (!data.items || data.items.length === 0) && !Object.keys(params).length) {
-      setTimeout(() => load(false), 3000)
+    const filterKeys = Object.keys(params).filter((k) => k !== 'force')
+    if (retry && (!data.items || data.items.length === 0) && !filterKeys.length) {
+      setTimeout(() => load(false, force), 3000)
     }
   } catch (e) {
     ElMessage.error('加载失败：' + (e.response?.data?.detail || e.message))

@@ -2,7 +2,6 @@
   <div>
     <el-button type="primary" @click="createVisible = true">新建代理</el-button>
     <el-button @click="batchVisible = true">批量导入</el-button>
-    <div style="font-size:12px;color:#909399;margin-top:8px">单API单代理：一个代理同一时间最多被一个账号绑定；socks5 会以 socks5h 方式使用，DNS 也走代理防泄漏</div>
 
     <el-table :data="proxies" v-loading="loading" style="margin-top: 12px" border>
       <el-table-column prop="name" label="名称" width="140" />
