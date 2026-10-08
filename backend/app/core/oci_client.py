@@ -46,6 +46,8 @@ class OciClient:
         self.user_ocid = user_ocid
         self.fingerprint = fingerprint
         self.region = region
+        self._proxy_url = proxy_url
+        self._private_key_pem = private_key_pem
         # keyId 格式：tenancy_ocid/user_ocid/fingerprint
         self.key_id = f"{tenancy_ocid}/{user_ocid}/{fingerprint}"
         self._private_key = serialization.load_pem_private_key(
@@ -473,38 +475,48 @@ class OciClient:
         return False
 
     async def get_subscription_plan_type(self) -> "str | None":
-        """查订阅 plan_type（osp-gateway，失败静默返回 None）。
+        """查订阅 plan_type（照搬 OCI-Noah，用官方 oci SDK）。
 
-        endpoint 模板照搬 OCI Python SDK：
-        https://osp-oci-integ.osp.{region}.oci.oraclecloud.com/20190601/subscriptions
+        SubscriptionServiceClient.list_subscriptions，走账号代理，
         取评分最高的订阅（PAYG=30 > FREE_TIER=20 > UNKNOWN=10）的 plan_type。
-        走账号代理，失败返回 None 不抛异常。
+        返回 "PAYG" / "FREE_TIER" / None。失败返回 None 不抛异常。
         """
         try:
-            url = (
-                f"https://osp-oci-integ.osp.{self.region}.oci.oraclecloud.com"
-                f"/20190601/subscriptions"
-                f"?compartmentId={self.tenancy_ocid}"
-                f"&ospHomeRegion={self.region}"
-                f"&limit=100"
+            import oci
+            osp_config = {
+                "tenancy": self.tenancy_ocid,
+                "user": self.user_ocid,
+                "fingerprint": self.fingerprint,
+                "key_content": self._private_key_pem,
+                "region": self.region,
+            }
+            client = oci.osp_gateway.SubscriptionServiceClient(
+                osp_config, timeout=(10, 30)
             )
-            headers = self._sign_headers("GET", url, None)
-            resp = await self._client.request("GET", url, headers=headers)
-            if resp.status_code != 200:
-                return None
-            items = resp.json().get("items", []) or []
+            if self._proxy_url:
+                client.base_client.session.proxies = {
+                    "http": self._proxy_url,
+                    "https": self._proxy_url,
+                }
+            resp = client.list_subscriptions(
+                osp_home_region=self.region,
+                compartment_id=self.tenancy_ocid,
+                limit=100,
+                retry_strategy=oci.retry.NoneRetryStrategy(),
+            )
+            items = list(getattr(resp.data, "items", None) or [])
             if not items:
                 return None
-            def _score(s: dict) -> int:
-                pt = str(s.get("planType", "")).upper()
-                us = str(s.get("upgradeState", "")).upper()
+            def _score(s) -> int:
+                pt = str(getattr(s, "plan_type", "") or "").upper()
+                us = str(getattr(s, "upgrade_state", "") or "").upper()
                 if pt == "PAYG" or us == "UPGRADED":
                     return 30
                 if pt == "FREE_TIER":
                     return 20
                 return 10
             best = max(items, key=_score)
-            return best.get("planType")
+            return getattr(best, "plan_type", None)
         except Exception:
             return None
 

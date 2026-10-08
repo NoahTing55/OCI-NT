@@ -6,13 +6,15 @@ psycopg2-binary==2.9.10
 pydantic==2.10.4
 pydantic-settings==2.7.0
 httpx[socks]==0.28.1
-cryptography==44.0.0
+cryptography==50.0.0
 celery==5.4.0
 redis==5.2.1
 apscheduler==3.10.4
 alembic==1.13.3
 # M4：登录鉴权 + TOTP 双因素
-PyJWT==2.10.1
+PyJWT==2.12.0
 pyotp==2.9.0
 qrcode==7.4.2
 Pillow==11.0.0
+# 账号类型识别：官方 SDK 调 osp-gateway（照搬 OCI-Noah）
+oci==2.187.2
