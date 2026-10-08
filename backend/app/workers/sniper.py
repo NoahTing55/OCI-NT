@@ -25,6 +25,17 @@ from fastapi import HTTPException
 from sqlalchemy.orm import joinedload
 
 from app.core import telegram
+
+# 区域中文名（TG 通知用）
+REGION_CN = {
+    "us-phoenix-1": "凤凰城", "us-ashburn-1": "阿什本", "us-sanjose-1": "圣何塞", "us-chicago-1": "芝加哥",
+    "ap-singapore-1": "新加坡", "ap-singapore-2": "新加坡西", "ap-tokyo-1": "东京", "ap-osaka-1": "大阪",
+    "ap-seoul-1": "首尔", "ap-chuncheon-1": "春川", "ap-mumbai-1": "孟买", "ap-hyderabad-1": "海得拉巴",
+    "ap-sydney-1": "悉尼", "ap-melbourne-1": "墨尔本",
+    "eu-frankfurt-1": "法兰克福", "eu-paris-1": "巴黎",
+    "uk-london-1": "伦敦", "ca-toronto-1": "多伦多",
+    "sa-saopaulo-1": "圣保罗", "me-dubai-1": "迪拜",
+}
 from app.core.audit import log_operation
 from app.core.cloud_init import build_root_password_script
 from app.services.settings import get_setting
@@ -366,7 +377,7 @@ class SniperManager:
 
         self._log(
             task_id, "info",
-            "抢机启动：%s %sC/%sG @ %s" % (cfg["shape"], cfg["ocpus"], cfg["memory_gb"], cfg["region"])
+            "开机启动：%s %sC/%sG @ %s" % (cfg["shape"], cfg["ocpus"], cfg["memory_gb"], cfg["region"])
             + ("（服务重启后恢复）" if resumed else ""),
         )
         try:
@@ -442,7 +453,7 @@ class SniperManager:
                 if kind == "success":
                     instance_ocid = (resp.json() or {}).get("id", "")
                     done, snipe_done = await self._on_success(
-                        task_id, cfg, client, instance_ocid, "抢机成功", display_name=dn)
+                        task_id, cfg, client, instance_ocid, "开机成功", display_name=dn)
                     if done:
                         break
                     # 未达目标台数：继续循环抢下一台
@@ -522,7 +533,7 @@ class SniperManager:
         try:
             log_operation(
                 db3, "snipe.success", account_id=cfg.get("account_id"),
-                detail="抢机成功（第 %d/%d 台）：%s 在 %s 抢到 %s，实例 %s"
+                detail="开机成功（第 %d/%d 台）：%s 在 %s 开出 %s，实例 %s"
                 % (new_count, target, cfg["account_name"], cfg["region"], cfg["shape"], instance_ocid),
                 operator="sniper",
             )
@@ -549,23 +560,41 @@ class SniperManager:
             if ip:
                 break
             await self._sleep(task_id, 10)
-        # 开机成功通知：带机器信息、公网 IP 和 root 密码（纯文本发送，无转义问题）
-        # 多台时注明"第 X/Y 台"，最后一台额外注明任务完成
+        # 开机成功通知（新格式：无 OCID 等技术信息）
         count_tag = "（第 %d/%d 台%s）" % (new_count, target, "，任务完成" if done else "")
         self._log(task_id, "info", "发送 TG 开机通知%s…" % count_tag)
         try:
+            shape = cfg["shape"]
+            arch = "ARM" if "A1" in shape else "AMD"
+            region_cn = REGION_CN.get(cfg["region"], cfg["region"])
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # 创建次数：任务累计尝试次数
+            db_tmp = SessionLocal()
+            try:
+                task_row = db_tmp.get(SnipeTask, task_id)
+                attempts = task_row.attempts if task_row else 0
+            finally:
+                db_tmp.close()
             tg_ok = await telegram.send_message(
-            "🚀 ————开机成功通知———— 🚀%s\n"
-            "账号: %s\n"
-            "区域: %s\n"
-            "实例: %s (%s)\n"
-            "Shape: %s (%sC/%sG)\n"
-            "公网 IP: %s\n"
-            "用户: root\n"
-            "密码: %s"
-            % (count_tag, cfg["account_name"], cfg["region"], display_name or cfg["display_name"], instance_ocid,
-               cfg["shape"], cfg["ocpus"], cfg["memory_gb"],
-               ip or "获取中", cfg["root_password"] or "未设置")
+            "🚀 ————ORACLE开机成功通知———— 🚀%s\n"
+            "\n"
+            "状态: 已成功启动\n"
+            "时间: %s\n"
+            "用户: %s\n"
+            "实例信息:\n"
+            "-----------------------------------\n"
+            "架构类型: %s\n"
+            "实例区域: %s\n"
+            "访问地址: %s\n"
+            "访问用户: [root]\n"
+            "访问密码: %s\n"
+            "创建次数: %d\n"
+            "-----------------------------------\n"
+            "实例已经创建成功，请登录验证"
+            % (count_tag, now_str, cfg["account_name"],
+               arch, region_cn,
+               ip or "获取中", cfg["root_password"] or "未设置",
+               attempts)
             )
             self._log(task_id, "info" if tg_ok else "warning",
                       "TG 开机通知%s" % ("发送成功" if tg_ok else "发送失败（检查系统设置里的 TG 配置）"))
