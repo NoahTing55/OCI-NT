@@ -15,6 +15,36 @@ from app.schemas.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 区域转城市名映射（用于自动生成自定义名称）
+_REGION_CITY_MAP = {
+    "phoenix": "Phoenix", "sanjose": "SanJose", "ashburn": "Ashburn",
+    "chicago": "Chicago", "seoul": "Seoul", "tokyo": "Tokyo",
+    "osaka": "Osaka", "singapore": "Singapore", "sydney": "Sydney",
+    "mumbai": "Mumbai", "hyderabad": "Hyderabad", "melbourne": "Melbourne",
+    "chuncheon": "Chuncheon", "frankfurt": "Frankfurt", "paris": "Paris",
+    "london": "London", "cardiff": "Cardiff", "amsterdam": "Amsterdam",
+    "milan": "Milan", "madrid": "Madrid", "stockholm": "Stockholm",
+    "zurich": "Zurich", "toronto": "Toronto", "montreal": "Montreal",
+    "saopaulo": "SaoPaulo", "santiago": "Santiago", "vinhedo": "Vinhedo",
+    "abudhabi": "AbuDhabi", "dubai": "Dubai", "jeddah": "Jeddah",
+    "monterrey": "Monterrey",
+}
+
+
+def region_to_city(region: str) -> str:
+    """区域名转城市名：us-phoenix-1 -> Phoenix，用于自动生成自定义名称。"""
+    parts = (region or "").split("-")
+    city_key = parts[1].lower() if len(parts) >= 2 else ""
+    return _REGION_CITY_MAP.get(city_key, city_key.capitalize() or "OCI")
+
+
+def generate_account_name(region: str, account_id: int) -> str:
+    """自动生成自定义名称：{城市}-{id}-{日期}，如 Phoenix-3-20261008。"""
+    from datetime import datetime
+    city = region_to_city(region)
+    date_str = datetime.now().strftime("%Y%m%d")
+    return f"{city}-{account_id}-{date_str}"
 # 与 app.services.instances.CACHE_PREFIX 保持一致（实例列表缓存 key 前缀）
 _INSTANCE_CACHE_PREFIX = "instances:"
 
@@ -120,7 +150,15 @@ def _create_account_core(data: AccountCreate, db: Session) -> Account:
 
 @router.post("", response_model=AccountOut)
 def create_account(data: AccountCreate, db: Session = Depends(get_db)):
+    # 自定义名称为空时先用临时名，拿到 id 后按 {城市}-{id}-{日期} 生成
+    use_auto_name = not (data.name or "").strip()
+    if use_auto_name:
+        data.name = "tmp-single"
     account = _create_account_core(data, db)
+    if use_auto_name:
+        account.name = generate_account_name(account.region, account.id)
+        db.commit()
+        db.refresh(account)
     return _to_out(account)
 
 
@@ -174,13 +212,13 @@ def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(get_db
     created: list[int] = []
     failed: list[dict] = []
     for idx, item in enumerate(data.accounts):
-        # 别名：为空则用 tenancy 后 6 位自动生成
+        # 自定义名称：为空则先用临时名创建，拿到 id 后按 {城市}-{id}-{日期} 生成
         name = item.name.strip()
         try:
             cfg = _parse_oci_config(item.config_text)
-            if not name:
-                suffix = "".join(c for c in cfg["tenancy_ocid"] if c.isalnum())[-6:]
-                name = f"oci-{suffix}"
+            use_auto_name = not name
+            if use_auto_name:
+                name = f"tmp-{idx}"
             account_data = AccountCreate(
                 name=name,
                 tenancy_ocid=cfg["tenancy_ocid"],
@@ -190,6 +228,10 @@ def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(get_db
                 region=cfg["region"],
             )
             account = _create_account_core(account_data, db)
+            if use_auto_name:
+                # 按规则生成：{城市}-{id}-{日期}，如 Phoenix-3-20261008
+                account.name = generate_account_name(cfg["region"], account.id)
+                db.commit()
             created.append(account.id)
         except HTTPException as e:
             failed.append({"name": name or f"第{idx + 1}个", "error": e.detail})

@@ -141,7 +141,8 @@
 
           <div class="import-sub">完整 OCI Config</div>
           <el-input v-model="importForm.config" type="textarea" :rows="6"
-            placeholder="粘贴 ~/.oci/config 内容，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1" />
+            placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此，如：&#10;[DEFAULT]&#10;user=ocid1.user.oc1...&#10;fingerprint=aa:bb:cc...&#10;tenancy=ocid1.tenancy.oc1...&#10;region=ap-seoul-1"
+            @dragover.prevent @drop.prevent="(e) => onDropSingleFile(e, 'config')" />
           <div class="region-hint">
             区域识别&nbsp;&nbsp;<span v-if="detectedRegion">已识别区域：<b>{{ detectedRegion }}</b></span><span v-else>等待输入 OCI Config</span><br />
             粘贴配置后自动识别 region，并在导入时再次由后端校验。
@@ -162,7 +163,8 @@
           </div>
           <div class="import-sub">私钥 PEM（可选）</div>
           <el-input v-model="importForm.privateKey" type="textarea" :rows="4"
-            placeholder="-----BEGIN PRIVATE KEY-----" show-password />
+            placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password
+            @dragover.prevent @drop.prevent="(e) => onDropSingleFile(e, 'privateKey')" />
 
           <!-- 解析结果：由 Config 自动解析，可手动修改 -->
           <div class="import-sub" style="display:flex;align-items:center;justify-content:space-between">
@@ -171,7 +173,7 @@
           </div>
           <div style="font-size:12px;color:#909399;margin-bottom:8px">以下字段由 Config 自动解析，可手动修改；私钥已同步到上方私钥框，只在提交瞬间传输，服务端加密入库，永不回显</div>
           <el-form :model="form" label-width="110px">
-            <el-form-item label="别名"><el-input v-model="form.name" placeholder="如 香港-01" /></el-form-item>
+            <el-form-item label="自定义名称"><el-input v-model="form.name" placeholder="如 Phoenix-01，留空按 {城市}-{id}-{日期} 自动生成" /></el-form-item>
             <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
             <el-form-item label="User OCID"><el-input v-model="form.user_ocid" placeholder="ocid1.user.oc1.." /></el-form-item>
             <el-form-item label="指纹"><el-input v-model="form.fingerprint" placeholder="aa:bb:cc:.." /></el-form-item>
@@ -210,7 +212,8 @@
     <!-- 批量导入账号：多份 config 一次导入 -->
     <el-dialog v-model="batchImportVisible" title="批量导入账号" width="720px">
       <div style="font-size:12px;color:#909399;margin-bottom:10px">
-        每组填写一份账号：自定义名称（可空，自动生成）+ Config 内容 + 私钥内容。点"添加一组"可继续添加。
+        每组填写一份账号：自定义名称（可空，按 {城市}-{id}-{日期} 自动生成，如 Phoenix-3-20261008）+ Config 内容 + 私钥内容。
+        文本框支持粘贴，也可把 config / PEM 文件直接拖拽到对应文本框。点"添加一组"可继续添加。
       </div>
       <div v-for="(item, idx) in batchItems" :key="idx" class="batch-item">
         <div class="batch-item-head">
@@ -219,15 +222,17 @@
         </div>
         <el-form label-width="90px" size="small">
           <el-form-item label="自定义名称">
-            <el-input v-model="item.name" placeholder="可空，自动生成如 oci-abc123" />
+            <el-input v-model="item.name" placeholder="可空，自动生成如 Phoenix-3-20261008" />
           </el-form-item>
           <el-form-item label="Config 内容">
             <el-input v-model="item.config_text" type="textarea" :rows="4"
-              placeholder="粘贴 ~/.oci/config 内容" />
+              placeholder="粘贴 ~/.oci/config 内容，或拖拽 config 文件到此"
+              @dragover.prevent @drop.prevent="(e) => onDropFile(e, item, 'config_text')" />
           </el-form-item>
           <el-form-item label="私钥内容">
             <el-input v-model="item.private_key" type="textarea" :rows="3"
-              placeholder="-----BEGIN PRIVATE KEY-----" show-password />
+              placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password
+              @dragover.prevent @drop.prevent="(e) => onDropFile(e, item, 'private_key')" />
           </el-form-item>
         </el-form>
       </div>
@@ -634,6 +639,25 @@ const addBatchItem = () => {
 }
 const removeBatchItem = (idx) => {
   batchItems.value.splice(idx, 1)
+}
+// 拖拽文件到文本框：读取文件内容填入对应字段
+const onDropFile = (e, item, field) => {
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => { item[field] = reader.result }
+  reader.readAsText(file)
+}
+// 单账号导入：拖拽文件到文本框
+const onDropSingleFile = (e, field) => {
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    importForm[field] = reader.result
+    if (field === 'config') parseConfig()
+  }
+  reader.readAsText(file)
 }
 const submitBatchImport = async () => {
   const valid = batchItems.value.filter(i => i.config_text.trim() && i.private_key.trim())
