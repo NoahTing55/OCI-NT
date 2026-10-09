@@ -1,6 +1,6 @@
 <template>
-  <el-dialog v-model="visible" :title="`终端 - ${instanceName}`" width="900px" :close-on-click-modal="false" @closed="onClose" @opened="onOpened">
-    <div ref="termRef" style="height: 560px; background: #1e1e1e; border-radius: 4px;"></div>
+  <el-dialog v-model="visible" :title="`终端 - ${instanceName}`" width="900px" :close-on-click-modal="false" @closed="onClose" @opened="onOpened" style="--el-dialog-padding-primary: 20px;">
+    <div ref="termRef" style="height: 560px; background: #1e1e1e; border-radius: 6px; padding: 12px; box-sizing: border-box;"></div>
     <template #footer>
       <span style="font-size: 12px; color: #909399; margin-right: 12px">空闲 5 分钟自动断开</span>
       <el-button @click="visible = false">关闭</el-button>
