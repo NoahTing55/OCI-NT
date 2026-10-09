@@ -107,11 +107,14 @@ def _kb(rows):
 
 
 def _menu_kb():
-    """主菜单按钮。"""
+    """主菜单按钮（单列条形）。"""
     return _kb([
-        [("📊 状态", "menu:status"), ("👤 账号", "menu:accounts")],
-        [("💻 实例", "menu:instances"), ("📋 任务", "menu:tasks")],
-        [("🚀 开机", "menu:snipe"), ("➕ 新建账号", "menu:new_account")],
+        [("📊 状态", "menu:status")],
+        [("👤 账号", "menu:accounts")],
+        [("💻 实例", "menu:instances")],
+        [("📋 任务", "menu:tasks")],
+        [("🚀 开机", "menu:snipe")],
+        [("➕ 新建账号", "menu:new_account")],
     ])
 
 
@@ -121,11 +124,8 @@ def _confirm_kb():
 
 
 def _region_kb():
-    """常用区域选择按钮。"""
-    rows = []
-    for i in range(0, len(_COMMON_REGIONS), 2):
-        rows.append([(r, "region:" + r) for r in _COMMON_REGIONS[i:i + 2]])
-    return _kb(rows)
+    """常用区域选择按钮（单列条形）。"""
+    return _kb([[(r, "region:" + r)] for r in _COMMON_REGIONS])
 
 
 async def _answer_callback(cq_id, text=""):
