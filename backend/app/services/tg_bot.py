@@ -530,6 +530,7 @@ async def _find_instances(keyword):
     db = SessionLocal()
     try:
         accounts = db.query(Account).order_by(Account.id).all()
+        db.expunge_all()
     finally:
         db.close()
     items, errors = await instance_service.fetch_all_instances(accounts)
@@ -634,7 +635,7 @@ async def cmd_status(chat_id, args):
     ]
     if errors:
         lines.append("⚠️ %d 个账号实例查询失败" % len(errors))
-    await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
+    await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
 
 
 async def cmd_accounts(chat_id, args):
@@ -650,7 +651,7 @@ async def cmd_accounts(chat_id, args):
                 a.account_type or "", a.account_type or "未知")
             lines.append("• %s｜%s｜存活 %d 天｜%s" % (
                 a.name, atype, _alive_days(a), a.status))
-        await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
+        await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
     finally:
         db.close()
 
@@ -677,7 +678,7 @@ async def cmd_instances(chat_id, args):
         lines.append("…还有 %d 台未显示" % (len(items) - 30))
     if errors:
         lines.append("⚠️ %d 个账号查询失败" % len(errors))
-    await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
+    await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
 
 
 async def cmd_tasks(chat_id, args):
@@ -698,7 +699,7 @@ async def cmd_tasks(chat_id, args):
                     t.id, aname, t.region, t.shape,
                     st, t.success_count, t.target_count)
             )
-        await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
+        await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
     finally:
         db.close()
 
@@ -1108,24 +1109,17 @@ def _short_ocid(v):
 
 
 def _parse_oci_config(text: str) -> dict | None:
-    """解析粘贴的 OCI 配置块，返回 {user, tenancy, fingerprint, region}，解析失败返回 None。"""
+    """解析粘贴的 OCI 配置块（支持多行和单行空格分隔两种格式）。
+    返回 {user, tenancy, fingerprint, region}，解析失败返回 None。"""
     if "[DEFAULT]" not in text or "ocid1." not in text:
         return None
+    import re
     result = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("[") or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        k, v = k.strip().lower(), v.strip()
-        # 去掉行尾注释
-        if "#" in v:
-            v = v.split("#", 1)[0].strip()
-        if k in ("user", "tenancy", "fingerprint", "region"):
-            result[k] = v
-    # 至少要有 user 和 tenancy 才算有效
+    # 用正则找 key=value，兼容换行和空格分隔
+    for m in re.finditer(r'(?i)\b(user|tenancy|fingerprint|region)\s*=\s*([^\s#\[]+)', text):
+        k = m.group(1).lower()
+        v = m.group(2).strip()
+        result[k] = v
     if "user" not in result or "tenancy" not in result:
         return None
     return result
