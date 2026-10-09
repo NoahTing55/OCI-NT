@@ -1,6 +1,26 @@
 <template>
-  <el-dialog v-model="visible" :title="`终端 - ${instanceName}`" width="900px" :close-on-click-modal="false" @closed="onClose" @opened="onOpened" style="--el-dialog-padding-primary: 20px;">
-    <div ref="termRef" style="height: 560px; background: #1e1e1e; border-radius: 6px; padding: 12px; box-sizing: border-box;"></div>
+  <el-dialog v-model="visible" :title="`SSH终端 - ${instanceName}`" width="95%" :close-on-click-modal="false" @closed="onClose" @opened="onOpened" class="term-dialog">
+    <!-- 工具栏 -->
+    <div class="term-toolbar">
+      <el-button size="small" type="success" @click="reconnect" :disabled="connected">连接</el-button>
+      <el-button size="small" type="danger" @click="disconnect" :disabled="!connected">断开</el-button>
+      <span class="term-status" :class="{ on: connected }">
+        <i class="dot"></i>{{ connected ? '已连接' : '未连接' }}
+      </span>
+      <span style="flex: 1"></span>
+      <el-button size="small" @click="changeFont(-1)">A-</el-button>
+      <span style="font-size: 12px; color: #909399; margin: 0 6px;">{{ fontSize }}px</span>
+      <el-button size="small" @click="changeFont(1)">A+</el-button>
+      <el-button size="small" @click="clearScreen">清屏</el-button>
+    </div>
+    <!-- 终端区 -->
+    <div ref="termRef" class="term-body"></div>
+    <!-- 状态栏 -->
+    <div class="term-statusbar">
+      <span>{{ statusText }}</span>
+      <span style="flex: 1"></span>
+      <span>{{ cols }} x {{ rows }}</span>
+    </div>
     <template #footer>
       <span style="font-size: 12px; color: #909399; margin-right: 12px">空闲 5 分钟自动断开</span>
       <el-button @click="visible = false">关闭</el-button>
@@ -18,6 +38,11 @@ import { ElMessage } from 'element-plus'
 const visible = ref(false)
 const termRef = ref(null)
 const instanceName = ref('')
+const connected = ref(false)
+const statusText = ref('等待连接...')
+const fontSize = ref(14)
+const cols = ref(0)
+const rows = ref(0)
 let term = null
 let fitAddon = null
 let ws = null
@@ -31,7 +56,6 @@ const open = (accountId, instanceId, displayName) => {
   visible.value = true
 }
 
-// dialog 打开动画完成后初始化（确保容器有尺寸）
 const onOpened = () => {
   nextTick(() => initTerminal(pendingAccountId, pendingInstanceId))
 }
@@ -39,63 +63,82 @@ const onOpened = () => {
 const initTerminal = (accountId, instanceId) => {
   term = new Terminal({
     cursorBlink: true,
-    fontSize: 14,
-    theme: { background: '#1e1e1e', foreground: '#d4d4d4' },
+    fontSize: fontSize.value,
+    theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff' },
   })
   fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
   term.open(termRef.value)
   fitAddon.fit()
   term.focus()
-  term.writeln('正在连接...\r')
+  cols.value = term.cols
+  rows.value = term.rows
+  term.writeln('\x1b[32m正在连接...\x1b[0m')
+  statusText.value = '正在连接...'
 
   const token = localStorage.getItem('oci_token') || ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   ws = new WebSocket(`${proto}//${location.host}/api/terminal/ws/${accountId}/${instanceId}?token=${token}`)
 
-  ws.onopen = () => term.writeln('WebSocket 已连接，等待 SSH...\r')
-
   ws.onmessage = (e) => {
-    // 尝试解析 JSON 控制消息，否则当终端输出直接写
     try {
       const obj = JSON.parse(e.data)
       if (obj.type === 'connected') {
-        term.writeln('SSH 连接成功。\r')
+        connected.value = true
+        statusText.value = '已连接'
         return
       }
       if (obj.type === 'error') {
-        term.writeln(`\r\n错误: ${obj.data}\r\n`)
+        term.writeln(`\r\n\x1b[31m错误: ${obj.data}\x1b[0m\r\n`)
+        statusText.value = '连接失败'
         ElMessage.error(obj.data)
         return
       }
-    } catch {
-      // 不是 JSON，直接写终端
-    }
+    } catch {}
     term.write(e.data)
   }
-
-  ws.onclose = () => term.writeln('\r\n连接已关闭。\r')
+  ws.onclose = () => {
+    connected.value = false
+    statusText.value = '已断开'
+    term.writeln('\r\n\x1b[33m连接已关闭。\x1b[0m\r\n')
+  }
   ws.onerror = () => {
-    term.writeln('\r\n连接出错。\r')
+    statusText.value = '连接出错'
     ElMessage.error('终端连接失败')
   }
-
-  // 键盘输入 -> JSON 发送
   term.onData((data) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'input', data }))
     }
   })
-
-  // 窗口大小变化 -> 通知后端
-  term.onResize(({ cols, rows }) => {
+  term.onResize(({ cols: c, rows: r }) => {
+    cols.value = c
+    rows.value = r
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+      ws.send(JSON.stringify({ type: 'resize', cols: c, rows: r }))
     }
   })
 }
 
+const reconnect = () => {
+  onClose()
+  nextTick(() => initTerminal(pendingAccountId, pendingInstanceId))
+}
+const disconnect = () => {
+  if (ws) ws.close()
+}
+const changeFont = (d) => {
+  fontSize.value = Math.max(10, Math.min(24, fontSize.value + d))
+  if (term) {
+    term.options.fontSize = fontSize.value
+    fitAddon.fit()
+  }
+}
+const clearScreen = () => {
+  if (term) term.clear()
+}
 const onClose = () => {
+  connected.value = false
   if (ws) {
     try { ws.send(JSON.stringify({ type: 'disconnect' })) } catch {}
     ws.close()
@@ -106,3 +149,50 @@ const onClose = () => {
 
 defineExpose({ open })
 </script>
+
+<style scoped>
+.term-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #161b22;
+  border-radius: 6px 6px 0 0;
+  margin-bottom: 0;
+}
+.term-status {
+  font-size: 12px;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.term-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b949e;
+  display: inline-block;
+}
+.term-status.on { color: #3fb950; }
+.term-status.on .dot { background: #3fb950; }
+.term-body {
+  height: 60vh;
+  min-height: 400px;
+  background: #0d1117;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.term-statusbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: #161b22;
+  border-radius: 0 0 6px 6px;
+  font-size: 12px;
+  color: #8b949e;
+}
+.term-dialog :deep(.el-dialog__body) {
+  padding: 12px 20px;
+}
+</style>
