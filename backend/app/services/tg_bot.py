@@ -704,9 +704,9 @@ async def cmd_status(chat_id, args):
             .count()
         )
         accounts = db.query(Account).order_by(Account.id).all()
+        items, errors = await instance_service.fetch_all_instances(accounts)
     finally:
         db.close()
-    items, errors = await instance_service.fetch_all_instances(accounts)
     running = len([i for i in items if i.get("lifecycle_state") == "RUNNING"])
     lines = [
         "📊 面板状态",
@@ -747,14 +747,13 @@ async def cmd_instances(chat_id, args):
             acc = db.get(Account, int(keyword[6:]))
             if acc:
                 accounts = [acc]
-                db.expunge_all()
         elif keyword:
             acc = _find_account(db, keyword)
             if acc:
                 accounts = [acc]
+        items, errors = await instance_service.fetch_all_instances(accounts)
     finally:
         db.close()
-    items, errors = await instance_service.fetch_all_instances(accounts)
     if not items:
         await _send(chat_id, "没有实例" + ("（账号 %s）" % keyword if keyword else ""))
         return
