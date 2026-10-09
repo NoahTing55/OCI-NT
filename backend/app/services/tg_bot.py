@@ -351,6 +351,9 @@ async def _dispatch_callback(cq):
         elif data.startswith("region:"):
             await _answer_callback(cq_id)
             await _handle_region_pick(chat_id, data[7:])
+        elif data.startswith("snipe_acc:"):
+            await _answer_callback(cq_id)
+            await _handle_snipe_acc_pick(chat_id, data[10:])
         else:
             await _answer_callback(cq_id, "未知按钮")
     except Exception:
@@ -396,6 +399,28 @@ async def _handle_region_pick(chat_id, region):
     elif kind == "snipe":
         wiz["step"] = "count"
         await _send(chat_id, "区域已选：%s\n\n第 3/3 步：请发送开机数量（1-100）：" % region)
+
+
+async def _handle_snipe_acc_pick(chat_id, account_id):
+    """开机向导：账号按钮选择，直接进区域步骤。"""
+    wiz = _wizards.get(chat_id)
+    if not wiz or wiz.get("kind") != "snipe" or wiz.get("step") != "account":
+        return
+    db = SessionLocal()
+    try:
+        account = db.get(Account, int(account_id))
+        if not account:
+            await _send(chat_id, "账号不存在，请重新选择。")
+            return
+        wiz["data"]["account_id"] = account.id
+        wiz["data"]["account_name"] = account.name
+    finally:
+        db.close()
+    wiz["step"] = "region"
+    await _send(chat_id,
+                f"账号已选：{wiz['data']['account_name']}\n\n"
+                "第 2/3 步：请选择区域：",
+                reply_markup=_region_kb())
 
 
 async def _handle_wizard_input(chat_id, text):
@@ -961,9 +986,21 @@ async def _exec_change_ip(chat_id, params):
 async def _wiz_start_snipe(chat_id):
     _pending.pop(chat_id, None)
     _wizards[chat_id] = {"kind": "snipe", "step": "account", "data": {}}
+    # 列出账号按钮供选择
+    db = SessionLocal()
+    try:
+        accounts = db.query(Account).order_by(Account.id).all()
+    finally:
+        db.close()
+    if not accounts:
+        await _send(chat_id, "暂无账号，请先在面板添加。", reply_markup=_back_kb())
+        _wizards.pop(chat_id, None)
+        return
+    kb = _kb([[(f"☁️ {a.name}", f"snipe_acc:{a.id}")] for a in accounts] + [[("🏠 主菜单", "menu:main")]])
     await _send(chat_id,
                 "🚀 新建开机任务（E5 1C6G，发送 /取消 可随时退出）\n\n"
-                "第 1/3 步：请发送账号别名：")
+                "请选择要开机的账号：",
+                reply_markup=kb)
 
 
 async def _wiz_snipe_input(chat_id, wiz, text):
