@@ -111,14 +111,10 @@ async def terminal_ws(
         await websocket.close()
         return
 
-    # 打开 shell
-    chan = None
+    # 打开 shell（用 create_process，直接拿到 stdin/stdout）
+    process = None
     try:
-        result = await conn.open_session()
-        # 兼容返回 tuple 的情况
-        chan = result[0] if isinstance(result, tuple) else result
-        await chan.request_pty("xterm", 80, 24)
-        await chan.open_shell()
+        process = await conn.create_process(term_type="xterm", term_size=(80, 24))
     except Exception as e:
         await websocket.send_text(f"\r\n打开 shell 失败：{str(e)[:100]}\r\n")
         conn.close()
@@ -134,7 +130,7 @@ async def terminal_ws(
             while True:
                 data = await websocket.receive_text()
                 last_active = datetime.now()
-                chan.write(data)
+                process.stdin.write(data)
         except WebSocketDisconnect:
             pass
 
@@ -142,14 +138,13 @@ async def terminal_ws(
         nonlocal last_active
         try:
             while True:
-                # 空闲超时检查
                 if datetime.now() - last_active > timedelta(seconds=IDLE_TIMEOUT):
                     await websocket.send_text("\r\n空闲超时，连接已断开。\r\n")
                     break
-                data = await asyncio.wait_for(chan.read(1024), timeout=1.0)
+                data = await asyncio.wait_for(process.stdout.read(1024), timeout=1.0)
                 if data:
                     await websocket.send_text(data)
-                elif chan.eof_received:
+                elif process.stdout.at_eof():
                     break
         except asyncio.TimeoutError:
             pass
@@ -159,7 +154,7 @@ async def terminal_ws(
     try:
         await asyncio.gather(ws_to_ssh(), ssh_to_ws())
     finally:
-        chan.close()
+        process.close()
         conn.close()
         try:
             await websocket.close()
