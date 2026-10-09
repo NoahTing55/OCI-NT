@@ -138,9 +138,8 @@ const errors = ref([])
 const selected = ref([])
 const terminalRef = ref(null)
 const openTerminal = (row) => {
-  // row 需要 account_id 和 instance ocid
-  const accountId = row.account_id || filters.value.account_id
-  const instanceId = row.id || row.ocid
+  const accountId = row.account_id
+  const instanceId = row.instance_id
   if (!accountId || !instanceId) {
     ElMessage.warning('无法确定账号或实例')
     return
