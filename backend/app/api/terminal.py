@@ -143,6 +143,7 @@ async def terminal_ws(
                 data = await websocket.receive_text()
                 last_active = datetime.now()
                 process.stdin.write(data)
+                await process.stdin.drain()
         except WebSocketDisconnect:
             pass
 
