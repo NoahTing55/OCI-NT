@@ -29,11 +29,7 @@ IDLE_TIMEOUT = 300
 
 async def _get_instance_ip(account: Account, instance_id: str) -> str | None:
     """从 OCI 查实例公网 IP。"""
-    items, _ = await instance_service.fetch_all_instances_cached([account], {})
-    for item in items:
-        if item.get("id") == instance_id or item.get("ocid") == instance_id:
-            return item.get("public_ip")
-    return None
+    return await instance_service.get_instance_public_ip(account, instance_id)
 
 
 async def _get_root_password(db: Session, account_id: int, instance_id: str) -> str | None:
