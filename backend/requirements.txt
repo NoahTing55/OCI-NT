@@ -19,3 +19,4 @@ Pillow==11.0.0
 # 账号类型识别：官方 SDK 调 osp-gateway（照搬 OCI-Noah）
 oci==2.187.2
 asyncssh==2.21.0
+paramiko==3.4.0
