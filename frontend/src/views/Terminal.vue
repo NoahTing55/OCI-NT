@@ -1,6 +1,7 @@
 <template>
   <el-dialog v-model="visible" :title="`终端 - ${instanceName}`" width="800px" :close-on-click-modal="false" @closed="onClose">
-    <div ref="termRef" style="height: 480px; background: #1e1e1e; border-radius: 4px;"></div>
+    <div ref="termRef" style="height: 440px; background: #1e1e1e; border-radius: 4px;"></div>
+    <el-input v-model="cmdInput" placeholder="在此输入命令，回车发送（备用输入）" @keyup.enter="sendCmd" style="margin-top: 8px;" />
     <template #footer>
       <span style="font-size: 12px; color: #909399; margin-right: 12px">空闲 5 分钟自动断开</span>
       <el-button @click="visible = false">关闭</el-button>
@@ -18,6 +19,7 @@ import { ElMessage } from 'element-plus'
 const visible = ref(false)
 const termRef = ref(null)
 const instanceName = ref('')
+const cmdInput = ref('')
 let term = null
 let fitAddon = null
 let ws = null
@@ -58,6 +60,12 @@ const initTerminal = (accountId, instanceId) => {
   })
 }
 
+const sendCmd = () => {
+  if (ws && ws.readyState === WebSocket.OPEN && cmdInput.value) {
+    ws.send(cmdInput.value + '\n')
+    cmdInput.value = ''
+  }
+}
 const onClose = () => {
   if (ws) { ws.close(); ws = null }
   if (term) { term.dispose(); term = null }
