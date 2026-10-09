@@ -142,10 +142,13 @@ async def terminal_ws(
             while True:
                 data = await websocket.receive_text()
                 last_active = datetime.now()
+                logger.info("收到终端输入: %s", data[:50])
                 process.stdin.write(data)
                 await process.stdin.drain()
         except WebSocketDisconnect:
-            pass
+            logger.info("WebSocket 断开")
+        except Exception as e:
+            logger.error("ws_to_ssh 异常: %s", e)
 
     async def ssh_to_ws():
         nonlocal last_active
