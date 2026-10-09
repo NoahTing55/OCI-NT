@@ -50,14 +50,16 @@
       <el-table-column prop="shape" label="Shape" width="170" />
       <el-table-column prop="public_ip" label="公网 IP" width="140" />
       <el-table-column prop="private_ip" label="私网 IP" width="140" />
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
+          <el-button size="small" type="success" @click="openTerminal(row)">终端</el-button>
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" @click="openChangeIp(row)">换 IP</el-button>
         </template>
       </el-table-column>
     </el-table>
 
+    <Terminal ref="terminalRef" />
     <!-- 批量任务进度 -->
     <el-dialog v-model="progressVisible" title="批量任务进度" width="680px" :close-on-click-modal="false">
       <el-progress :percentage="progressPct" :status="task.status === 'failed' ? 'exception' : ''" />
@@ -117,6 +119,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 const route = useRoute()
 import { ElMessage, ElMessageBox } from 'element-plus'
+import Terminal from './Terminal.vue'
 import {
   listAccounts,
   listInstances,
@@ -133,6 +136,17 @@ const accounts = ref([])
 const instances = ref([])
 const errors = ref([])
 const selected = ref([])
+const terminalRef = ref(null)
+const openTerminal = (row) => {
+  // row 需要 account_id 和 instance ocid
+  const accountId = row.account_id || filters.value.account_id
+  const instanceId = row.id || row.ocid
+  if (!accountId || !instanceId) {
+    ElMessage.warning('无法确定账号或实例')
+    return
+  }
+  terminalRef.value?.open(accountId, instanceId, row.display_name)
+}
 const loading = ref(false)
 const filters = ref({ account_id: null, region: '', state: '' })
 
