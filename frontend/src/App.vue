@@ -33,7 +33,7 @@
             <el-icon><Share /></el-icon><span>网络 / 换 IP</span>
           </el-menu-item>
           <el-menu-item index="/domains">
-            <el-icon><Link /></el-icon><span>域名管理</span>
+            <el-icon><Link /></el-icon><span>CF管理</span>
           </el-menu-item>
           <el-menu-item index="/sniper">
             <el-icon><Aim /></el-icon><span>开机管理</span>

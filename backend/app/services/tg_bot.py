@@ -5,21 +5,28 @@
 实现方式：getUpdates 长轮询（30s 超时），在 FastAPI lifespan 中作为后台任务启动。
 安全：只响应系统设置中 TG_CHAT_ID 发来的消息，其他人一律忽略（不回复）。
 
-命令（中文）：
-    /help /帮助      - 命令列表
+命令（中文，文本/按钮双模式）：
+    /help /帮助 /start - 主菜单（内联按钮）+ 命令列表
     /状态            - 面板运行状态
     /账号            - 账号列表
     /实例 [账号名]   - 实例列表（可按账号过滤）
     /任务            - 抢机任务列表
-    /开机 <账号别名> <区域> [数量]   - 新建 E5 1C6G 开机任务（需确认）
-    /关机 <实例名> /开机实例 <实例名> /重启 <实例名>  - 电源操作（需确认）
-    /换IP <实例名>   - 换预留 IP（需确认）
+    /开机 [账号别名] [区域] [数量] - 新建 E5 1C6G 开机任务（无参数进入分步向导）
+    /关机 [实例名] /开机实例 [实例名] /重启 [实例名]  - 电源操作（无参数进入分步输入）
+    /换IP [实例名]   - 换预留 IP（无参数进入分步输入）
+    /取消            - 退出当前向导/清除待确认
 
-不可逆操作（开机/关机/重启/换IP）需二次确认：Bot 回复"确认吗？回复 Y 执行"，
-用户回复 Y（5 分钟内有效）才执行。
+按钮面板：主菜单 [📊 状态] [👤 账号] [💻 实例] [📋 任务] [🚀 开机] [➕ 新建账号]，
+通过 callback_query 触发；需要参数时 Bot 提示发送文本继续流程。
+新建账号向导：别名 → Tenancy OCID → User OCID → 指纹 → 区域（按钮/文本）→ 私钥 PEM
+→ 汇总确认 → 创建（含自动存活检查）。私钥不回显、不记日志。
+
+不可逆操作（开机/关机/重启/换IP/新建账号）需二次确认：
+内联按钮 [✅ 确认] [❌ 取消]（首选），兼容旧的回复 Y（5 分钟内有效）。
 """
 import asyncio
 import logging
+import re
 import time
 
 import httpx
@@ -42,6 +49,17 @@ _task = None
 _offset = 0
 # 待确认操作：{chat_id: {"action": str, "params": dict, "expires": float}}
 _pending = {}
+# 分步向导/输入状态：{chat_id: {"kind": str, "step": str, "data": dict, ...}}
+# kind: new_account / snipe / power / change_ip；服务重启后丢失（可接受）
+_wizards = {}
+
+# 常用区域（按钮快捷选择）
+_COMMON_REGIONS = [
+    "us-ashburn-1", "us-phoenix-1",
+    "us-sanjose-1", "ap-seoul-1",
+    "ap-tokyo-1", "ap-singapore-1",
+    "eu-frankfurt-1", "uk-london-1",
+]
 
 
 # ================= 基础：收发 =================
@@ -54,17 +72,23 @@ def _tg_chat_id():
     return str(get_setting("TG_CHAT_ID") or "").strip()
 
 
-async def _send(chat_id, text):
-    """给指定 chat 发消息（Bot 控制专用，不经过通知渠道的 chat_id）。"""
+async def _send(chat_id, text, reply_markup=None):
+    """给指定 chat 发消息（Bot 控制专用，不经过通知渠道的 chat_id）。
+
+    reply_markup：可选，Telegram 内联键盘 dict。
+    """
     token = _tg_token()
     if not token:
         logger.warning("TG_BOT_TOKEN 未配置，Bot 控制不可用")
         return False
     try:
+        payload = {"chat_id": chat_id, "text": text}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
             r = await client.post(
                 "https://api.telegram.org/bot%s/sendMessage" % token,
-                json={"chat_id": chat_id, "text": text},
+                json=payload,
             )
             if r.status_code != 200:
                 logger.error("Bot 发送消息失败：%s %s", r.status_code, r.text[:200])
@@ -73,6 +97,66 @@ async def _send(chat_id, text):
     except Exception:
         logger.exception("Bot 发送消息异常")
         return False
+
+
+def _kb(rows):
+    """构造内联键盘。rows: [[(text, callback_data), ...], ...]。"""
+    return {"inline_keyboard": [
+        [{"text": t, "callback_data": d} for t, d in row] for row in rows
+    ]}
+
+
+def _menu_kb():
+    """主菜单按钮。"""
+    return _kb([
+        [("📊 状态", "menu:status"), ("👤 账号", "menu:accounts")],
+        [("💻 实例", "menu:instances"), ("📋 任务", "menu:tasks")],
+        [("🚀 开机", "menu:snipe"), ("➕ 新建账号", "menu:new_account")],
+    ])
+
+
+def _confirm_kb():
+    """二次确认按钮。"""
+    return _kb([[("✅ 确认", "confirm:yes"), ("❌ 取消", "confirm:no")]])
+
+
+def _region_kb():
+    """常用区域选择按钮。"""
+    rows = []
+    for i in range(0, len(_COMMON_REGIONS), 2):
+        rows.append([(r, "region:" + r) for r in _COMMON_REGIONS[i:i + 2]])
+    return _kb(rows)
+
+
+async def _answer_callback(cq_id, text=""):
+    """应答 callback_query（消除按钮上的 loading）。"""
+    token = _tg_token()
+    if not token or not cq_id:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            await client.post(
+                "https://api.telegram.org/bot%s/answerCallbackQuery" % token,
+                json={"callback_query_id": cq_id, "text": text},
+            )
+    except Exception:
+        logger.exception("answerCallbackQuery 异常")
+
+
+async def _strip_keyboard(chat_id, message_id):
+    """移除消息上的内联键盘（确认/取消后防重复点击）。失败静默。"""
+    token = _tg_token()
+    if not token or not message_id:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            await client.post(
+                "https://api.telegram.org/bot%s/editMessageReplyMarkup" % token,
+                json={"chat_id": chat_id, "message_id": message_id,
+                      "reply_markup": {"inline_keyboard": []}},
+            )
+    except Exception:
+        pass
 
 
 async def _poll():
@@ -150,7 +234,8 @@ async def _run():
                 try:
                     await _dispatch(u)
                 except Exception:
-                    logger.exception("处理 TG 消息异常：%s", str(u)[:200])
+                    logger.exception("处理 TG 更新异常：%s",
+                                     _safe_update_repr(_update_chat_id(u), u))
         except asyncio.CancelledError:
             break
         except Exception:
@@ -158,8 +243,37 @@ async def _run():
             await asyncio.sleep(5)
 
 
+def _update_chat_id(update):
+    """从 update（message 或 callback_query）取 chat_id。"""
+    cq = update.get("callback_query")
+    if cq:
+        return ((cq.get("message") or {}).get("chat") or {}).get("id")
+    msg = update.get("message") or update.get("edited_message") or {}
+    return (msg.get("chat") or {}).get("id")
+
+
+def _safe_update_repr(chat_id, update):
+    """日志用 update 摘要：新建账号向导私钥步骤时脱敏，避免私钥进日志。"""
+    try:
+        wiz = _wizards.get(chat_id) or {}
+        if isinstance(wiz, dict) and wiz.get("step") == "key":
+            return "<update 已脱敏：私钥输入中>"
+        msg = update.get("message") or update.get("edited_message") or {}
+        text = (msg.get("text") or "")[:200]
+        cq = update.get("callback_query") or {}
+        data = (cq.get("data") or "")[:100]
+        return "update_id=%s text=%r callback=%r" % (
+            update.get("update_id"), text, data)
+    except Exception:
+        return "<update>"
+
+
 async def _dispatch(update):
-    """分发单条 update。非配置 chat_id 的消息直接忽略。"""
+    """分发单条 update：callback_query 或 message。非配置 chat_id 一律忽略。"""
+    cq = update.get("callback_query")
+    if cq:
+        await _dispatch_callback(cq)
+        return
     msg = update.get("message") or update.get("edited_message")
     if not msg:
         return
@@ -175,7 +289,23 @@ async def _dispatch(update):
         logger.warning("忽略非授权 chat_id %s 的 TG 消息", chat_id)
         return
 
-    # 二次确认：Y / 确认
+    cmd, _ = _parse(text)
+
+    # /取消：退出向导 / 清除待确认
+    if cmd == "/取消":
+        await cmd_cancel(chat_id, [])
+        return
+
+    # 分步向导输入（非命令文本走向导；新命令则退出向导）
+    wiz = _wizards.get(chat_id)
+    if wiz:
+        if text.startswith("/"):
+            _wizards.pop(chat_id, None)
+        else:
+            await _handle_wizard_input(chat_id, text)
+            return
+
+    # 二次确认：Y / 确认（兼容旧文本方式，按钮为首选）
     if text.upper() == "Y" or text == "确认":
         await _do_confirm(chat_id)
         return
@@ -183,6 +313,101 @@ async def _dispatch(update):
     _pending.pop(chat_id, None)
 
     await _handle_command(chat_id, text)
+
+
+async def _dispatch_callback(cq):
+    """处理内联按钮回调。"""
+    try:
+        msg = cq.get("message") or {}
+        chat = msg.get("chat") or {}
+        chat_id = chat.get("id")
+        data = (cq.get("data") or "").strip()
+        cq_id = cq.get("id")
+        msg_id = msg.get("message_id")
+        if not chat_id or not data:
+            return
+
+        # 安全：只响应配置的 chat_id
+        allowed = _tg_chat_id()
+        if not allowed or str(chat_id) != str(allowed):
+            logger.warning("忽略非授权 chat_id %s 的 TG 回调", chat_id)
+            return
+
+        if data == "confirm:yes":
+            await _strip_keyboard(chat_id, msg_id)
+            await _answer_callback(cq_id)
+            await _do_confirm(chat_id)
+        elif data == "confirm:no":
+            _pending.pop(chat_id, None)
+            await _strip_keyboard(chat_id, msg_id)
+            await _answer_callback(cq_id, "已取消")
+            await _send(chat_id, "已取消")
+        elif data.startswith("menu:"):
+            _pending.pop(chat_id, None)
+            await _answer_callback(cq_id)
+            await _handle_menu(chat_id, data[5:])
+        elif data.startswith("region:"):
+            await _answer_callback(cq_id)
+            await _handle_region_pick(chat_id, data[7:])
+        else:
+            await _answer_callback(cq_id, "未知按钮")
+    except Exception:
+        logger.exception("处理 TG 回调异常")
+
+
+async def _handle_menu(chat_id, menu):
+    """主菜单按钮分发。"""
+    if menu == "status":
+        await cmd_status(chat_id, [])
+    elif menu == "accounts":
+        await cmd_accounts(chat_id, [])
+    elif menu == "instances":
+        await cmd_instances(chat_id, [])
+    elif menu == "tasks":
+        await cmd_tasks(chat_id, [])
+    elif menu == "snipe":
+        await _wiz_start_snipe(chat_id)
+    elif menu == "new_account":
+        await _wiz_start_new_account(chat_id)
+    else:
+        await _send(chat_id, "未知菜单")
+
+
+async def _handle_region_pick(chat_id, region):
+    """区域按钮选择：推进当前向导的 region 步骤。"""
+    wiz = _wizards.get(chat_id)
+    if not wiz or wiz.get("step") != "region":
+        return  # 过期按钮，忽略
+    region = region.strip()
+    if not re.fullmatch(r"[a-z]{2}-[a-z]+-\d+", region):
+        return
+    wiz["data"]["region"] = region
+    kind = wiz["kind"]
+    if kind == "new_account":
+        wiz["step"] = "key"
+        await _send(chat_id,
+                    "区域已选：%s\n\n第 6/6 步：请粘贴 Private Key PEM 全文"
+                    "（从 -----BEGIN 到 -----END，含头尾行）：\n"
+                    "⚠️ 私钥不会回显，也不会记入日志。" % region)
+    elif kind == "snipe":
+        wiz["step"] = "count"
+        await _send(chat_id, "区域已选：%s\n\n第 3/3 步：请发送开机数量（1-100）：" % region)
+
+
+async def _handle_wizard_input(chat_id, text):
+    """分步向导的文本输入分发。"""
+    wiz = _wizards.get(chat_id)
+    if not wiz:
+        return
+    kind = wiz.get("kind")
+    if kind == "new_account":
+        await _wiz_new_account_input(chat_id, wiz, text)
+    elif kind == "snipe":
+        await _wiz_snipe_input(chat_id, wiz, text)
+    elif kind == "power":
+        await _wiz_power_input(chat_id, wiz, text)
+    elif kind == "change_ip":
+        await _wiz_change_ip_input(chat_id, wiz, text)
 
 
 # ================= 命令解析 =================
@@ -263,10 +488,11 @@ def _fmt_instance(i):
 
 # ================= 二次确认 =================
 
-def _ask_confirm(chat_id, action, params):
-    """登记待确认操作。"""
+async def _ask_confirm(chat_id, action, params, text):
+    """登记待确认操作，并发送带确认按钮的消息。"""
     _pending[chat_id] = {"action": action, "params": params,
                          "expires": time.time() + _CONFIRM_TTL}
+    await _send(chat_id, text, reply_markup=_confirm_kb())
 
 
 async def _do_confirm(chat_id):
@@ -289,25 +515,36 @@ async def _do_confirm(chat_id):
 
 _HELP_TEXT = """🤖 OCI 面板控制命令
 
+点击下方按钮可快捷操作，也可直接发送文本命令。
+
 查询：
 /状态 - 面板运行状态
 /账号 - 账号列表
 /实例 [账号名] - 实例列表
 /任务 - 抢机任务列表
 
-操作（需回复 Y 确认）：
-/开机 <账号别名> <区域> [数量] - 新建 E5 1C6G 开机任务
-/关机 <实例名> - 关闭实例
-/开机实例 <实例名> - 启动实例
-/重启 <实例名> - 重启实例
-/换IP <实例名> - 更换预留 IP
+操作（点击按钮确认，也可回复 Y）：
+/开机 [账号别名] [区域] [数量] - 新建 E5 1C6G 开机任务（无参数进入向导）
+/关机 [实例名] /开机实例 [实例名] /重启 [实例名] - 电源操作
+/换IP [实例名] - 更换预留 IP
 
 实例名支持模糊匹配（包含即可）。
-/help 显示此帮助。"""
+/取消 - 退出当前向导"""
 
 
 async def cmd_help(chat_id, args):
-    await _send(chat_id, _HELP_TEXT)
+    await _send(chat_id, _HELP_TEXT, reply_markup=_menu_kb())
+
+
+async def cmd_menu(chat_id, args):
+    await _send(chat_id, "🤖 OCI 面板控制\n点击按钮操作，也可直接发送文本命令：",
+                reply_markup=_menu_kb())
+
+
+async def cmd_cancel(chat_id, args):
+    _wizards.pop(chat_id, None)
+    _pending.pop(chat_id, None)
+    await _send(chat_id, "已取消当前操作")
 
 
 async def cmd_status(chat_id, args):
@@ -402,9 +639,13 @@ async def cmd_tasks(chat_id, args):
 
 
 async def cmd_snipe(chat_id, args):
-    """开机：/开机 <账号别名> <区域> [数量]，E5 1C6G 模板，需确认。"""
+    """开机：/开机 [账号别名] [区域] [数量]，E5 1C6G 模板，需确认。
+    无参数时进入分步向导。"""
+    if not args:
+        await _wiz_start_snipe(chat_id)
+        return
     if len(args) < 2:
-        await _send(chat_id, "用法：/开机 <账号别名> <区域> [数量]\n例如：/开机 oci-smtqya us-ashburn-1 2")
+        await _send(chat_id, "用法：/开机 <账号别名> <区域> [数量]\n例如：/开机 oci-smtqya us-ashburn-1 2\n（直接发 /开机 进入分步向导）")
         return
     account_name, region = args[0], args[1]
     try:
@@ -426,12 +667,11 @@ async def cmd_snipe(chat_id, args):
 
     text = (
         "将在账号 %s 的 %s 新建开机任务：\n"
-        "E5 1C6G × %d 台\n确认吗？回复 Y 执行" % (real_name, region, count)
+        "E5 1C6G × %d 台\n点击下方按钮或回复 Y 确认执行" % (real_name, region, count)
     )
-    _ask_confirm(chat_id, "snipe_create",
-                 {"account_id": account_id, "account_name": real_name,
-                  "region": region, "count": count})
-    await _send(chat_id, text)
+    await _ask_confirm(chat_id, "snipe_create",
+                       {"account_id": account_id, "account_name": real_name,
+                        "region": region, "count": count}, text)
 
 
 async def _exec_snipe_create(chat_id, params):
@@ -537,23 +777,34 @@ async def _resolve_instance(chat_id, keyword):
     return matched[0]
 
 
-async def cmd_power(chat_id, args, action):
-    """电源操作统一入口。action: power_on / power_off / reboot。"""
+async def _ask_power_confirm(chat_id, inst, action):
+    """电源操作二次确认（按钮）。"""
     names = {"power_on": "开机", "power_off": "关机", "reboot": "重启"}
-    keyword = args[0] if args else ""
-    inst = await _resolve_instance(chat_id, keyword)
-    if not inst:
-        return
     text = (
         "确认%s实例吗？\n"
         "%s（%s %s）\n"
-        "回复 Y 执行" % (names[action], inst.get("display_name"),
+        "点击下方按钮或回复 Y 确认执行" % (names[action], inst.get("display_name"),
                         inst.get("account_name"), inst.get("region"))
     )
-    _ask_confirm(chat_id, "power",
-                 {"account_id": inst["account_id"], "instance_id": inst["instance_id"],
-                  "display_name": inst.get("display_name"), "action": action})
-    await _send(chat_id, text)
+    await _ask_confirm(chat_id, "power",
+                       {"account_id": inst["account_id"], "instance_id": inst["instance_id"],
+                        "display_name": inst.get("display_name"), "action": action}, text)
+
+
+async def cmd_power(chat_id, args, action):
+    """电源操作统一入口。action: power_on / power_off / reboot。
+    无参数时进入分步输入。"""
+    keyword = args[0] if args else ""
+    if not keyword:
+        names = {"power_on": "开机", "power_off": "关机", "reboot": "重启"}
+        _pending.pop(chat_id, None)
+        _wizards[chat_id] = {"kind": "power", "action": action}
+        await _send(chat_id, "请发送要%s的实例名（支持模糊匹配），或发送 /取消 退出：" % names[action])
+        return
+    inst = await _resolve_instance(chat_id, keyword)
+    if not inst:
+        return
+    await _ask_power_confirm(chat_id, inst, action)
 
 
 async def _exec_power(chat_id, params):
@@ -596,21 +847,31 @@ async def _exec_power(chat_id, params):
         db.close()
 
 
-async def cmd_change_ip(chat_id, args):
-    keyword = args[0] if args else ""
-    inst = await _resolve_instance(chat_id, keyword)
-    if not inst:
-        return
+async def _ask_change_ip_confirm(chat_id, inst):
+    """换 IP 二次确认（按钮）。"""
     text = (
         "确认为实例换 IP 吗？\n"
         "%s（%s，当前 %s）\n"
-        "回复 Y 执行" % (inst.get("display_name"), inst.get("account_name"),
+        "点击下方按钮或回复 Y 确认执行" % (inst.get("display_name"), inst.get("account_name"),
                         inst.get("public_ip") or "无公网IP")
     )
-    _ask_confirm(chat_id, "change_ip",
-                 {"account_id": inst["account_id"], "instance_id": inst["instance_id"],
-                  "display_name": inst.get("display_name")})
-    await _send(chat_id, text)
+    await _ask_confirm(chat_id, "change_ip",
+                       {"account_id": inst["account_id"], "instance_id": inst["instance_id"],
+                        "display_name": inst.get("display_name")}, text)
+
+
+async def cmd_change_ip(chat_id, args):
+    """换 IP。无参数时进入分步输入。"""
+    keyword = args[0] if args else ""
+    if not keyword:
+        _pending.pop(chat_id, None)
+        _wizards[chat_id] = {"kind": "change_ip"}
+        await _send(chat_id, "请发送要换 IP 的实例名（支持模糊匹配），或发送 /取消 退出：")
+        return
+    inst = await _resolve_instance(chat_id, keyword)
+    if not inst:
+        return
+    await _ask_change_ip_confirm(chat_id, inst)
 
 
 async def _exec_change_ip(chat_id, params):
@@ -691,6 +952,211 @@ async def _exec_change_ip(chat_id, params):
         db.close()
 
 
+# ================= 分步向导：开机 =================
+
+async def _wiz_start_snipe(chat_id):
+    _pending.pop(chat_id, None)
+    _wizards[chat_id] = {"kind": "snipe", "step": "account", "data": {}}
+    await _send(chat_id,
+                "🚀 新建开机任务（E5 1C6G，发送 /取消 可随时退出）\n\n"
+                "第 1/3 步：请发送账号别名：")
+
+
+async def _wiz_snipe_input(chat_id, wiz, text):
+    step, data = wiz["step"], wiz["data"]
+    if step == "account":
+        db = SessionLocal()
+        try:
+            account = _find_account(db, text)
+            aid, aname = (account.id, account.name) if account else (None, None)
+        finally:
+            db.close()
+        if not account:
+            await _send(chat_id, "找不到账号「%s」，请重新发送（/账号 查看列表）：" % text.strip())
+            return
+        data["account_id"] = aid
+        data["account_name"] = aname
+        wiz["step"] = "region"
+        await _send(chat_id, "第 2/3 步：请选择区域（或直接发送区域名）：",
+                    reply_markup=_region_kb())
+    elif step == "region":
+        v = text.strip()
+        if not re.fullmatch(r"[a-z]{2}-[a-z]+-\d+", v):
+            await _send(chat_id, "❌ 区域格式不对（如 us-ashburn-1），请重新选择或发送：",
+                        reply_markup=_region_kb())
+            return
+        data["region"] = v
+        wiz["step"] = "count"
+        await _send(chat_id, "第 3/3 步：请发送开机数量（1-100）：")
+    elif step == "count":
+        try:
+            n = int(text.strip())
+            if not 1 <= n <= 100:
+                raise ValueError
+        except ValueError:
+            await _send(chat_id, "❌ 数量必须是 1-100 的数字，请重新发送：")
+            return
+        data["count"] = n
+        _wizards.pop(chat_id, None)
+        await _ask_confirm(
+            chat_id, "snipe_create", data,
+            "将在账号 %s 的 %s 新建开机任务：\nE5 1C6G × %d 台\n点击下方按钮确认执行"
+            % (data["account_name"], data["region"], n))
+
+
+# ================= 分步向导：实例名输入（电源/换IP） =================
+
+async def _wiz_power_input(chat_id, wiz, text):
+    inst = await _resolve_instance(chat_id, text)
+    if not inst:
+        return  # 保留向导，等待更精确的输入
+    action = wiz.get("action")
+    _wizards.pop(chat_id, None)
+    await _ask_power_confirm(chat_id, inst, action)
+
+
+async def _wiz_change_ip_input(chat_id, wiz, text):
+    inst = await _resolve_instance(chat_id, text)
+    if not inst:
+        return  # 保留向导，等待更精确的输入
+    _wizards.pop(chat_id, None)
+    await _ask_change_ip_confirm(chat_id, inst)
+
+
+# ================= 分步向导：新建账号 =================
+
+def _short_ocid(v):
+    v = (v or "").strip()
+    return v[:24] + "…" + v[-6:] if len(v) > 32 else v
+
+
+async def _wiz_start_new_account(chat_id):
+    _pending.pop(chat_id, None)
+    _wizards[chat_id] = {"kind": "new_account", "step": "alias", "data": {}}
+    await _send(chat_id,
+                "➕ 新建账号（发送 /取消 可随时退出）\n\n"
+                "第 1/6 步：请发送账号别名（如 my-oci-01）：")
+
+
+async def _wiz_new_account_input(chat_id, wiz, text):
+    step, data = wiz["step"], wiz["data"]
+    if step == "alias":
+        alias = text.strip()
+        if not alias:
+            await _send(chat_id, "别名不能为空，请重新发送：")
+            return
+        db = SessionLocal()
+        try:
+            exists = db.query(Account).filter(Account.name == alias).first()
+        finally:
+            db.close()
+        if exists:
+            await _send(chat_id, "别名「%s」已存在，请换一个：" % alias)
+            return
+        data["alias"] = alias
+        wiz["step"] = "tenancy"
+        await _send(chat_id, "第 2/6 步：请发送 Tenancy OCID（以 ocid1.tenancy. 开头）：")
+    elif step == "tenancy":
+        v = text.strip()
+        if not v.startswith("ocid1.tenancy."):
+            await _send(chat_id, "❌ Tenancy OCID 格式不对（应以 ocid1.tenancy. 开头），请重新发送：")
+            return
+        data["tenancy_ocid"] = v
+        wiz["step"] = "user"
+        await _send(chat_id, "第 3/6 步：请发送 User OCID（以 ocid1.user. 开头）：")
+    elif step == "user":
+        v = text.strip()
+        if not v.startswith("ocid1.user."):
+            await _send(chat_id, "❌ User OCID 格式不对（应以 ocid1.user. 开头），请重新发送：")
+            return
+        data["user_ocid"] = v
+        wiz["step"] = "fingerprint"
+        await _send(chat_id, "第 4/6 步：请发送 API Key 指纹（形如 aa:bb:cc:… 共 16 组）：")
+    elif step == "fingerprint":
+        v = text.strip()
+        if not re.fullmatch(r"([0-9a-fA-F]{2}:){15}[0-9a-fA-F]{2}", v):
+            await _send(chat_id, "❌ 指纹格式不对（应为 16 组十六进制，如 ab:cd:ef:…），请重新发送：")
+            return
+        data["fingerprint"] = v
+        wiz["step"] = "region"
+        await _send(chat_id, "第 5/6 步：请选择主区域（或直接发送区域名）：",
+                    reply_markup=_region_kb())
+    elif step == "region":
+        v = text.strip()
+        if not re.fullmatch(r"[a-z]{2}-[a-z]+-\d+", v):
+            await _send(chat_id, "❌ 区域格式不对（如 us-ashburn-1），请重新选择或发送：",
+                        reply_markup=_region_kb())
+            return
+        data["region"] = v
+        wiz["step"] = "key"
+        await _send(chat_id,
+                    "第 6/6 步：请粘贴 Private Key PEM 全文"
+                    "（从 -----BEGIN 到 -----END，含头尾行）：\n"
+                    "⚠️ 私钥不会回显，也不会记入日志。")
+    elif step == "key":
+        v = text.strip()
+        # 私钥内容绝不回显
+        if "PRIVATE KEY" not in v or "BEGIN" not in v:
+            await _send(chat_id, "❌ 看起来不是 PEM 私钥，请重新粘贴完整内容：")
+            return
+        data["private_key"] = v
+        _wizards.pop(chat_id, None)
+        summary = (
+            "📝 新建账号确认\n"
+            "别名：%s\n"
+            "Tenancy：%s\n"
+            "User：%s\n"
+            "指纹：%s\n"
+            "区域：%s\n"
+            "私钥：已提供（不显示）" % (
+                data["alias"], _short_ocid(data["tenancy_ocid"]),
+                _short_ocid(data["user_ocid"]), data["fingerprint"], data["region"])
+        )
+        await _ask_confirm(chat_id, "new_account", data,
+                           summary + "\n点击下方按钮确认创建")
+
+
+async def _exec_new_account(chat_id, params):
+    """确认后执行：创建账号（含自动存活检查）。"""
+    from fastapi import HTTPException
+    from app.api.accounts import _auto_detect_account_info, _create_account_core
+    from app.schemas.schemas import AccountCreate
+
+    db = SessionLocal()
+    try:
+        data = AccountCreate(
+            name=params["alias"],
+            tenancy_ocid=params["tenancy_ocid"],
+            user_ocid=params["user_ocid"],
+            fingerprint=params["fingerprint"],
+            private_key=params["private_key"],
+            region=params["region"],
+        )
+        try:
+            account = _create_account_core(data, db)
+        except HTTPException as e:
+            await _send(chat_id, "❌ 创建失败：%s" % e.detail)
+            return
+        # 自动识别账号类型/注册时间/租户名（存活检查，内部已吞异常）
+        await _auto_detect_account_info(account, db)
+        # 审计：detail 里绝不带私钥
+        log_operation(db, "account.create", account_id=account.id,
+                      detail="TG Bot 新建账号「%s」" % params["alias"],
+                      operator="telegram")
+        atype = {"PAYG": "升级号", "FREE_TIER": "免费号"}.get(
+            account.account_type or "", "")
+        extra = "｜" + atype if atype else ""
+        await _send(chat_id,
+                    "✅ 账号已创建\n别名：%s\n区域：%s%s\n"
+                    "存活检查已自动运行，可发送 /账号 查看" % (
+                        account.name, account.region, extra))
+    except Exception as e:
+        logger.exception("Bot 新建账号异常")
+        await _send(chat_id, "执行异常：%s" % e)
+    finally:
+        db.close()
+
+
 # ================= 命令表 =================
 
 async def _cmd_power_on(chat_id, args):
@@ -708,6 +1174,7 @@ async def _cmd_reboot(chat_id, args):
 _COMMANDS = {
     "/help": cmd_help,
     "/帮助": cmd_help,
+    "/start": cmd_menu,
     "/状态": cmd_status,
     "/账号": cmd_accounts,
     "/实例": cmd_instances,
@@ -718,6 +1185,7 @@ _COMMANDS = {
     "/重启": _cmd_reboot,
     "/换IP": cmd_change_ip,
     "/换ip": cmd_change_ip,
+    "/取消": cmd_cancel,
 }
 
 # 二次确认后执行的动作
@@ -725,4 +1193,5 @@ _CONFIRM_ACTIONS = {
     "snipe_create": _exec_snipe_create,
     "power": _exec_power,
     "change_ip": _exec_change_ip,
+    "new_account": _exec_new_account,
 }
