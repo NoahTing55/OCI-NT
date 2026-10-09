@@ -195,8 +195,9 @@ defineExpose({ open })
 </style>
 
 <style>
-.term-dialog .el-dialog {
+.el-dialog.term-dialog {
   border-radius: 12px !important;
+  margin-top: 5vh !important;
 }
 .term-dialog .el-dialog__body {
   padding: 4px 8px !important;
