@@ -413,7 +413,7 @@ async def _handle_region_pick(chat_id, region):
 
 
 async def _handle_snipe_acc_pick(chat_id, account_id):
-    """开机向导：账号按钮选择，直接进区域步骤。"""
+    """开机向导：账号按钮选择。免费号跳过区域（用主区域），升级号显示已订阅区域。"""
     wiz = _wizards.get(chat_id)
     if not wiz or wiz.get("kind") != "snipe" or wiz.get("step") != "account":
         return
@@ -425,13 +425,55 @@ async def _handle_snipe_acc_pick(chat_id, account_id):
             return
         wiz["data"]["account_id"] = account.id
         wiz["data"]["account_name"] = account.name
+        atype = account.account_type or ""
+        home_region = account.region or ""
+        tenancy_ocid = account.tenancy_ocid
+        db.expunge_all()
     finally:
         db.close()
+
+    # 免费号：直接用主区域，跳过选择
+    if atype == "FREE_TIER":
+        wiz["data"]["region"] = home_region
+        wiz["step"] = "count"
+        await _send(chat_id,
+                    f"账号已选：{wiz['data']['account_name']}（免费号，主区域 {home_region}）\n\n"
+                    "第 3/3 步：请发送开机数量（1-100）：")
+        return
+
+    # 升级号：查已订阅区域
+    regions = []
+    try:
+        db2 = SessionLocal()
+        try:
+            acc2 = db2.get(Account, int(account_id))
+            client = build_client_for_account(acc2)
+        finally:
+            db2.close()
+        subs = await client.list_region_subscriptions(tenancy_ocid)
+        for s in subs:
+            rn = s.get("regionName") or s.get("region_name")
+            st = (s.get("status") or s.get("lifecycle_state") or "").upper()
+            if rn and st in ("READY", "ACTIVE", ""):
+                regions.append(rn)
+    except Exception as e:
+        logger.warning("查订阅区域失败：%s", e)
+    if home_region and home_region not in regions:
+        regions.insert(0, home_region)
+    regions = sorted(set(regions))
+
     wiz["step"] = "region"
-    await _send(chat_id,
-                f"账号已选：{wiz['data']['account_name']}\n\n"
-                "第 2/3 步：请选择区域：",
-                reply_markup=_region_kb())
+    if regions:
+        kb = _kb([[(r, f"region:{r}")] for r in regions] + [[("🏠 主菜单", "menu:main")]])
+        await _send(chat_id,
+                    f"账号已选：{wiz['data']['account_name']}（升级号）\n\n"
+                    "第 2/3 步：请选择已订阅区域：",
+                    reply_markup=kb)
+    else:
+        # 查不到就回退到手动输入
+        await _send(chat_id,
+                    f"账号已选：{wiz['data']['account_name']}\n\n"
+                    "第 2/3 步：请发送区域名（如 ap-tokyo-1）：")
 
 
 async def _handle_acc_detail(chat_id, account_id):
