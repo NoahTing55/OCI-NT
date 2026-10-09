@@ -92,6 +92,16 @@ class CloudflareClient:
             "ttl": ttl, "proxied": proxied,
         })
 
+    async def patch_record(self, zone_id: str, record_id: str, fields: dict) -> dict:
+        """部分更新记录（如只改 proxied 开关）。"""
+        return await self._api("PATCH", f"/zones/{zone_id}/dns_records/{record_id}", fields)
+
+    async def delete_record(self, zone_id: str, record_id: str) -> dict:
+        return await self._api("DELETE", f"/zones/{zone_id}/dns_records/{record_id}")
+
+    async def get_record(self, zone_id: str, record_id: str) -> dict:
+        return await self._api("GET", f"/zones/{zone_id}/dns_records/{record_id}")
+
     async def ensure_record(
         self, domain: str, ip: str, record_type: str = "A", ttl: int = 120, proxied: bool = False
     ) -> dict:
@@ -116,6 +126,9 @@ class CloudflareClient:
 async def sync_instance_domains(db, instance_ocid: str, new_ip: str) -> list:
     """换 IP 成功后自动调用：更新该实例所有 auto_sync 域名绑定的 CF 记录。
 
+    除了绑定域名，还会扫描同 zone 下其他指向旧 IP 的同类型 A/AAAA 记录
+    （如手动添加的），一并更新到新 IP，避免遗漏。
+
     返回 [{"domain", "ok", "record_id"/"error"}]，供换 IP 接口汇总展示。
     单个域名失败不影响其他域名。
     """
@@ -130,18 +143,33 @@ async def sync_instance_domains(db, instance_ocid: str, new_ip: str) -> list:
         if not token_row:
             results.append({"domain": b.domain, "ok": False, "error": "CF Token 不存在"})
             continue
+        old_ip = b.last_ip or ""
         try:
             client = CloudflareClient(decrypt_text(token_row.token_enc))
             try:
                 info = await client.ensure_record(b.domain, new_ip, b.record_type, ttl=b.ttl, proxied=b.proxied)
+                extra_updated = []
+                # 同 zone 下其他指向旧 IP 的同类型记录（如手动添加的）一并更新
+                if old_ip and old_ip != new_ip and b.zone_id:
+                    try:
+                        records = await client.list_records(b.zone_id, record_type=b.record_type)
+                        for rec in records:
+                            if rec.get("content") == old_ip and rec["id"] != info["record_id"]:
+                                await client.patch_record(b.zone_id, rec["id"], {"content": new_ip})
+                                extra_updated.append(rec.get("name", rec["id"]))
+                    except Exception as e:
+                        logger.warning("CF 同步扫描同 zone 旧 IP 记录失败：%s %s", b.domain, e)
             finally:
                 await client.aclose()
             b.record_id = info["record_id"]
             b.last_ip = new_ip
             b.last_sync_at = datetime.utcnow()
             db.commit()
-            results.append({"domain": b.domain, "ok": True, "record_id": info["record_id"]})
-            logger.info("CF 同步成功：%s → %s", b.domain, new_ip)
+            r = {"domain": b.domain, "ok": True, "record_id": info["record_id"]}
+            if extra_updated:
+                r["extra_updated"] = extra_updated
+            results.append(r)
+            logger.info("CF 同步成功：%s → %s（另更新同 zone %d 条）", b.domain, new_ip, len(extra_updated))
         except Exception as e:
             logger.warning("CF 同步失败：%s %s", b.domain, e)
             results.append({"domain": b.domain, "ok": False, "error": str(e)[:200]})

@@ -270,6 +270,62 @@ class DomainBindingOut(BaseModel):
     last_sync_at: datetime | None = None
 
 
+class CfZoneOut(BaseModel):
+    id: str
+    name: str
+    status: str = ""
+    name_servers: list[str] = []
+
+
+class CfRecordOut(BaseModel):
+    id: str
+    zone_id: str = ""
+    zone_name: str = ""
+    type: str
+    name: str
+    content: str
+    proxied: bool = False
+    ttl: int = 1
+    locked: bool = False
+
+
+class CfRecordCreate(BaseModel):
+    cf_token_id: int
+    type: str = Field(default="A", description="A / AAAA / CNAME / TXT")
+    name: str = Field(..., description="记录名，如 www；@ 表示根域名")
+    content: str
+    ttl: int = Field(default=120, description="1=自动")
+    proxied: bool = False
+
+
+class CfRecordUpdate(BaseModel):
+    cf_token_id: int
+    zone_id: str
+    type: str = Field(default="A")
+    name: str
+    content: str
+    ttl: int = 120
+    proxied: bool = False
+
+
+class CfProxyToggle(BaseModel):
+    cf_token_id: int
+    zone_id: str
+    proxied: bool
+
+
+class CfBatchProxy(BaseModel):
+    cf_token_id: int
+    zone_id: str
+    record_ids: list[str]
+    proxied: bool
+
+
+class CfBatchDelete(BaseModel):
+    cf_token_id: int
+    record_ids: list[str]
+
+
 # ---------------- 抢机任务 ----------------
 class EnsureNetworkIn(BaseModel):
     """一键建网请求：按「有则复用、无则创建」备好 VCN→IG→路由→子网。"""
@@ -290,7 +346,7 @@ class SnipeTaskCreate(BaseModel):
     availability_domain: str
     display_name: str = Field(default="", max_length=128)
     root_password: str = Field(default="", max_length=128, description="root 密码；为空则 worker 自动生成随机密码")
-    target_count: int = Field(default=1, ge=1, le=100, description="目标抢机台数，一次抢 N 台")
+    target_count: int = Field(default=1, ge=1, le=100, description="目标开机台数，一次开 N 台")
     interval_seconds: int = Field(default=60, ge=5, le=3600, description="无可用容量时的重试间隔（秒）")
     open_all_ports: bool = Field(default=True, description="开机后是否放行所有端口（安全列表加全端口规则）")
     boot_volume_gb: int = Field(default=50, ge=50, le=16384, description="启动卷大小（GB），OCI 限制 50-16384")

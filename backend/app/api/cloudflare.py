@@ -13,8 +13,15 @@ from app.core.deps import get_db
 from app.core.security import decrypt_text, encrypt_text
 from app.models.models import Account, CloudflareToken, DomainBinding
 from app.schemas.schemas import (
+    CfBatchDelete,
+    CfBatchProxy,
+    CfProxyToggle,
+    CfRecordCreate,
+    CfRecordOut,
+    CfRecordUpdate,
     CfTokenCreate,
     CfTokenOut,
+    CfZoneOut,
     DomainBindingCreate,
     DomainBindingOut,
 )
@@ -202,4 +209,190 @@ async def sync_all(db: Session = Depends(get_db)):
             results.append({"domain": b.domain, "ok": False, "error": e.detail})
         except Exception as e:
             results.append({"domain": b.domain, "ok": False, "error": str(e)[:150]})
+    return {"results": results}
+
+
+# ---------------- DNS 记录直接管理 ----------------
+def _get_cf_client(db: Session, token_id: int) -> tuple[cf_service.CloudflareClient, str]:
+    """按 token_id 取解密后的 CF 客户端。返回 (client, token_name)。用完记得 aclose。"""
+    token_plain = _decrypt_token(db, token_id)
+    token_row = db.get(CloudflareToken, token_id)
+    return cf_service.CloudflareClient(token_plain), (token_row.name if token_row else "")
+
+
+def _cf_err(e: Exception) -> HTTPException:
+    if isinstance(e, cf_service.CloudflareError):
+        return HTTPException(status_code=502, detail=str(e))
+    return HTTPException(status_code=502, detail=f"连接 CF API 失败：{type(e).__name__} {str(e)[:150]}")
+
+
+def _record_out(rec: dict, zone_id: str = "", zone_name: str = "") -> CfRecordOut:
+    return CfRecordOut(
+        id=rec.get("id", ""),
+        zone_id=zone_id or rec.get("zone_id", ""),
+        zone_name=zone_name or rec.get("zone_name", ""),
+        type=rec.get("type", ""),
+        name=rec.get("name", ""),
+        content=rec.get("content", ""),
+        proxied=bool(rec.get("proxied", False)),
+        ttl=int(rec.get("ttl", 1) or 1),
+        locked=bool(rec.get("locked", False)),
+    )
+
+
+@router.get("/zones", response_model=list[CfZoneOut])
+async def list_zones(token_id: int, db: Session = Depends(get_db)):
+    """列出某 Token 下的所有 zone（域名）。"""
+    client, _ = _get_cf_client(db, token_id)
+    try:
+        zones = await client.list_zones()
+    except Exception as e:
+        raise _cf_err(e)
+    finally:
+        await client.aclose()
+    return [
+        CfZoneOut(
+            id=z.get("id", ""), name=z.get("name", ""),
+            status=z.get("status", ""),
+            name_servers=z.get("name_servers", []) or [],
+        )
+        for z in zones
+    ]
+
+
+@router.get("/zones/{zone_id}/records", response_model=list[CfRecordOut])
+async def list_zone_records(
+    zone_id: str, token_id: int, record_type: str = "", db: Session = Depends(get_db)
+):
+    """列出某域名的 DNS 记录，可按类型过滤。"""
+    client, _ = _get_cf_client(db, token_id)
+    try:
+        zones = await client.list_zones()
+        zone_name = next((z["name"] for z in zones if z["id"] == zone_id), "")
+        records = await client.list_records(zone_id, record_type=record_type or None)
+    except Exception as e:
+        raise _cf_err(e)
+    finally:
+        await client.aclose()
+    return [_record_out(r, zone_id, zone_name) for r in records]
+
+
+@router.post("/zones/{zone_id}/records", response_model=CfRecordOut)
+async def create_zone_record(
+    zone_id: str, data: CfRecordCreate, db: Session = Depends(get_db)
+):
+    """新增 DNS 记录（A/AAAA/CNAME/TXT）。"""
+    if data.type not in ("A", "AAAA", "CNAME", "TXT"):
+        raise HTTPException(status_code=400, detail="type 只支持 A / AAAA / CNAME / TXT")
+    if not data.name.strip() or not data.content.strip():
+        raise HTTPException(status_code=400, detail="记录名和内容不能为空")
+    if data.ttl != 1 and data.ttl < 60:
+        raise HTTPException(status_code=400, detail="TTL 最小 60 秒（1 表示自动）")
+    # CNAME/TXT 不支持小黄云
+    proxied = data.proxied and data.type in ("A", "AAAA", "CNAME")
+    client, _ = _get_cf_client(db, data.cf_token_id)
+    try:
+        rec = await client.create_record(
+            zone_id, data.type, data.name.strip(), data.content.strip(),
+            ttl=data.ttl, proxied=proxied,
+        )
+    except Exception as e:
+        raise _cf_err(e)
+    finally:
+        await client.aclose()
+    return _record_out(rec, zone_id)
+
+
+@router.put("/records/{record_id}", response_model=CfRecordOut)
+async def update_dns_record(
+    record_id: str, data: CfRecordUpdate, db: Session = Depends(get_db)
+):
+    """修改 DNS 记录（含 proxy 开关）。"""
+    if data.type not in ("A", "AAAA", "CNAME", "TXT"):
+        raise HTTPException(status_code=400, detail="type 只支持 A / AAAA / CNAME / TXT")
+    proxied = data.proxied and data.type in ("A", "AAAA", "CNAME")
+    client, _ = _get_cf_client(db, data.cf_token_id)
+    try:
+        rec = await client.update_record(
+            data.zone_id, record_id, data.type, data.name.strip(), data.content.strip(),
+            ttl=data.ttl, proxied=proxied,
+        )
+    except Exception as e:
+        raise _cf_err(e)
+    finally:
+        await client.aclose()
+    return _record_out(rec, data.zone_id)
+
+
+@router.delete("/records/{record_id}")
+async def delete_dns_record(
+    record_id: str, token_id: int, zone_id: str, db: Session = Depends(get_db)
+):
+    """删除 DNS 记录。"""
+    client, _ = _get_cf_client(db, token_id)
+    try:
+        await client.delete_record(zone_id, record_id)
+    except Exception as e:
+        raise _cf_err(e)
+    finally:
+        await client.aclose()
+    return {"ok": True}
+
+
+@router.post("/records/{record_id}/proxy")
+async def toggle_record_proxy(
+    record_id: str, data: CfProxyToggle, db: Session = Depends(get_db)
+):
+    """一键开关 CDN 小黄云。"""
+    client, _ = _get_cf_client(db, data.cf_token_id)
+    try:
+        rec = await client.patch_record(data.zone_id, record_id, {"proxied": data.proxied})
+    except Exception as e:
+        raise _cf_err(e)
+    finally:
+        await client.aclose()
+    return {"ok": True, "id": record_id, "proxied": bool(rec.get("proxied", data.proxied))}
+
+
+@router.post("/records/batch-proxy")
+async def batch_toggle_proxy(data: CfBatchProxy, db: Session = Depends(get_db)):
+    """批量开关 CDN。单个失败不影响其他。"""
+    if not data.record_ids:
+        raise HTTPException(status_code=400, detail="record_ids 不能为空")
+    if len(data.record_ids) > 100:
+        raise HTTPException(status_code=400, detail="单次最多 100 条")
+    results = []
+    client, _ = _get_cf_client(db, data.cf_token_id)
+    try:
+        for rid in data.record_ids:
+            try:
+                await client.patch_record(data.zone_id, rid, {"proxied": data.proxied})
+                results.append({"id": rid, "ok": True})
+            except Exception as e:
+                results.append({"id": rid, "ok": False, "error": str(e)[:150]})
+    finally:
+        await client.aclose()
+    return {"results": results}
+
+
+@router.post("/zones/{zone_id}/records/batch-delete")
+async def batch_delete_records(
+    zone_id: str, data: CfBatchDelete, db: Session = Depends(get_db)
+):
+    """批量删除 DNS 记录。单个失败不影响其他。"""
+    if not data.record_ids:
+        raise HTTPException(status_code=400, detail="record_ids 不能为空")
+    if len(data.record_ids) > 100:
+        raise HTTPException(status_code=400, detail="单次最多 100 条")
+    results = []
+    client, _ = _get_cf_client(db, data.cf_token_id)
+    try:
+        for rid in data.record_ids:
+            try:
+                await client.delete_record(zone_id, rid)
+                results.append({"id": rid, "ok": True})
+            except Exception as e:
+                results.append({"id": rid, "ok": False, "error": str(e)[:150]})
+    finally:
+        await client.aclose()
     return {"results": results}

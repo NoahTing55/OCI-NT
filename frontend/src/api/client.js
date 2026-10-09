@@ -54,6 +54,16 @@ export const syncBinding = (id) => api.post(`/cloudflare/bindings/${id}/sync`).t
 export const cfCheck = () => api.get('/cloudflare/check').then((r) => r.data)
 export const cfSyncAll = () => api.post('/cloudflare/sync-all').then((r) => r.data)
 
+// Cloudflare DNS 记录管理
+export const cfListZones = (tokenId) => api.get('/cloudflare/zones', { params: { token_id: tokenId } }).then((r) => r.data)
+export const cfListRecords = (zoneId, tokenId, type = '') => api.get(`/cloudflare/zones/${zoneId}/records`, { params: { token_id: tokenId, record_type: type } }).then((r) => r.data)
+export const cfCreateRecord = (zoneId, data) => api.post(`/cloudflare/zones/${zoneId}/records`, data).then((r) => r.data)
+export const cfUpdateRecord = (recordId, data) => api.put(`/cloudflare/records/${recordId}`, data).then((r) => r.data)
+export const cfDeleteRecord = (recordId, tokenId, zoneId) => api.delete(`/cloudflare/records/${recordId}`, { params: { token_id: tokenId, zone_id: zoneId } }).then((r) => r.data)
+export const cfToggleProxy = (recordId, data) => api.post(`/cloudflare/records/${recordId}/proxy`, data).then((r) => r.data)
+export const cfBatchProxy = (data) => api.post('/cloudflare/records/batch-proxy', data).then((r) => r.data)
+export const cfBatchDeleteRecords = (zoneId, data) => api.post(`/cloudflare/zones/${zoneId}/records/batch-delete`, data).then((r) => r.data)
+
 // 开机任务
 export const listSnipeTasks = () => api.get('/sniper').then((r) => r.data)
 export const createSnipeTask = (data) => api.post('/sniper', data).then((r) => r.data)

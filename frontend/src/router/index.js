@@ -4,6 +4,7 @@ import Accounts from '../views/Accounts.vue'
 import Proxies from '../views/Proxies.vue'
 import Instances from '../views/Instances.vue'
 import Network from '../views/Network.vue'
+import Domains from '../views/Domains.vue'
 import Sniper from '../views/Sniper.vue'
 import Login from '../views/Login.vue'
 import Security from '../views/Security.vue'
@@ -19,6 +20,7 @@ const router = createRouter({
     { path: '/proxies', component: Proxies },
     { path: '/instances', component: Instances },
     { path: '/network', component: Network },
+    { path: '/domains', component: Domains },
     { path: '/sniper', component: Sniper },
     { path: '/security', component: Security },
     { path: '/settings', component: Settings },

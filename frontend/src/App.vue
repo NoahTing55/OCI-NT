@@ -32,6 +32,9 @@
           <el-menu-item index="/network">
             <el-icon><Share /></el-icon><span>网络 / 换 IP</span>
           </el-menu-item>
+          <el-menu-item index="/domains">
+            <el-icon><Link /></el-icon><span>域名管理</span>
+          </el-menu-item>
           <el-menu-item index="/sniper">
             <el-icon><Aim /></el-icon><span>开机管理</span>
           </el-menu-item>
@@ -54,7 +57,7 @@
 // 主布局：侧边栏图标 + 渐变 header
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Cloudy, DataBoard, User, Connection, Monitor, Share, Aim, Lock, Setting } from '@element-plus/icons-vue'
+import { Cloudy, DataBoard, User, Connection, Monitor, Share, Link, Aim, Lock, Setting } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const username = computed(() => localStorage.getItem('oci_user') || '')
