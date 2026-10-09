@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import accounts, account_summary, auth, batch, cloudflare, health, instances, network, oci_options, proxies, region_subscription, sniper
+from app.api import accounts, account_summary, auth, batch, cloudflare, health, instances, network, oci_options, proxies, region_subscription, sniper, terminal
 from app.api import settings as settings_api
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
