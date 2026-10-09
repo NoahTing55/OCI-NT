@@ -9,7 +9,6 @@ import asyncio
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 
 import paramiko
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
@@ -17,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.security import decrypt_text, decode_access_token
-from app.core import telegram
 from app.models.models import Account, SnipeTask
 from app.services import instances as instance_service
 
@@ -118,14 +116,6 @@ async def terminal_ws(
         await websocket.send_text(json.dumps({"type": "error", "data": "未找到 root 密码"}))
         await websocket.close()
         return
-
-    # TG 提醒
-    try:
-        await telegram.send_message(
-            f"💻 终端会话开始\n账号: {account.name}\nIP: {ip}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-    except Exception:
-        pass
 
     # SSH 连接（逐个试密码，在线程池跑阻塞操作）
     client, channel = None, None
