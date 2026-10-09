@@ -40,7 +40,7 @@ const initTerminal = (accountId, instanceId) => {
   fitAddon.fit()
   term.writeln('正在连接...\r')
 
-  const token = localStorage.getItem('token') || ''
+  const token = localStorage.getItem('oci_token') || ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   ws = new WebSocket(`${proto}//${location.host}/api/terminal/ws/${accountId}/${instanceId}?token=${token}`)
   ws.onopen = () => term.writeln('连接已建立。\r')
