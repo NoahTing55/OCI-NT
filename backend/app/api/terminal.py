@@ -52,6 +52,22 @@ async def _get_root_passwords(db: Session, account_id: int) -> list[str]:
     return passwords
 
 
+@router.get("/info/{account_id}/{instance_id}")
+async def terminal_info(
+    account_id: int,
+    instance_id: str,
+    db: Session = Depends(get_db),
+    # op = Depends(get_current_operator),  # 简化：走全局 auth_dep
+):
+    """返回实例 SSH 连接信息（IP + root 密码）。密码仅返回给已登录用户。"""
+    account = db.get(Account, account_id)
+    if not account:
+        return {"public_ip": None, "password": None}
+    ip = await _get_instance_ip(account, instance_id)
+    passwords = await _get_root_passwords(db, account_id)
+    return {"public_ip": ip, "password": passwords[0] if passwords else None}
+
+
 @router.websocket("/ws/{account_id}/{instance_id}")
 async def terminal_ws(
     websocket: WebSocket,
