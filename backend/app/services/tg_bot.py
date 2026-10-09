@@ -362,22 +362,26 @@ async def _dispatch_callback(cq):
 
 async def _handle_menu(chat_id, menu):
     """主菜单按钮分发。"""
-    if menu == "status":
-        await cmd_status(chat_id, [])
-    elif menu == "accounts":
-        await cmd_accounts(chat_id, [])
-    elif menu == "instances":
-        await cmd_instances(chat_id, [])
-    elif menu == "tasks":
-        await cmd_tasks(chat_id, [])
-    elif menu == "snipe":
-        await _wiz_start_snipe(chat_id)
-    elif menu == "new_account":
-        await _wiz_start_new_account(chat_id)
-    elif menu == "main":
-        await _send(chat_id, "🤖 OCI 面板控制\n点击按钮操作，也可直接发送文本命令：", reply_markup=_menu_kb())
-    else:
-        await _send(chat_id, "未知菜单")
+    try:
+        if menu == "status":
+            await cmd_status(chat_id, [])
+        elif menu == "accounts":
+            await cmd_accounts(chat_id, [])
+        elif menu == "instances":
+            await cmd_instances(chat_id, [])
+        elif menu == "tasks":
+            await cmd_tasks(chat_id, [])
+        elif menu == "snipe":
+            await _wiz_start_snipe(chat_id)
+        elif menu == "new_account":
+            await _wiz_start_new_account(chat_id)
+        elif menu == "main":
+            await _send(chat_id, "🤖 OCI 面板控制\n点击按钮操作，也可直接发送文本命令：", reply_markup=_menu_kb())
+        else:
+            await _send(chat_id, "未知菜单")
+    except Exception as e:
+        logger.exception("菜单 %s 处理失败", menu)
+        await _send(chat_id, f"⚠️ 查询失败：{str(e)[:100]}", reply_markup=_back_kb())
 
 
 async def _handle_region_pick(chat_id, region):
@@ -426,6 +430,37 @@ async def _handle_snipe_acc_pick(chat_id, account_id):
 async def _handle_wizard_input(chat_id, text):
     """分步向导的文本输入分发。"""
     wiz = _wizards.get(chat_id)
+    # 新建账号第 1 步：尝试解析粘贴的 OCI 配置块
+    if wiz and wiz.get("kind") == "new_account" and wiz.get("step") == "alias":
+        cfg = _parse_oci_config(text)
+        if cfg:
+            data = wiz["data"]
+            # 别名用 tenancy 后 6 位生成，用户可后续在面板改
+            data["alias"] = "oci-" + cfg["tenancy"][-6:]
+            data["user_ocid"] = cfg["user"]
+            data["tenancy_ocid"] = cfg["tenancy"]
+            data["fingerprint"] = cfg.get("fingerprint", "")
+            data["region"] = cfg.get("region", "")
+            # 校验解析出的字段
+            errs = []
+            if not data["user_ocid"].startswith("ocid1.user."):
+                errs.append("user OCID 格式不对")
+            if not data["tenancy_ocid"].startswith("ocid1.tenancy."):
+                errs.append("tenancy OCID 格式不对")
+            if errs:
+                await _send(chat_id, "⚠️ 配置解析失败：" + "；".join(errs) + "，请检查后重发。")
+                return
+            # 指纹格式不对也接受（可能为空），跳到私钥步骤
+            wiz["step"] = "key"
+            await _send(chat_id,
+                        "✅ 已从配置解析：\n"
+                        f"别名：{data['alias']}（可在面板修改）\n"
+                        f"区域：{data['region'] or '未指定'} \n\n"
+                        "最后一步：请粘贴 Private Key PEM 全文\n"
+                        "（从 -----BEGIN 到 -----END，含头尾行）：\n"
+                        "⚠️ 私钥不会回显，也不会记入日志。")
+            return
+        wiz = _wizards.get(chat_id)
     if not wiz:
         return
     kind = wiz.get("kind")
@@ -1071,12 +1106,37 @@ def _short_ocid(v):
     return v[:24] + "…" + v[-6:] if len(v) > 32 else v
 
 
+def _parse_oci_config(text: str) -> dict | None:
+    """解析粘贴的 OCI 配置块，返回 {user, tenancy, fingerprint, region}，解析失败返回 None。"""
+    if "[DEFAULT]" not in text or "ocid1." not in text:
+        return None
+    result = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("[") or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip().lower(), v.strip()
+        # 去掉行尾注释
+        if "#" in v:
+            v = v.split("#", 1)[0].strip()
+        if k in ("user", "tenancy", "fingerprint", "region"):
+            result[k] = v
+    # 至少要有 user 和 tenancy 才算有效
+    if "user" not in result or "tenancy" not in result:
+        return None
+    return result
+
+
 async def _wiz_start_new_account(chat_id):
     _pending.pop(chat_id, None)
     _wizards[chat_id] = {"kind": "new_account", "step": "alias", "data": {}}
     await _send(chat_id,
                 "➕ 新建账号（发送 /取消 可随时退出）\n\n"
-                "第 1/6 步：请发送账号别名（如 my-oci-01）：")
+                "第 1/6 步：请发送账号别名（如 my-oci-01）：\n\n"
+                "💡 也可直接粘贴 OCI 配置文件内容（[DEFAULT] 开头的那段），自动解析。")
 
 
 async def _wiz_new_account_input(chat_id, wiz, text):
