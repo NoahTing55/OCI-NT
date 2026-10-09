@@ -107,15 +107,17 @@ def _kb(rows):
 
 
 def _menu_kb():
-    """主菜单按钮（单列条形）。"""
+    """主菜单按钮（2 列，参照主流 Bot 样式）。"""
     return _kb([
-        [("📊 状态", "menu:status")],
-        [("👤 账号", "menu:accounts")],
-        [("💻 实例", "menu:instances")],
-        [("📋 任务", "menu:tasks")],
-        [("🚀 开机", "menu:snipe")],
-        [("➕ 新建账号", "menu:new_account")],
+        [("📊 状态", "menu:status"), ("👤 账号", "menu:accounts")],
+        [("💻 实例", "menu:instances"), ("📋 任务", "menu:tasks")],
+        [("🚀 开机", "menu:snipe"), ("➕ 新建账号", "menu:new_account")],
     ])
+
+
+def _back_kb():
+    """子页面返回主菜单按钮。"""
+    return _kb([ [("🏠 主菜单", "menu:main")] ])
 
 
 def _confirm_kb():
@@ -369,6 +371,8 @@ async def _handle_menu(chat_id, menu):
         await _wiz_start_snipe(chat_id)
     elif menu == "new_account":
         await _wiz_start_new_account(chat_id)
+    elif menu == "main":
+        await _send(chat_id, "🤖 OCI 面板控制\n点击按钮操作，也可直接发送文本命令：", reply_markup=_menu_kb())
     else:
         await _send(chat_id, "未知菜单")
 
@@ -569,7 +573,7 @@ async def cmd_status(chat_id, args):
     ]
     if errors:
         lines.append("⚠️ %d 个账号实例查询失败" % len(errors))
-    await _send(chat_id, "\n".join(lines))
+    await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
 
 
 async def cmd_accounts(chat_id, args):
@@ -585,7 +589,7 @@ async def cmd_accounts(chat_id, args):
                 a.account_type or "", a.account_type or "未知")
             lines.append("• %s｜%s｜存活 %d 天｜%s" % (
                 a.name, atype, _alive_days(a), a.status))
-        await _send(chat_id, "\n".join(lines))
+        await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
     finally:
         db.close()
 
@@ -612,7 +616,7 @@ async def cmd_instances(chat_id, args):
         lines.append("…还有 %d 台未显示" % (len(items) - 30))
     if errors:
         lines.append("⚠️ %d 个账号查询失败" % len(errors))
-    await _send(chat_id, "\n".join(lines))
+    await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
 
 
 async def cmd_tasks(chat_id, args):
@@ -633,7 +637,7 @@ async def cmd_tasks(chat_id, args):
                     t.id, aname, t.region, t.shape,
                     st, t.success_count, t.target_count)
             )
-        await _send(chat_id, "\n".join(lines))
+        await _send(chat_id, "\n".join(lines, reply_markup=_back_kb()))
     finally:
         db.close()
 
