@@ -62,7 +62,15 @@ async def terminal_ws(
     token: str = Query(..., description="JWT 登录 token"),
     db: Session = Depends(get_db),
 ):
-    # TODO: JWT 校验（简化版，先接受连接，后续加强）
+    # JWT 校验
+    from app.core.security import decode_access_token
+    try:
+        username = decode_access_token(token)
+        if not username:
+            raise ValueError("invalid token")
+    except Exception:
+        await websocket.close(code=4401)
+        return
     await websocket.accept()
 
     # 查账号

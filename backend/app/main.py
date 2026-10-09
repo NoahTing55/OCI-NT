@@ -87,7 +87,7 @@ app.include_router(instances.router, prefix="/api/instances", tags=["实例运�
 app.include_router(cloudflare.router, prefix="/api/cloudflare", tags=["Cloudflare"], dependencies=auth_dep)
 app.include_router(oci_options.router, prefix="/api/oci-options", tags=["OCI 选项查询"], dependencies=auth_dep)
 app.include_router(sniper.router, prefix="/api/sniper", tags=["抢机任务"], dependencies=auth_dep)
-app.include_router(terminal.router, dependencies=auth_dep)
+app.include_router(terminal.router)
 app.include_router(settings_api.router, prefix="/api/settings", tags=["系统设置"], dependencies=auth_dep)
 
 
