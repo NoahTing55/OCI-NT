@@ -18,7 +18,7 @@ from app.core.deps import get_db
 from app.core.security import decrypt_text
 from app.core import telegram
 from app.models.models import Account, SnipeTask
-from app.services import instance_service
+from app.services import instances as instance_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
