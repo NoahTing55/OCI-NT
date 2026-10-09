@@ -193,6 +193,7 @@ async def start():
     global _task
     if _task and not _task.done():
         return
+    await _set_bot_commands()
     _task = asyncio.create_task(_run(), name="tg-bot-poll")
     logger.info("TG Bot 控制已启动（getUpdates 长轮询）")
 
@@ -1276,10 +1277,15 @@ _COMMANDS = {
     "/help": cmd_help,
     "/帮助": cmd_help,
     "/start": cmd_menu,
+    "/menu": cmd_menu,
     "/状态": cmd_status,
+    "/status": cmd_status,
     "/账号": cmd_accounts,
+    "/accounts": cmd_accounts,
     "/实例": cmd_instances,
+    "/instances": cmd_instances,
     "/任务": cmd_tasks,
+    "/tasks": cmd_tasks,
     "/开机": cmd_snipe,
     "/关机": _cmd_power_off,
     "/开机实例": _cmd_power_on,
@@ -1287,7 +1293,37 @@ _COMMANDS = {
     "/换IP": cmd_change_ip,
     "/换ip": cmd_change_ip,
     "/取消": cmd_cancel,
+    "/cancel": cmd_cancel,
 }
+
+
+async def _set_bot_commands():
+    """注册 TG 左下角快捷命令菜单。"""
+    token = _tg_token()
+    if not token:
+        return
+    commands = [
+        {"command": "start", "description": "主菜单"},
+        {"command": "help", "description": "帮助"},
+        {"command": "status", "description": "面板状态"},
+        {"command": "accounts", "description": "账号列表"},
+        {"command": "instances", "description": "实例列表"},
+        {"command": "tasks", "description": "抢机任务"},
+        {"command": "cancel", "description": "取消当前操作"},
+    ]
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"https://api.telegram.org/bot{token}/setMyCommands",
+                json={"commands": commands},
+            )
+            if r.status_code == 200:
+                logger.info("TG 快捷命令菜单已注册")
+            else:
+                logger.warning("TG setMyCommands 失败：%s", r.text[:200])
+    except Exception as e:
+        logger.warning("TG setMyCommands 异常：%s", e)
 
 # 二次确认后执行的动作
 _CONFIRM_ACTIONS = {
