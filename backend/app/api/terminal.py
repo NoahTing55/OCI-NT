@@ -112,9 +112,11 @@ async def terminal_ws(
         return
 
     # 打开 shell
-    chan, session = None, None
+    chan = None
     try:
-        chan = await conn.open_session()
+        result = await conn.open_session()
+        # 兼容返回 tuple 的情况
+        chan = result[0] if isinstance(result, tuple) else result
         await chan.request_pty("xterm", 80, 24)
         await chan.open_shell()
     except Exception as e:
