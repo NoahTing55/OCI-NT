@@ -38,7 +38,10 @@ const initTerminal = (accountId, instanceId) => {
   term.loadAddon(fitAddon)
   term.open(termRef.value)
   fitAddon.fit()
+  term.focus()
   term.writeln('正在连接...\r')
+  // 点击终端时聚焦
+  termRef.value.addEventListener('click', () => term.focus())
 
   const token = localStorage.getItem('oci_token') || ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
