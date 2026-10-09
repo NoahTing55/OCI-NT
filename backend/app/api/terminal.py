@@ -32,22 +32,24 @@ async def _get_instance_ip(account: Account, instance_id: str) -> str | None:
     return await instance_service.get_instance_public_ip(account, instance_id)
 
 
-async def _get_root_password(db: Session, account_id: int, instance_id: str) -> str | None:
-    """从抢机任务查 root 密码（解密）。"""
-    # 先找该账号最近的成功任务
-    task = (
+async def _get_root_passwords(db: Session, account_id: int) -> list[str]:
+    """查该账号所有抢机任务的 root 密码（解密），去重。"""
+    tasks = (
         db.query(SnipeTask)
         .filter(SnipeTask.account_id == account_id)
+        .filter(SnipeTask.root_password.isnot(None))
         .order_by(SnipeTask.id.desc())
-        .first()
+        .all()
     )
-    if task and task.root_password:
+    passwords = []
+    for task in tasks:
         try:
-            return decrypt_text(task.root_password)
+            pwd = decrypt_text(task.root_password)
         except Exception:
-            # 可能存的是明文（老数据）
-            return task.root_password
-    return None
+            pwd = task.root_password  # 老数据可能是明文
+        if pwd and pwd not in passwords:
+            passwords.append(pwd)
+    return passwords
 
 
 @router.websocket("/ws/{account_id}/{instance_id}")
@@ -83,10 +85,10 @@ async def terminal_ws(
         await websocket.close()
         return
 
-    # 查 root 密码
-    password = await _get_root_password(db, account_id, instance_id)
-    if not password:
-        await websocket.send_text("\r\n未找到该实例的 root 密码，连接关闭。\r\n")
+    # 查 root 密码（该账号所有任务的密码都试一遍）
+    passwords = await _get_root_passwords(db, account_id)
+    if not passwords:
+        await websocket.send_text("\r\n未找到该账号的 root 密码，连接关闭。\r\n")
         await websocket.close()
         return
 
@@ -98,16 +100,26 @@ async def terminal_ws(
     except Exception:
         pass  # TG 未配置时静默跳过
 
-    # 建立 SSH 连接
-    try:
-        conn = await asyncssh.connect(
-            ip,
-            username="root",
-            password=password,
-            known_hosts=None,  # 生产环境建议做主机密钥校验
-        )
-    except Exception as e:
-        await websocket.send_text(f"\r\nSSH 连接失败：{str(e)[:100]}\r\n")
+    # 建立 SSH 连接（逐个试密码）
+    conn = None
+    last_err = ""
+    for pwd in passwords:
+        try:
+            conn = await asyncssh.connect(
+                ip,
+                username="root",
+                password=pwd,
+                known_hosts=None,
+            )
+            break
+        except asyncssh.PermissionDenied:
+            last_err = "密码错误"
+            continue
+        except Exception as e:
+            last_err = str(e)[:100]
+            break
+    if not conn:
+        await websocket.send_text(f"\r\nSSH 连接失败：{last_err}\r\n")
         await websocket.close()
         return
 
