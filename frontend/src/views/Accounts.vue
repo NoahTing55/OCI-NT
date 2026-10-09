@@ -591,7 +591,7 @@ const handleOp = (cmd, row) => {
   else if (cmd === 'regions') openRegions(row)
   else if (cmd === 'delete') remove(row)
 }
-// 存活天数：按自然日计算（避免时区/小时差导致少算一天）
+// 存活天数：注册当天=1天，满1天=2天（按自然日+1）
 const aliveDays = (row) => {
   const base = row.registered_at || row.created_at
   if (!base) return '-'
@@ -600,7 +600,7 @@ const aliveDays = (row) => {
   const sd = new Date(s.getFullYear(), s.getMonth(), s.getDate())
   const nd = new Date(n.getFullYear(), n.getMonth(), n.getDate())
   const d = Math.round((nd - sd) / 86400000)
-  return (d < 0 ? 0 : d) + ' 天'
+  return (d < 0 ? 0 : d) + 1 + ' 天'
 }
 // 创建时间只显示日期
 const fmtDate = (v) => {

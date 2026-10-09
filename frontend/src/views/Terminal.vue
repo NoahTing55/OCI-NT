@@ -78,7 +78,8 @@ const initTerminal = (accountId, instanceId) => {
 
   const token = localStorage.getItem('oci_token') || ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(`${proto}//${location.host}/api/terminal/ws/${accountId}/${instanceId}?token=${token}`)
+  const dn = encodeURIComponent(instanceName.value || '')
+  ws = new WebSocket(`${proto}//${location.host}/api/terminal/ws/${accountId}/${instanceId}?token=${token}&display_name=${dn}`)
 
   ws.onmessage = (e) => {
     try {
