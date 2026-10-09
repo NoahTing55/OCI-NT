@@ -192,17 +192,20 @@ defineExpose({ open })
   font-size: 12px;
   color: #8b949e;
 }
-.term-dialog :deep(.el-dialog__body) {
-  padding: 8px 16px;
+</style>
+
+<style>
+.term-dialog .el-dialog__body {
+  padding: 8px 16px !important;
 }
-.term-dialog :deep(.el-dialog__header) {
-  padding: 10px 20px;
-  margin: 0;
+.term-dialog .el-dialog__header {
+  padding: 10px 20px !important;
+  margin: 0 !important;
 }
-.term-dialog :deep(.el-dialog__footer) {
-  padding: 8px 20px;
+.term-dialog .el-dialog__footer {
+  padding: 8px 20px !important;
 }
-.term-dialog :deep(.el-dialog__title) {
-  font-size: 14px;
+.term-dialog .el-dialog__title {
+  font-size: 14px !important;
 }
 </style>
