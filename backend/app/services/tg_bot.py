@@ -355,6 +355,12 @@ async def _dispatch_callback(cq):
         elif data.startswith("snipe_acc:"):
             await _answer_callback(cq_id)
             await _handle_snipe_acc_pick(chat_id, data[10:])
+        elif data.startswith("acc_detail:"):
+            await _answer_callback(cq_id)
+            await _handle_acc_detail(chat_id, data[11:])
+        elif data.startswith("task_detail:"):
+            await _answer_callback(cq_id)
+            await _handle_task_detail(chat_id, data[12:])
         else:
             await _answer_callback(cq_id, "未知按钮")
     except Exception:
@@ -426,6 +432,39 @@ async def _handle_snipe_acc_pick(chat_id, account_id):
                 f"账号已选：{wiz['data']['account_name']}\n\n"
                 "第 2/3 步：请选择区域：",
                 reply_markup=_region_kb())
+
+
+async def _handle_acc_detail(chat_id, account_id):
+    """账号按钮点击：显示该账号的实例列表。"""
+    await cmd_instances(chat_id, [f"__id__{account_id}"])
+
+
+async def _handle_task_detail(chat_id, task_id):
+    """任务按钮点击：显示任务详情。"""
+    from app.api.sniper import STATUS_TEXT
+    db = SessionLocal()
+    try:
+        t = db.get(SnipeTask, int(task_id))
+        if not t:
+            await _send(chat_id, "任务不存在", reply_markup=_back_kb())
+            return
+        acc = db.get(Account, t.account_id)
+        aname = acc.name if acc else ("#%d" % t.account_id)
+        st = STATUS_TEXT.get(t.status, t.status)
+        lines = [
+            f"🎯 任务 #{t.id} 详情",
+            f"账号：{aname}",
+            f"区域：{t.region}",
+            f"配置：{t.shape} {t.ocpus}C{t.memory_gb}G",
+            f"状态：{st}",
+            f"进度：{t.success_count}/{t.target_count}",
+            f"尝试：{t.attempts} 次",
+        ]
+        if t.last_error:
+            lines.append(f"最后错误：{t.last_error[:100]}")
+        await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
+    finally:
+        db.close()
 
 
 async def _handle_wizard_input(chat_id, text):
@@ -643,15 +682,16 @@ async def cmd_accounts(chat_id, args):
     try:
         accounts = db.query(Account).order_by(Account.id).all()
         if not accounts:
-            await _send(chat_id, "还没有账号")
+            await _send(chat_id, "还没有账号", reply_markup=_back_kb())
             return
-        lines = ["👤 账号列表"]
+        kb_rows = []
         for a in accounts:
             atype = {"PAYG": "升级号", "FREE_TIER": "免费号"}.get(
                 a.account_type or "", a.account_type or "未知")
-            lines.append("• %s｜%s｜存活 %d 天｜%s" % (
-                a.name, atype, _alive_days(a), a.status))
-        await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
+            label = f"☁️ {a.name}｜{atype}｜存活{_alive_days(a)}天"
+            kb_rows.append([(label, f"acc_detail:{a.id}")])
+        kb_rows.append([("🏠 主菜单", "menu:main")])
+        await _send(chat_id, "👤 账号列表\n点击查看实例：", reply_markup=_kb(kb_rows))
     finally:
         db.close()
 
@@ -661,7 +701,12 @@ async def cmd_instances(chat_id, args):
     db = SessionLocal()
     try:
         accounts = db.query(Account).order_by(Account.id).all()
-        if keyword:
+        if keyword.startswith("__id__"):
+            acc = db.get(Account, int(keyword[6:]))
+            if acc:
+                accounts = [acc]
+                db.expunge_all()
+        elif keyword:
             acc = _find_account(db, keyword)
             if acc:
                 accounts = [acc]
@@ -687,19 +732,17 @@ async def cmd_tasks(chat_id, args):
     try:
         tasks = db.query(SnipeTask).order_by(SnipeTask.id.desc()).limit(10).all()
         if not tasks:
-            await _send(chat_id, "还没有抢机任务")
+            await _send(chat_id, "还没有抢机任务", reply_markup=_back_kb())
             return
-        lines = ["🎯 抢机任务（最近 10 个）"]
+        kb_rows = []
         for t in tasks:
             acc = db.get(Account, t.account_id)
             aname = acc.name if acc else ("#%d" % t.account_id)
             st = STATUS_TEXT.get(t.status, t.status)
-            lines.append(
-                "• #%d %s %s %s\n  %s｜进度 %d/%d" % (
-                    t.id, aname, t.region, t.shape,
-                    st, t.success_count, t.target_count)
-            )
-        await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
+            label = f"🎯 #{t.id} {aname} {st} {t.success_count}/{t.target_count}"
+            kb_rows.append([(label, f"task_detail:{t.id}")])
+        kb_rows.append([("🏠 主菜单", "menu:main")])
+        await _send(chat_id, "🎯 抢机任务（最近 10 个）\n点击查看详情：", reply_markup=_kb(kb_rows))
     finally:
         db.close()
 
