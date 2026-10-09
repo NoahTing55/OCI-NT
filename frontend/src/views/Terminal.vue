@@ -22,7 +22,7 @@
       <span>{{ cols }} x {{ rows }}</span>
     </div>
     <template #footer>
-      <span style="font-size: 12px; color: #909399; margin-right: 12px">空闲 5 分钟自动断开</span>
+      <span style="font-size: 12px; color: #8b949e; margin-right: 12px">空闲 5 分钟自动断开</span>
       <el-button @click="visible = false">关闭</el-button>
     </template>
   </el-dialog>
@@ -198,18 +198,31 @@ defineExpose({ open })
 .el-dialog.term-dialog {
   border-radius: 12px !important;
   margin-top: 5vh !important;
+  background: #161b22 !important;
+  border: 1px solid #30363d !important;
+  box-shadow: 0 0 0 1px #58a6ff33, 0 12px 48px rgba(0, 0, 0, 0.5) !important;
 }
 .term-dialog .el-dialog__body {
-  padding: 4px 8px !important;
+  padding: 0 8px !important;
 }
 .term-dialog .el-dialog__header {
   padding: 8px 12px !important;
   margin: 0 !important;
 }
+.term-dialog .el-dialog__header .el-dialog__title {
+  color: #c9d1d9 !important;
+  font-size: 14px !important;
+}
+.term-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #8b949e !important;
+}
 .term-dialog .el-dialog__footer {
   padding: 6px 12px !important;
+  background: #161b22 !important;
 }
-.term-dialog .el-dialog__title {
-  font-size: 14px !important;
+.term-dialog .el-dialog__footer .el-button {
+  background: #21262d !important;
+  border-color: #30363d !important;
+  color: #c9d1d9 !important;
 }
 </style>
