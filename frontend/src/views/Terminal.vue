@@ -40,7 +40,7 @@ const termRef = ref(null)
 const instanceName = ref('')
 const connected = ref(false)
 const statusText = ref('等待连接...')
-const fontSize = ref(14)
+const fontSize = ref(12)
 const cols = ref(0)
 const rows = ref(0)
 let term = null
@@ -154,8 +154,8 @@ defineExpose({ open })
 .term-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 6px 10px;
   background: #161b22;
   border-radius: 6px 6px 0 0;
   margin-bottom: 0;
@@ -193,6 +193,16 @@ defineExpose({ open })
   color: #8b949e;
 }
 .term-dialog :deep(.el-dialog__body) {
-  padding: 12px 20px;
+  padding: 8px 16px;
+}
+.term-dialog :deep(.el-dialog__header) {
+  padding: 10px 20px;
+  margin: 0;
+}
+.term-dialog :deep(.el-dialog__footer) {
+  padding: 8px 20px;
+}
+.term-dialog :deep(.el-dialog__title) {
+  font-size: 14px;
 }
 </style>
