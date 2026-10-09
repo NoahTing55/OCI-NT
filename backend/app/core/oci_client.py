@@ -28,6 +28,27 @@ from cryptography.hazmat.primitives.asymmetric import padding
 logger = logging.getLogger(__name__)
 
 
+# 区域名 → 官方 regionKey 映射（创建区域订阅接口要求 regionKey，如 IAD/PHX/FRA）。
+# 仅在 /regions 实时列表不可用时兜底；能查到实时列表时以实时为准。
+_REGION_NAME_TO_KEY_FALLBACK = {
+    "us-ashburn-1": "IAD", "us-phoenix-1": "PHX", "us-sanjose-1": "SJC",
+    "us-chicago-1": "ORD",
+    "eu-frankfurt-1": "FRA", "eu-amsterdam-1": "AMS", "eu-paris-1": "CDG",
+    "eu-milan-1": "MXP", "eu-zurich-1": "ZRH", "eu-stockholm-1": "ARN",
+    "eu-madrid-1": "MAD",
+    "uk-london-1": "LHR", "uk-cardiff-1": "CWL",
+    "ap-tokyo-1": "NRT", "ap-osaka-1": "KIX", "ap-seoul-1": "ICN",
+    "ap-singapore-1": "SIN", "ap-mumbai-1": "BOM", "ap-hyderabad-1": "HYD",
+    "ap-sydney-1": "SYD", "ap-melbourne-1": "MEL",
+    "me-dubai-1": "DXB", "me-abudhabi-1": "AUH", "me-jeddah-1": "JED",
+    "me-riyadh-1": "RUH",
+    "sa-saopaulo-1": "GRU",
+    "ca-toronto-1": "YYZ", "ca-montreal-1": "YUL",
+    "il-jerusalem-1": "MTV",
+    "af-johannesburg-1": "JNB",
+}
+
+
 class OciClient:
     """一个实例 = 一个账号 = 一个代理。"""
 
@@ -396,7 +417,8 @@ class OciClient:
     # OCI-Start 真实逻辑（OciClassLoader.java:110-185）：
     # 1. 注册时间：GET /20160918/compartments/{tenancyId} 取 timeCreated（根 compartment）
     # 2. 账号类型：优先用区域订阅接口探测
-    #    GET /20160918/regionSubscriptions?tenancyId={tenancyId}
+    #    GET /20180419/regionSubscriptions?tenancyId={tenancyId}
+    #    （注意：regionSubscriptions 是 20180419 的资源，走 20160918 会固定 404）
     #    - 200 → upgraded（升级号，能订阅新区域）
     #    - 404/403 → free（免费号，无权限）
     #    - 其他异常 → 回退到 shapes 逻辑：有 AMD E3/E4/E5 大内存（memoryInGBs > 1.0）→ upgraded，否则 free
@@ -659,20 +681,41 @@ class OciClient:
         return (await self.get_subscription_info(home_region))["type"]
 
     # ---------------- 区域订阅（升级账户） ----------------
+    # 注意：regionSubscriptions 是 Identity 20180419 API 的资源，
+    # 20160918 版本没有这个路径（调它会 404，与账号权限无关）。
+    # 创建订阅时 body 字段为 regionKey（如 IAD/PHX/FRA），不是 regionName。
     async def list_region_subscriptions(self, tenancy_ocid: str) -> list[dict]:
-        """GET /20160918/regionSubscriptions：查租户已订阅区域（含 regionName、status）。"""
+        """GET /20180419/regionSubscriptions：查租户已订阅区域（含 regionName、regionKey、status）。"""
         resp = await self.request(
-            "GET", "identity", f"/20160918/regionSubscriptions?tenancyId={tenancy_ocid}"
+            "GET", "identity", f"/20180419/regionSubscriptions?tenancyId={tenancy_ocid}"
         )
         if resp.status_code != 200:
             raise RuntimeError(f"查询区域订阅失败：HTTP {resp.status_code} {resp.text[:200]}")
         return resp.json()
 
+    async def resolve_region_key(self, region_name: str) -> str:
+        """把区域名（us-ashburn-1）换成官方订阅接口要用的 regionKey（IAD）。
+
+        先用实时 /regions 列表建映射；接口失败时用内置常用区域映射兜底。
+        """
+        try:
+            regions = await self.list_all_regions()
+            for r in regions:
+                if r.get("regionName") == region_name and r.get("regionKey"):
+                    return r["regionKey"]
+        except RuntimeError:
+            pass
+        key = _REGION_NAME_TO_KEY_FALLBACK.get(region_name)
+        if key:
+            return key
+        raise RuntimeError(f"无法解析区域 {region_name} 的 regionKey（区域列表不可用）")
+
     async def create_region_subscription(self, tenancy_ocid: str, region_name: str) -> dict:
-        """POST /20160918/regionSubscriptions：订阅新区域（仅升级账户可用）。"""
+        """POST /20180419/regionSubscriptions：订阅新区域（仅升级账户可用）。"""
+        region_key = await self.resolve_region_key(region_name)
         resp = await self.request(
-            "POST", "identity", "/20160918/regionSubscriptions",
-            json_body={"tenancyId": tenancy_ocid, "regionName": region_name},
+            "POST", "identity", "/20180419/regionSubscriptions",
+            json_body={"tenancyId": tenancy_ocid, "regionKey": region_key},
         )
         if resp.status_code not in (200, 201):
             raise RuntimeError(f"订阅区域失败：HTTP {resp.status_code} {resp.text[:200]}")
