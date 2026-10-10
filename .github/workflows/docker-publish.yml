@@ -29,3 +29,10 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: ghcr.io/noahting55/oci-nt:latest
+      - name: 构建并推送（单容器版）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile.single
+          push: true
+          tags: ghcr.io/noahting55/oci-nt-single:latest
