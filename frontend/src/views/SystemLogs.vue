@@ -17,7 +17,7 @@
     </div>
     <el-alert v-if="notice" :title="notice" type="info" :closable="false" class="mb-2" />
     <div class="log-box">
-      <pre v-if="lines.length">{{ lines.join('\n') }}</pre>
+      <pre v-if="lines.length">{{ lines.map(fmtTime).join('\n') }}</pre>
       <div v-else class="text-gray-400 text-sm p-4">暂无日志</div>
     </div>
   </div>
@@ -41,6 +41,14 @@ async function fetchList() {
     const first = logs.value.find(l => l.exists)
     if (first) current.value = first.name
   }
+}
+
+function fmtTime(line) {
+  // 2026-10-10T16:10:31.717774 -> 2026-10-10 16:10:31
+  return line.replace(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(\.\d+)?/,
+    '$1 $2'
+  )
 }
 
 async function load() {
