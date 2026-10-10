@@ -14,9 +14,10 @@ FROM python:3.11-slim
 
 # 安装 postgres 16（与旧 pgdata 卷兼容）、redis、supervisord
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget gnupg lsb-release \
-    && sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
-    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+    wget gnupg lsb-release ca-certificates \
+    && mkdir -p /etc/apt/keyrings \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg \
+    && sh -c 'echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
     && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-16 \
     redis-server \
