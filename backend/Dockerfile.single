@@ -12,9 +12,13 @@ RUN npm run build
 # ============ 第二阶段：单容器运行环境 ============
 FROM python:3.11-slim
 
-# 安装 postgres、redis、supervisord
+# 安装 postgres 16（与旧 pgdata 卷兼容）、redis、supervisord
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    postgresql \
+    wget gnupg lsb-release \
+    && sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-16 \
     redis-server \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
