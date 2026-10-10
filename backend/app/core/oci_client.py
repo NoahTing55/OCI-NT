@@ -497,7 +497,7 @@ class OciClient:
         return False
 
     async def get_subscription_plan_type(self) -> "str | None":
-        """查订阅 plan_type（照搬 OCI-Noah，用官方 oci SDK）。
+        """查订阅 plan_type（官方 oci SDK）。
 
         SubscriptionServiceClient.list_subscriptions，走账号代理，
         取评分最高的订阅（PAYG=30 > FREE_TIER=20 > UNKNOWN=10）的 plan_type。
@@ -513,13 +513,14 @@ class OciClient:
                 "region": self.region,
             }
             client = oci.osp_gateway.SubscriptionServiceClient(
-                osp_config, timeout=(10, 30)
+                osp_config, timeout=(5, 15)
             )
             if self._proxy_url:
                 client.base_client.session.proxies = {
                     "http": self._proxy_url,
                     "https": self._proxy_url,
                 }
+            logger.info("订阅查询：region=%s tenancy=%s", self.region, self.tenancy_ocid[-6:])
             resp = client.list_subscriptions(
                 osp_home_region=self.region,
                 compartment_id=self.tenancy_ocid,
@@ -527,6 +528,7 @@ class OciClient:
                 retry_strategy=oci.retry.NoneRetryStrategy(),
             )
             items = list(getattr(resp.data, "items", None) or [])
+            logger.info("订阅查询：返回 %d 个订阅", len(items))
             if not items:
                 return None
             def _score(s) -> int:
@@ -539,12 +541,14 @@ class OciClient:
                 return 10
             best = max(items, key=_score)
             pt = getattr(best, "plan_type", None)
-            # SDK 可能返回枚举对象，转成字符串（如 "PAYG" / "FREE_TIER"）
             if pt is not None and not isinstance(pt, str):
                 pt = str(pt).split(".")[-1].upper()
+            logger.info("订阅查询：plan_type=%s", pt)
             return pt
-        except Exception:
+        except Exception as e:
+            logger.warning("订阅查询异常：%s", str(e)[:200])
             return None
+
 
     @staticmethod
     def classify_account_type(plan_type: "str | None", upgrade_state: "str | None" = None) -> str:
@@ -587,19 +591,14 @@ class OciClient:
             if comp:
                 result["registered_at"] = self._parse_ocid_time(comp.get("timeCreated"))
 
-            # 账号类型：只用 ListShapes 查 E3/E4/E5 的 billingType 判断
-            # 有 billingType=PAID 的大内存 AMD → upgraded，否则 free。
-            # 不调 osp-gateway 订阅接口（该接口超时/DNS失败/500 不稳定，拖慢识别）
-            plan_type = None
-            try:
-                shapes = await self.list_shapes(self.tenancy_ocid)
-                can_amd = self._can_create_large_amd(shapes)
-                result["account_type"] = "upgraded" if can_amd else "free"
-            except Exception as e:
-                logger.warning("shapes 查账号类型失败：%s", str(e)[:100])
-
-            logger.info("账号信息识别(shapes)：type=%s, registered_at=%s",
-                        result["account_type"], result["registered_at"])
+            # 账号类型：Plan type 决定（Pay As You Go=升级，Free Trial=免费）
+            # 只认订阅接口返回的明确值；接口失败时不猜测、不写 DB，避免误判
+            plan_type = await self.get_subscription_plan_type()
+            classified = self.classify_account_type(plan_type)
+            if classified in ("upgraded", "free"):
+                result["account_type"] = classified
+            logger.info("账号信息识别：type=%s plan_type=%s, registered_at=%s",
+                        result["account_type"], plan_type, result["registered_at"])
 
             logger.info("账号信息识别：type=%s plan_type=%s, registered_at=%s",
                         result["account_type"], plan_type, result["registered_at"])
