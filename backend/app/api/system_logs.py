@@ -9,9 +9,6 @@ router = APIRouter(prefix="/api/system-logs", tags=["系统日志"])
 LOG_FILES = {
     "api": "/var/log/api.log",
     "worker": "/var/log/worker.log",
-    "postgres": "/var/log/postgres.log",
-    "redis": "/var/log/redis.log",
-    "supervisord": "/var/log/supervisord.log",
 }
 
 @router.get("")
