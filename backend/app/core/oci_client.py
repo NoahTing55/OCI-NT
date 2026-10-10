@@ -538,7 +538,11 @@ class OciClient:
                     return 20
                 return 10
             best = max(items, key=_score)
-            return getattr(best, "plan_type", None)
+            pt = getattr(best, "plan_type", None)
+            # SDK 可能返回枚举对象，转成字符串（如 "PAYG" / "FREE_TIER"）
+            if pt is not None and not isinstance(pt, str):
+                pt = str(pt).split(".")[-1].upper()
+            return pt
         except Exception:
             return None
 
