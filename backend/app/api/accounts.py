@@ -128,6 +128,26 @@ def _create_account_core(data: AccountCreate, db: Session) -> Account:
 
     抛 HTTPException 表示失败，调用方负责捕获。
     """
+    # 别名留空时按 {城市}-{日期} 自动生成，如 Phoenix-20261008
+    name = (data.name or "").strip()
+    if not name:
+        from datetime import datetime
+        region_city = {
+            "us-phoenix-1": "Phoenix", "us-ashburn-1": "Ashburn",
+            "us-sanjose-1": "SanJose", "ap-tokyo-1": "Tokyo",
+            "ap-osaka-1": "Osaka", "ap-seoul-1": "Seoul",
+            "eu-frankfurt-1": "Frankfurt", "uk-london-1": "London",
+        }
+        city = region_city.get((data.region or "").strip(), (data.region or "Unknown"))
+        date_str = datetime.now().strftime("%Y%m%d")
+        base = f"{city}-{date_str}"
+        # 避免重名，加后缀
+        name = base
+        idx = 2
+        while db.query(Account).filter(Account.name == name).first():
+            name = f"{base}-{idx}"
+            idx += 1
+        data.name = name
     if "PRIVATE KEY" not in data.private_key:
         raise HTTPException(status_code=400, detail="private_key 看起来不是 PEM 私钥")
     try:

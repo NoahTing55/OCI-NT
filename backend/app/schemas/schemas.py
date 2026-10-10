@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------- 账号 ----------------
 class AccountCreate(BaseModel):
-    name: str = Field(..., max_length=100)
+    name: str = Field("", max_length=100)
     tenancy_ocid: str
     user_ocid: str
     fingerprint: str
