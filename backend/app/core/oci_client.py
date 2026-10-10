@@ -520,6 +520,8 @@ class OciClient:
                     "http": self._proxy_url,
                     "https": self._proxy_url,
                 }
+            # 按 OCI-Start 方式：先 list 拿 ID，再 get 取完整详情（含 planType）
+            # osp_home_region 用账号主区域
             resp = client.list_subscriptions(
                 osp_home_region=self.region,
                 compartment_id=self.tenancy_ocid,
@@ -530,19 +532,28 @@ class OciClient:
             if not items:
                 logger.warning("订阅查询：items 为空，tenancy=%s", self.tenancy_ocid[-6:])
                 return None
-            def _score(s) -> int:
-                pt = str(getattr(s, "plan_type", "") or "").upper()
-                us = str(getattr(s, "upgrade_state", "") or "").upper()
-                if pt == "PAYG" or us == "UPGRADED":
-                    return 30
-                if pt == "FREE_TIER":
-                    return 20
-                return 10
-            best = max(items, key=_score)
-            pt = getattr(best, "plan_type", None)
-            us = getattr(best, "upgrade_state", None)
-            logger.info("订阅查询：tenancy=%s plan_type=%s upgrade_state=%s（共 %d 个订阅）",
-                        self.tenancy_ocid[-6:], pt, us, len(items))
+            # 取第一个订阅的 ID，调 get_subscription 取完整信息
+            # （list 返回的是 Summary，可能没有 planType）
+            sub_id = getattr(items[0], "id", None)
+            if not sub_id:
+                logger.warning("订阅查询：首个订阅无 ID，tenancy=%s", self.tenancy_ocid[-6:])
+                return None
+            detail_resp = client.get_subscription(
+                subscription_id=sub_id,
+                compartment_id=self.tenancy_ocid,
+                osp_home_region=self.region,
+                retry_strategy=oci.retry.NoneRetryStrategy(),
+            )
+            sub = detail_resp.data
+            pt = getattr(sub, "plan_type", None)
+            # planType 可能是枚举，转字符串
+            if pt is not None and not isinstance(pt, str):
+                pt = str(pt).split(".")[-1]  # e.g. "PlanType.PAYG" -> "PAYG"
+            us = getattr(sub, "upgrade_state", None)
+            if us is not None and not isinstance(us, str):
+                us = str(us).split(".")[-1]
+            logger.info("订阅查询：tenancy=%s plan_type=%s upgrade_state=%s",
+                        self.tenancy_ocid[-6:], pt, us)
             return pt
         except Exception as e:
             logger.warning("订阅查询异常：%s", str(e)[:200])
