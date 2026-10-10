@@ -561,12 +561,14 @@ class OciClient:
             except Exception as e:
                 logger.warning("查 home region 失败，用 %s：%s", self.region, str(e)[:100])
             # 2. OSP 查订阅列表
+            # 注意：osp-gateway 不是每个区都有 endpoint（如 us-sanjose-1 解析失败），
+            # client 用 us-ashburn-1（必有网关），osp_home_region 参数传真实 home region
             osp_config = {
                 "tenancy": self.tenancy_ocid,
                 "user": self.user_ocid,
                 "fingerprint": self.fingerprint,
                 "key_content": self._private_key_pem,
-                "region": home_region_name,
+                "region": "us-ashburn-1",
             }
             client = oci.osp_gateway.SubscriptionServiceClient(
                 osp_config, timeout=(10, 30))
