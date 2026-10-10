@@ -17,6 +17,7 @@ if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
 fi
 
 mkdir -p /data && chmod 777 /data
+chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql
 
 # 启动 supervisord
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
