@@ -1,4 +1,4 @@
-"""抢机任务 API。
+"""开机任务 API。
 
 - POST /：新建任务（同一账号同一 shape 同时只允许一个 running/paused 任务）；
 - POST /{id}/start：CAS 置 running 并启动 worker；
@@ -21,7 +21,7 @@ router = APIRouter()
 
 # 内置场景模板：前端"一键填入"用。不含区域/密钥/OCID，只有公开的 shape 配置。
 # 顺序固定：免费 AMD 1C1G → ARM 1C6G → ARM 2C12G → E5 1C6G。区域跟随所选账号。
-# 内置抢机模板（顺序固定，前端卡片按此顺序展示）
+# 内置开机模板（顺序固定，前端卡片按此顺序展示）
 TEMPLATES = [
     {"name": "免费 AMD 1C1G",
      "shape": "VM.Standard.E2.1.Micro", "ocpus": 1, "memory_gb": 1},
@@ -34,7 +34,7 @@ TEMPLATES = [
 ]
 
 STATUS_TEXT = {
-    "pending": "待启动", "running": "抢机中", "paused": "已暂停",
+    "pending": "待启动", "running": "开机中", "paused": "已暂停",
     "success": "已完成", "stopped": "已停止", "failed": "失败",
 }
 
@@ -69,7 +69,7 @@ def _to_out(task: SnipeTask, account_name: str = "") -> SnipeTaskOut:
 def _get_task(db: Session, task_id: int) -> SnipeTask:
     task = db.get(SnipeTask, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="抢机任务不存在")
+        raise HTTPException(status_code=404, detail="开机任务不存在")
     return task
 
 @router.get("/templates")
@@ -79,7 +79,7 @@ def list_templates():
 
 @router.post("", response_model=SnipeTaskOut)
 def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
-    """新建单个抢机任务。"""
+    """新建单个开机任务。"""
     task = _do_create_task(db, data)
     account = db.get(Account, task.account_id)
     return _to_out(task, account.name if account else "")
@@ -87,7 +87,7 @@ def create_task(data: SnipeTaskCreate, db: Session = Depends(get_db)):
 
 @router.post("/batch-create")
 def batch_create_tasks(data: SnipeTaskBatchCreate, db: Session = Depends(get_db)):
-    """批量创建抢机任务：同一份任务配置应用到多个账号，每个账号创建一个任务。
+    """批量创建开机任务：同一份任务配置应用到多个账号，每个账号创建一个任务。
 
     请求体：{"account_ids": [1,2,3], "task": {...任务配置，不含 account_id...}}。
     逐个账号复用单个创建逻辑，单个账号失败不影响其他账号。
@@ -119,7 +119,7 @@ def batch_create_tasks(data: SnipeTaskBatchCreate, db: Session = Depends(get_db)
 
 
 def _do_create_task(db: Session, data: SnipeTaskCreate) -> SnipeTask:
-    """创建单个抢机任务的核心逻辑（单个创建和批量创建共用）。
+    """创建单个开机任务的核心逻辑（单个创建和批量创建共用）。
 
     抛 HTTPException 表示校验失败，调用方负责捕获处理。
     """
@@ -142,7 +142,7 @@ def _do_create_task(db: Session, data: SnipeTaskCreate) -> SnipeTask:
     if dup:
         raise HTTPException(
             status_code=400,
-            detail="该账号该 shape 已有进行中的抢机任务（#%d，状态 %s），请先暂停或删除" % (dup.id, STATUS_TEXT.get(dup.status, dup.status)),
+            detail="该账号该 shape 已有进行中的开机任务（#%d，状态 %s），请先暂停或删除" % (dup.id, STATUS_TEXT.get(dup.status, dup.status)),
         )
     task = SnipeTask(
         account_id=data.account_id,
@@ -180,7 +180,7 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{task_id}", response_model=SnipeTaskOut)
 def update_task(task_id: int, data: SnipeTaskUpdate, db: Session = Depends(get_db)):
-    """编辑抢机任务：只有 pending/paused/stopped/failed 状态可编辑。
+    """编辑开机任务：只有 pending/paused/stopped/failed 状态可编辑。
 
     只更新传入的非 None 字段；attempts 与 status 保持不变。
     """
@@ -211,7 +211,7 @@ def update_task(task_id: int, data: SnipeTaskUpdate, db: Session = Depends(get_d
         if dup:
             raise HTTPException(
                 status_code=400,
-                detail="该账号该 shape 已有进行中的抢机任务（#%d，状态 %s），请先暂停或删除" % (dup.id, STATUS_TEXT.get(dup.status, dup.status)),
+                detail="该账号该 shape 已有进行中的开机任务（#%d，状态 %s），请先暂停或删除" % (dup.id, STATUS_TEXT.get(dup.status, dup.status)),
             )
     for field, value in updates.items():
         setattr(task, field, value)
@@ -236,14 +236,14 @@ async def pause_task(task_id: int, db: Session = Depends(get_db)):
     task = _get_task(db, task_id)
     ok = await sniper_manager.pause_task(task_id)
     if not ok:
-        raise HTTPException(status_code=400, detail="只有抢机中的任务才能暂停")
+        raise HTTPException(status_code=400, detail="只有开机中的任务才能暂停")
     return {"ok": True, "task_id": task_id, "status": "paused"}
 
 @router.delete("/{task_id}")
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = _get_task(db, task_id)
     if task.status == "running":
-        raise HTTPException(status_code=400, detail="任务正在抢机中，请先暂停再删除")
+        raise HTTPException(status_code=400, detail="任务正在开机中，请先暂停再删除")
     account_id = task.account_id
     db.query(SnipeLog).filter(SnipeLog.task_id == task_id).delete(synchronize_session=False)
     db.delete(task)
@@ -272,4 +272,40 @@ def list_logs(task_id: int, level: str = "", page: int = 1, size: int = 100,
             )
             for r in rows
         ],
+    }
+
+@router.post("/{task_id}/remove-instance")
+def remove_instance_from_task(task_id: int, data: dict, db: Session = Depends(get_db)):
+    """从任务实例列表中移除指定 OCID（实例已删除时调用）。
+    
+    自动补齐序号：删除中间项后，后续实例序号前移。
+    密码按任务存储，不受序号变化影响。
+    """
+    from app.models.models import SnipeTask
+    task = db.get(SnipeTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    ocid = (data.get("instance_ocid") or "").strip()
+    if not ocid:
+        raise HTTPException(status_code=400, detail="instance_ocid 不能为空")
+    
+    ocids = [o.strip() for o in (task.instance_ocid or "").split(",") if o.strip()]
+    if ocid not in ocids:
+        raise HTTPException(status_code=404, detail="该实例不在任务列表中")
+    
+    ocids.remove(ocid)
+    task.instance_ocid = ",".join(ocids)
+    task.success_count = max(0, len(ocids))
+    # 如果删完后数量小于目标，任务状态改回 running（可继续抢）
+    if task.success_count < task.target_count and task.status == "success":
+        task.status = "running"
+    db.commit()
+    
+    return {
+        "ok": True,
+        "task_id": task_id,
+        "success_count": task.success_count,
+        "target_count": task.target_count,
+        "instance_ocids": ocids,
+        "message": f"已移除实例，当前 {task.success_count}/{task.target_count} 台",
     }
