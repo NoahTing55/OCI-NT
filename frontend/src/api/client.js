@@ -15,6 +15,7 @@ export const redetectAccount = (id) => api.post(`/accounts/${id}/redetect`).then
 export const listProxies = () => api.get('/proxies').then((r) => r.data)
 export const createProxy = (data) => api.post('/proxies', data).then((r) => r.data)
 export const deleteProxy = (id) => api.delete(`/proxies/${id}`).then((r) => r.data)
+export const testAllProxies = () => api.post('/proxies/test-all').then((r) => r.data)
 
 // 账户摘要
 export const getAccountSummary = () => api.get('/account-summary').then((r) => r.data)

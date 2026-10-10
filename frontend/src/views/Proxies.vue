@@ -82,10 +82,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listProxies, createProxy, deleteProxy } from '../api/client.js'
+import { listProxies, createProxy, deleteProxy, testAllProxies } from '../api/client.js'
 
 const proxies = ref([])
 const loading = ref(false)
+const testing = ref(false)
 const createVisible = ref(false)
 const submitting = ref(false)
 const form = ref({ name: '', scheme: 'http', host: '', port: 8080, username: '', password: '', remark: '' })
@@ -193,6 +194,20 @@ const submitBatch = async () => {
   batchList.value = []
   load()
   ElMessage.success(`批量导入完成：成功 ${ok} 个，失败 ${fail} 个`)
+}
+
+const doTestAll = async () => {
+  testing.value = true
+  try {
+    const r = await testAllProxies()
+    ElMessage.success(r.message || '代理测速已开始')
+    // 10 秒后自动刷新
+    setTimeout(() => load(), 10000)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '启动失败')
+  } finally {
+    testing.value = false
+  }
 }
 
 onMounted(load)

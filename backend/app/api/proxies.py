@@ -56,3 +56,11 @@ def delete_proxy(proxy_id: int, db: Session = Depends(get_db)):
     db.delete(proxy)
     db.commit()
     return {"ok": True}
+
+@router.post("/test-all")
+async def test_all_proxies():
+    """手动触发全部代理测速（后台运行，立即返回）。"""
+    import asyncio
+    from app.workers.scheduler import _job_proxy_speedtest
+    asyncio.create_task(_job_proxy_speedtest())
+    return {"ok": True, "message": "代理测速已开始，请稍后刷新查看结果"}
