@@ -25,7 +25,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import { listSystemLogs, getSystemLog } from '../api/client.js'
 
 const logs = ref([])
 const current = ref('api')
@@ -35,7 +35,7 @@ const loading = ref(false)
 const notice = ref('')
 
 async function fetchList() {
-  const { data } = await axios.get('/api/system-logs')
+  const data = await listSystemLogs()
   logs.value = data
   if (!logs.value.find(l => l.name === current.value)?.exists) {
     const first = logs.value.find(l => l.exists)
@@ -47,7 +47,7 @@ async function load() {
   loading.value = true
   notice.value = ''
   try {
-    const { data } = await axios.get(`/api/system-logs/${current.value}`, { params: { lines: lineCount.value } })
+    const data = await getSystemLog(current.value, lineCount.value)
     lines.value = data.lines || []
     if (data.message) notice.value = data.message
   } catch (e) {

@@ -92,6 +92,10 @@ export const getSettings = () => api.get('/settings').then((r) => r.data)
 export const updateSettings = (data) => api.put('/settings', data).then((r) => r.data)
 export const testTelegram = () => api.post('/settings/test-telegram').then((r) => r.data)
 
+// 系统日志
+export const listSystemLogs = () => api.get('/system-logs').then((r) => r.data)
+export const getSystemLog = (name, lines = 200) => api.get(`/system-logs/${name}`, { params: { lines } }).then((r) => r.data)
+
 // 鉴权
 export const authStatus = () => api.get('/auth/status').then((r) => r.data)
 export const login = (data) => api.post('/auth/login', data).then((r) => r.data)
