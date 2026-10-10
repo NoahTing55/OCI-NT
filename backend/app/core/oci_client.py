@@ -556,27 +556,41 @@ class OciClient:
                 return None
             # 取第一个订阅的 ID，调 get_subscription 取完整信息
             # （list 返回的是 Summary，可能没有 planType）
-            sub_id = getattr(items[0], "id", None)
-            if not sub_id:
-                logger.warning("订阅查询：首个订阅无 ID，tenancy=%s", self.tenancy_ocid[-6:])
-                return None
-            detail_resp = client.get_subscription(
-                subscription_id=sub_id,
-                compartment_id=self.tenancy_ocid,
-                osp_home_region=home_region,
-                retry_strategy=oci.retry.NoneRetryStrategy(),
-            )
-            sub = detail_resp.data
-            pt = getattr(sub, "plan_type", None)
-            # planType 可能是枚举，转字符串
-            if pt is not None and not isinstance(pt, str):
-                pt = str(pt).split(".")[-1]  # e.g. "PlanType.PAYG" -> "PAYG"
-            us = getattr(sub, "upgrade_state", None)
-            if us is not None and not isinstance(us, str):
-                us = str(us).split(".")[-1]
-            logger.info("订阅查询：tenancy=%s plan_type=%s upgrade_state=%s",
-                        self.tenancy_ocid[-6:], pt, us)
-            return pt
+            # 逐个订阅取详情，打全日志，按评分取最高者（PAYG=30 > FREE_TIER=20）
+            best_pt, best_score = None, -1
+            for item in items:
+                sub_id = getattr(item, "id", None)
+                if not sub_id:
+                    continue
+                try:
+                    detail_resp = client.get_subscription(
+                        subscription_id=sub_id,
+                        compartment_id=self.tenancy_ocid,
+                        osp_home_region=home_region,
+                        retry_strategy=oci.retry.NoneRetryStrategy(),
+                    )
+                except Exception as e:
+                    logger.warning("订阅详情查询失败 ..%s：%s", sub_id[-8:], str(e)[:100])
+                    continue
+                sub = detail_resp.data
+                pt = getattr(sub, "plan_type", None)
+                if pt is not None and not isinstance(pt, str):
+                    pt = str(pt).split(".")[-1]
+                us = getattr(sub, "upgrade_state", None)
+                if us is not None and not isinstance(us, str):
+                    us = str(us).split(".")[-1]
+                st = getattr(sub, "status", None)
+                if st is not None and not isinstance(st, str):
+                    st = str(st).split(".")[-1]
+                logger.info("订阅明细：tenancy=%s id=..%s plan_type=%s upgrade_state=%s status=%s",
+                            self.tenancy_ocid[-6:], sub_id[-8:], pt, us, st)
+                score = (30 if (str(pt).upper() == "PAYG" or str(us).upper() == "UPGRADED")
+                         else 20 if str(pt).upper() == "FREE_TIER" else 10)
+                if score > best_score:
+                    best_score, best_pt = score, pt
+            logger.info("订阅查询结论：tenancy=%s plan_type=%s（共 %d 个订阅）",
+                        self.tenancy_ocid[-6:], best_pt, len(items))
+            return best_pt
         except Exception as e:
             logger.warning("订阅查询异常：%s", str(e)[:200])
             return None
