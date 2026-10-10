@@ -44,6 +44,9 @@
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon><span>系统设置</span>
           </el-menu-item>
+<el-menu-item index="/system-logs">
+            <el-icon><Setting /></el-icon><span>系统日志</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
       <el-main>

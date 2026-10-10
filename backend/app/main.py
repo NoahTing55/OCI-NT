@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import accounts, account_summary, auth, batch, cloudflare, health, instances, network, oci_options, proxies, region_subscription, sniper, terminal
 from app.api import settings as settings_api
+from app.api import system_logs
 from app.core.audit import AuditMiddleware
 from app.core.config import settings
 from app.core.deps import SessionLocal, engine, get_current_operator
@@ -89,6 +90,7 @@ app.include_router(oci_options.router, prefix="/api/oci-options", tags=["OCI 选
 app.include_router(sniper.router, prefix="/api/sniper", tags=["抢机任务"], dependencies=auth_dep)
 app.include_router(terminal.router)
 app.include_router(settings_api.router, prefix="/api/settings", tags=["系统设置"], dependencies=auth_dep)
+app.include_router(system_logs.router, dependencies=auth_dep)
 
 
 @app.get("/api/ping")

@@ -9,6 +9,7 @@ import Sniper from '../views/Sniper.vue'
 import Login from '../views/Login.vue'
 import Security from '../views/Security.vue'
 import Settings from '../views/Settings.vue'
+import SystemLogs from '../views/SystemLogs.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -24,6 +25,7 @@ const router = createRouter({
     { path: '/sniper', component: Sniper },
     { path: '/security', component: Security },
     { path: '/settings', component: Settings },
+    { path: '/system-logs', component: SystemLogs },
   ],
 })
 
