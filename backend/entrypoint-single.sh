@@ -26,5 +26,9 @@ if [ -f /var/lib/postgresql/data/postgresql.conf ]; then
     sed -i "s/^lc_time.*/lc_time = 'C'/" /var/lib/postgresql/data/postgresql.conf
 fi
 
+# 单容器内：让 postgres/redis 主机名指向本机（兼容 .env 里的旧配置）
+grep -q "postgres" /etc/hosts || echo "127.0.0.1 postgres" >> /etc/hosts
+grep -q "redis" /etc/hosts || echo "127.0.0.1 redis" >> /etc/hosts
+
 # 启动 supervisord
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
