@@ -520,10 +520,32 @@ class OciClient:
                     "http": self._proxy_url,
                     "https": self._proxy_url,
                 }
-            # 按 OCI-Start 方式：先 list 拿 ID，再 get 取完整详情（含 planType）
-            # osp_home_region 用账号主区域
+            # 按 OCI-Start 方式：先查 regionSubscriptions 找 home region，
+            # 再用 home region 调订阅接口（OciGateWayUtils.getAccountTypeInfo）
+            home_region = self.region
+            try:
+                import oci as _oci
+                id_client = _oci.identity.IdentityClient(
+                    {"tenancy": self.tenancy_ocid, "user": self.user_ocid,
+                     "fingerprint": self.fingerprint, "key_content": self._private_key_pem,
+                     "region": self.region},
+                    retry_strategy=_oci.retry.NoneRetryStrategy(),
+                )
+                if self._proxy_url:
+                    id_client.base_client.session.proxies = {
+                        "http": self._proxy_url, "https": self._proxy_url}
+                rs = id_client.list_region_subscriptions(
+                    self.tenancy_ocid,
+                    retry_strategy=_oci.retry.NoneRetryStrategy()).data
+                for r in rs or []:
+                    if getattr(r, "is_home_region", False):
+                        home_region = r.region_name
+                        break
+            except Exception as e:
+                logger.warning("查 home region 失败，用账号区域 %s：%s", self.region, str(e)[:100])
+            logger.info("订阅查询：tenancy=%s home_region=%s", self.tenancy_ocid[-6:], home_region)
             resp = client.list_subscriptions(
-                osp_home_region=self.region,
+                osp_home_region=home_region,
                 compartment_id=self.tenancy_ocid,
                 limit=100,
                 retry_strategy=oci.retry.NoneRetryStrategy(),
@@ -541,7 +563,7 @@ class OciClient:
             detail_resp = client.get_subscription(
                 subscription_id=sub_id,
                 compartment_id=self.tenancy_ocid,
-                osp_home_region=self.region,
+                osp_home_region=home_region,
                 retry_strategy=oci.retry.NoneRetryStrategy(),
             )
             sub = detail_resp.data
