@@ -1,7 +1,7 @@
 """系统日志查看：supervisord 管理的各进程日志文件"""
 import os
 from fastapi import APIRouter, Depends, Query, HTTPException
-from app.api.auth import get_current_user
+from app.core.deps import get_current_operator
 
 router = APIRouter(prefix="/api/system-logs", tags=["系统日志"])
 
@@ -15,7 +15,7 @@ LOG_FILES = {
 }
 
 @router.get("")
-def list_logs(user=Depends(get_current_user)):
+def list_logs(user=Depends(get_current_operator)):
     """列出可用的日志文件"""
     result = []
     for name, path in LOG_FILES.items():
@@ -28,7 +28,7 @@ def list_logs(user=Depends(get_current_user)):
 def get_log(
     name: str,
     lines: int = Query(200, ge=1, le=2000),
-    user=Depends(get_current_user),
+    user=Depends(get_current_operator),
 ):
     """读取指定日志的最后 N 行"""
     path = LOG_FILES.get(name)
