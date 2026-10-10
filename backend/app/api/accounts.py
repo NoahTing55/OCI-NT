@@ -338,6 +338,20 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True}
 
+@router.post("/{account_id}/redetect", response_model=AccountOut)
+async def redetect_account(account_id: int, db: Session = Depends(get_db)):
+    """强制重新识别账号类型和注册时间（清除手动锁定标记）。"""
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    # 清除手动锁定，允许自动覆盖
+    account.account_type_manual = False
+    db.commit()
+    await _auto_detect_account_info(account, db)
+    db.refresh(account)
+    return account
+
+
 @router.post("/{account_id}/bind-proxy", response_model=AccountOut)
 def bind_proxy(account_id: int, data: BindProxyIn, db: Session = Depends(get_db)):
     """绑定代理（一账号一代理）。proxy_id 为 null 时解绑。"""

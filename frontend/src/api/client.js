@@ -9,6 +9,7 @@ export const batchImportAccounts = (accounts) => api.post('/accounts/batch-impor
 export const updateAccount = (id, data) => api.put(`/accounts/${id}`, data).then((r) => r.data)
 export const deleteAccount = (id) => api.delete(`/accounts/${id}`).then((r) => r.data)
 export const bindProxy = (id, proxy_id) => api.post(`/accounts/${id}/bind-proxy`, { proxy_id }).then((r) => r.data)
+export const redetectAccount = (id) => api.post(`/accounts/${id}/redetect`).then((r) => r.data)
 
 // 代理
 export const listProxies = () => api.get('/proxies').then((r) => r.data)

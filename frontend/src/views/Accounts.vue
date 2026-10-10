@@ -76,10 +76,14 @@
       <!-- 账号类型：免费/试用/升级/未知（对标 OCI-Start） -->
       <el-table-column label="账号类型" min-width="120" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.account_type === 'free' || row.account_type === 'trial'" type="success" size="small">个人免费账户</el-tag>
-          <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级账户</el-tag>
-          <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
-          <el-tag v-else type="info" size="small">未知</el-tag>
+          <el-tooltip content="点击重新自动识别" placement="top">
+            <span @click="redetect(row)" style="cursor: pointer;">
+              <el-tag v-if="row.account_type === 'free' || row.account_type === 'trial'" type="success" size="small">个人免费账户</el-tag>
+              <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级账户</el-tag>
+              <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
+              <el-tag v-else type="info" size="small">未知</el-tag>
+            </span>
+          </el-tooltip>
         </template>
       </el-table-column>
       <!-- 实例数：点击跳转筛选 -->
@@ -356,7 +360,7 @@ const fmtRegion = (r) => r ? `${REGION_CN[r] ? REGION_CN[r] + ' ' : ''}${r}` : '
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
-import { listAccounts, createAccount, batchImportAccounts, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary, listRegionSubscriptions, subscribeRegion, batchSubscribeRegions, listOciRegions } from '../api/client.js'
+import { listAccounts, createAccount, batchImportAccounts, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary, listRegionSubscriptions, subscribeRegion, batchSubscribeRegions, listOciRegions, redetectAccount } from '../api/client.js'
 
 const router = useRouter()
 const REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
@@ -804,6 +808,24 @@ const openBind = (row) => {
   bindAccount.value = row
   bindProxyId.value = row.proxy_id
   bindVisible.value = true
+}
+
+const redetect = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `对「${row.name}」重新自动识别账号类型和注册时间？`,
+      '重新识别',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch { return }
+  try {
+    const data = await redetectAccount(row.id)
+    const typ = { free: '个人免费账户', trial: '个人免费账户', upgraded: '个人升级账户' }[data.account_type] || data.account_type
+    ElMessage.success(`识别完成：${typ}`)
+    load()
+  } catch (e) {
+    ElMessage.error('识别失败：' + (e.response?.data?.detail || e.message))
+  }
 }
 
 const submitBind = async () => {
