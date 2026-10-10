@@ -1175,6 +1175,13 @@ watch(accounts, () => initColumnResize());
 .acct-table {
   font-size: 13px;
 }
+/* 去掉表格底部多余的空隙 */
+.acct-table .el-table__body-wrapper {
+  padding-bottom: 0;
+}
+.acct-table .el-scrollbar__bar.is-horizontal {
+  bottom: 0;
+}
 /* 🛡️ 代理盾牌：未绑定灰色，已绑定蓝色 */
 .shield-btn {
   cursor: pointer;
