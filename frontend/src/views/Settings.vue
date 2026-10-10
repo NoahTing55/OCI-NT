@@ -1,11 +1,5 @@
 <template>
   <div>
-    <el-alert type="info" :closable="false" style="margin-bottom: 16px">
-      <template #title>
-        网页修改保存后即时生效（定时任务间隔会自动重排，无需重启）。以下仍需在 .env 中配置（启动前就需要，网页改不了）：MASTER_KEY（加密主密钥）、DATABASE_URL / REDIS_URL（数据库）、JWT_SECRET_KEY（无则回退 MASTER_KEY）、ADMIN_USERNAME / ADMIN_PASSWORD（仅首次初始化管理员）。
-      </template>
-    </el-alert>
-
     <el-card v-for="g in groups" :key="g.key" style="margin-bottom: 16px">
       <template #header><b>{{ g.name }}</b></template>
       <el-form label-width="230px">

@@ -52,23 +52,26 @@ WEB_SETTINGS = {
     },
     "PROXY_SPEEDTEST_MINUTES": {
         "group": "schedule", "type": "int", "secret": False, "default": 30, "min": 1,
-        "label": "代理测速间隔（分钟）",
+        "label": "代理测速间隔（小时）",
         "desc": "代理延迟测速间隔。修改后定时任务自动重排，即时生效。",
+        "display_hours": True, "storage_unit": "minute",
     },
     "SNIPE_LOG_RETENTION_DAYS": {
         "group": "schedule", "type": "int", "secret": False, "default": 7, "min": 1,
-        "label": "抢机日志保留（天）",
-        "desc": "抢机任务日志只保留近 N 天，过期自动清理。",
+        "label": "开机日志保留（天）",
+        "desc": "开机任务日志只保留近 N 天，过期自动清理。",
     },
     "INSTANCE_CACHE_TTL": {
         "group": "cache", "type": "int", "secret": False, "default": 86400, "min": 0,
-        "label": "实例缓存 TTL（秒）",
-        "desc": "实例列表 Redis 缓存有效期，默认 86400（24 小时）。0 为关闭缓存，修改后即时生效。",
+        "label": "实例缓存 TTL（小时）",
+        "desc": "实例列表 Redis 缓存有效期，默认 24 小时。0 为关闭缓存，修改后即时生效。",
+        "display_hours": True, "storage_unit": "second",
     },
     "JWT_EXPIRE_MINUTES": {
         "group": "security", "type": "int", "secret": False, "default": 720, "min": 5,
-        "label": "登录有效期（分钟）",
+        "label": "登录有效期（小时）",
         "desc": "JWT Token 有效期（默认 12 小时）。只影响新签发的 Token，已签发的不变。",
+        "display_hours": True, "storage_unit": "minute",
     },
 }
 
@@ -201,6 +204,18 @@ def set_setting(key: str, value) -> bool:
     """校验并写入 DB（secret 加密存储），失效缓存。返回是否有变化。"""
     if key not in WEB_SETTINGS:
         raise KeyError(f"未知设置项：{key}")
+    # 前端以小时为单位显示的项，转回存储单位（分钟/秒）再入库
+    spec = WEB_SETTINGS[key]
+    if spec.get("display_hours"):
+        try:
+            hours = float(str(value).strip())
+        except (TypeError, ValueError):
+            raise ValueError(f"{spec['label']}必须是数字")
+        unit = spec.get("storage_unit", "minute")
+        if unit == "second":
+            value = int(hours * 3600)
+        else:
+            value = int(hours * 60)
     normalized = _validate(key, value)
     old = _read_db(key) or ""
     # 读 DB 做新旧比较时也走规范化，保证 "30" 与 30 视为相同
@@ -250,6 +265,16 @@ def get_all_masked() -> list:
             value = "已设置" if is_set(key) else ""
         else:
             value = get_setting(key)
+            # 需要以小时显示的项，转成小时（保留1位小数，去掉尾随0）
+            if spec.get("display_hours"):
+                try:
+                    unit = spec.get("storage_unit", "minute")
+                    v = float(value)
+                    hours = v / 3600 if unit == "second" else v / 60
+                    # 去掉无意义的小数位
+                    value = int(hours) if hours == int(hours) else round(hours, 1)
+                except (TypeError, ValueError):
+                    pass
         groups.setdefault(group, []).append(
             {
                 "key": key,
