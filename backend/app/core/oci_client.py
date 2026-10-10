@@ -506,7 +506,7 @@ class OciClient:
         失败返回 None 不抛异常。
         """
         # 先试 raw HTTP（老版本 /20190111/subscriptions，用 subscriptionTier）
-        # SDK 500 时可能 raw 能通
+        # endpoint 固定 us-ashburn-1（us-sanjose-1 无网关），参数传真实 home region
         try:
             hr = self.region
             try:
@@ -515,7 +515,7 @@ class OciClient:
                 pass
             path = ("/20190111/subscriptions"
                     f"?compartmentId={self.tenancy_ocid}&ospHomeRegion={hr}")
-            url = f"https://osp-gateway.{hr}.oraclecloud.com{path}"
+            url = f"https://osp-gateway.us-ashburn-1.oraclecloud.com{path}"
             headers = self._sign_headers("GET", url, None)
             resp = await self._client.request("GET", url, headers=headers)
             if resp.status_code == 200:
@@ -572,6 +572,11 @@ class OciClient:
             }
             client = oci.osp_gateway.SubscriptionServiceClient(
                 osp_config, timeout=(10, 30))
+            # 强制 endpoint（防止 SDK 按 region 拼出不存在的域名）
+            try:
+                client.base_client.endpoint = "https://osp-gateway.us-ashburn-1.oraclecloud.com"
+            except Exception:
+                pass
             if self._proxy_url:
                 client.base_client.session.proxies = {
                     "http": self._proxy_url, "https": self._proxy_url}
