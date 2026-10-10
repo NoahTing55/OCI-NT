@@ -1,0 +1,25 @@
+# 单容器部署：postgres + redis + api + worker 全在一个容器里
+# 构建：docker compose -f docker-compose.single.yml build
+# 运行：docker compose -f docker-compose.single.yml up -d
+
+services:
+  app:
+    image: ghcr.io/noahting55/oci-nt-single:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.single
+    env_file: .env
+    ports:
+      - "8035:8035"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - redisdata:/data
+    environment:
+      - POSTGRES_USER=oci
+      - POSTGRES_PASSWORD=oci
+      - POSTGRES_DB=ocipanel
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

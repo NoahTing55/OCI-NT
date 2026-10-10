@@ -1,0 +1,46 @@
+# 单容器版：postgres + redis + api + worker 全在一个镜像里，用 supervisord 管理
+# 构建：docker build -f backend/Dockerfile.single -t oci-nt-single .
+
+# ============ 第一阶段：构建前端 ============
+FROM node:20-alpine AS frontend-builder
+WORKDIR /web
+COPY frontend/package.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# ============ 第二阶段：单容器运行环境 ============
+FROM python:3.11-slim
+
+# 安装 postgres、redis、supervisord
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-15 \
+    redis-server \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /code
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/app ./app
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
+COPY --from=frontend-builder /web/dist /app/static
+
+# supervisord 配置
+COPY backend/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY backend/entrypoint-single.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# postgres 数据目录
+RUN mkdir -p /var/lib/postgresql/data /var/run/postgresql && \
+    chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql
+
+# redis 数据目录
+RUN mkdir -p /data && chown redis:redis /data
+
+EXPOSE 8035
+
+CMD ["/entrypoint.sh"]
