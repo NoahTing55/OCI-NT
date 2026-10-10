@@ -78,6 +78,23 @@ async def _wait_vcn_available(client: OciClient, vcn_id: str, timeout: float = 6
         await asyncio.sleep(3)
 
 
+async def _wait_ig_available(client: OciClient, comp: str, vcn_id: str, ig_id: str, timeout: float = 60) -> dict:
+    """轮询等 Internet Gateway 到 AVAILABLE，超时抛 400 中文错。"""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while True:
+        try:
+            igs = await client.list_internet_gateways(comp, vcn_id)
+        except RuntimeError:
+            igs = []
+        ig = next((g for g in igs if g.get("id") == ig_id), None)
+        if ig and ig.get("lifecycleState") == "AVAILABLE":
+            return ig
+        if loop.time() >= deadline:
+            raise HTTPException(status_code=400, detail="Internet Gateway 创建超时：60 秒内未到 AVAILABLE 状态")
+        await asyncio.sleep(3)
+
+
 async def _ensure_network(
     client: OciClient,
     tenancy_ocid: str,
@@ -131,6 +148,11 @@ async def _ensure_network(
         resp = await client.create_internet_gateway(comp, vcn_id, display_name=MANAGED_IG_NAME)
         _check_ok(resp, "创建 Internet Gateway")
         ig = resp.json()
+        ig_id_tmp = ig.get("id", "")
+        if not ig_id_tmp:
+            raise HTTPException(status_code=400, detail="创建 Internet Gateway 后未返回 OCID")
+        # 等 IG 到 AVAILABLE 再继续，避免路由表引用未就绪的 IG 导致错误状态
+        ig = await _wait_ig_available(client, comp, vcn_id, ig_id_tmp)
         created["ig"] = True
     ig_id = ig.get("id", "")
 
