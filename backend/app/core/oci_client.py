@@ -505,6 +505,35 @@ class OciClient:
         不调 get_subscription（list 结果直接有 plan_type）。
         失败返回 None 不抛异常。
         """
+        # 先试 raw HTTP（老版本 /20190111/subscriptions，用 subscriptionTier）
+        # SDK 500 时可能 raw 能通
+        try:
+            hr = self.region
+            try:
+                hr = await self.get_tenancy_home_region() or self.region
+            except Exception:
+                pass
+            path = ("/20190111/subscriptions"
+                    f"?compartmentId={self.tenancy_ocid}&ospHomeRegion={hr}")
+            url = f"https://osp-gateway.{hr}.oraclecloud.com{path}"
+            headers = self._sign_headers("GET", url, None)
+            resp = await self._client.request("GET", url, headers=headers)
+            if resp.status_code == 200:
+                items = resp.json()
+                if isinstance(items, dict):
+                    items = items.get("items", [])
+                if items:
+                    tier = str(items[0].get("subscriptionTier", "")).upper()
+                    logger.info("订阅查询(raw)：tenancy=%s tier=%s", self.tenancy_ocid[-6:], tier)
+                    if tier in ("ALWAYS_FREE", "FREE"):
+                        return "FREE_TIER"
+                    if tier == "PAID":
+                        return "PAYG"
+            else:
+                logger.warning("订阅查询(raw) HTTP %s", resp.status_code)
+        except Exception as e:
+            logger.warning("订阅查询(raw)异常：%s", str(e)[:100])
+        # raw 不行，走 SDK（10-08 版）
         try:
             import oci
             # 1. 找 home region（Identity 接口）
