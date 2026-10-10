@@ -381,6 +381,14 @@ async def _dispatch_callback(cq):
         elif data.startswith("task_detail:"):
             await _answer_callback(cq_id)
             await _handle_task_detail(chat_id, data[12:])
+        elif data.startswith("inst_detail:"):
+            await _answer_callback(cq_id)
+            await _handle_inst_detail(chat_id, msg_id, data[12:])
+        elif data.startswith("inst_act:"):
+            await _answer_callback(cq_id)
+            parts = data[9:].split(":", 1)
+            if len(parts) == 2:
+                await _handle_inst_act(chat_id, msg_id, parts[0], parts[1])
         else:
             await _answer_callback(cq_id, "未知按钮")
     except Exception:
@@ -403,7 +411,12 @@ async def _handle_menu(chat_id, menu, msg_id=None):
         elif menu == "new_account":
             await _wiz_start_new_account(chat_id)
         elif menu == "main":
-            await _send(chat_id, "🤖 OCI 面板控制\n点击按钮操作，也可直接发送文本命令：", reply_markup=_menu_kb())
+            text = "🤖 OCI 面板控制\n点击按钮操作，也可直接发送文本命令："
+            kb = _menu_kb()
+            if msg_id:
+                await _edit(chat_id, msg_id, text, reply_markup=kb)
+            else:
+                await _send(chat_id, text, reply_markup=kb)
         else:
             await _send(chat_id, "未知菜单")
     except Exception as e:
@@ -527,6 +540,66 @@ async def _handle_task_detail(chat_id, task_id):
         await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
     finally:
         db.close()
+
+
+async def _handle_inst_detail(chat_id, msg_id, instance_id):
+    """实例按钮点击：显示实例详情+操作按钮。"""
+    db = SessionLocal()
+    try:
+        accounts = db.query(Account).order_by(Account.id).all()
+        items, errors = await instance_service.fetch_all_instances(accounts)
+    finally:
+        db.close()
+    inst = next((i for i in items if i.get("instance_id") == instance_id), None)
+    if not inst:
+        text = "实例不存在或已删除"
+        kb = _back_kb()
+    else:
+        text = (
+            f"💻 {inst.get('display_name')}\n"
+            f"账号：{inst.get('account_name')}\n"
+            f"区域：{inst.get('region')}\n"
+            f"状态：{inst.get('lifecycle_state')}\n"
+            f"Shape：{inst.get('shape')}\n"
+            f"公网 IP：{inst.get('public_ip') or '无'}\n"
+            f"私网 IP：{inst.get('private_ip') or '无'}"
+        )
+        kb = _kb([
+            [("⏻ 关机", f"inst_act:off:{instance_id}"), ("▶ 开机", f"inst_act:on:{instance_id}")],
+            [("🔄 重启", f"inst_act:reboot:{instance_id}"), ("🌐 换IP", f"inst_act:reip:{instance_id}")],
+            [("🏠 主菜单", "menu:main")],
+        ])
+    if msg_id:
+        await _edit(chat_id, msg_id, text, reply_markup=kb)
+    else:
+        await _send(chat_id, text, reply_markup=kb)
+
+
+async def _handle_inst_act(chat_id, msg_id, action, instance_id):
+    """实例操作按钮：关机/开机/重启/换IP，需要二次确认。"""
+    # 先找到实例名用于显示
+    db = SessionLocal()
+    try:
+        accounts = db.query(Account).order_by(Account.id).all()
+        items, _ = await instance_service.fetch_all_instances(accounts)
+    finally:
+        db.close()
+    inst = next((i for i in items if i.get("instance_id") == instance_id), None)
+    name = inst.get("display_name") if inst else instance_id
+    action_text = {"off": "关机", "on": "开机", "reboot": "重启", "reip": "换IP"}.get(action, action)
+    # 登记待确认操作
+    _pending[chat_id] = {
+        "action": f"inst_{action}",
+        "params": {"instance_id": instance_id, "name": name, "act": action},
+        "msg_id": msg_id,
+        "expires": time.time() + _CONFIRM_TTL,
+    }
+    text = f"⚠️ 确认对实例 {name} 执行【{action_text}】？"
+    kb = _confirm_kb()
+    if msg_id:
+        await _edit(chat_id, msg_id, text, reply_markup=kb)
+    else:
+        await _send(chat_id, text, reply_markup=kb)
 
 
 async def _handle_wizard_input(chat_id, text):
@@ -786,21 +859,27 @@ async def cmd_instances(chat_id, args, msg_id=None):
     finally:
         db.close()
     if not items:
-        await _send(chat_id, "没有实例" + ("（账号 %s）" % keyword if keyword else ""))
+        text = "没有实例" + ("（账号 %s）" % keyword if keyword else "")
+        if msg_id:
+            await _edit(chat_id, msg_id, text, reply_markup=_back_kb())
+        else:
+            await _send(chat_id, text, reply_markup=_back_kb())
         return
-    lines = ["💻 实例列表"]
+    kb_rows = []
     for i in items[:30]:
-        lines.append(_fmt_instance(i))
-    if len(items) > 30:
-        lines.append("…还有 %d 台未显示" % (len(items) - 30))
-    if errors:
-        lines.append("⚠️ %d 个账号查询失败" % len(errors))
-    text = "\n".join(lines)
-    kb = _back_kb()
+        state = i.get("lifecycle_state") or "-"
+        ip = i.get("public_ip") or "无公网IP"
+        label = f"💻 {i.get('display_name')}｜{state}｜{ip}"
+        # 用 instance_id 做 callback（限制长度）
+        kb_rows.append([(label, f"inst_detail:{i.get('instance_id')}")])
+    kb_rows.append([("🏠 主菜单", "menu:main")])
+    text = "💻 实例列表\n点击查看详情："
+    kb = _kb(kb_rows)
     if msg_id:
         await _edit(chat_id, msg_id, text, reply_markup=kb)
     else:
         await _send(chat_id, text, reply_markup=kb)
+    return
 
 
 async def cmd_tasks(chat_id, args, msg_id=None):
@@ -1445,9 +1524,43 @@ async def _set_bot_commands():
         logger.warning("TG setMyCommands 异常：%s", e)
 
 # 二次确认后执行的动作
+async def _exec_inst_action(chat_id, params):
+    """实例按钮的电源操作（通过 instance_id 查 account_id）。"""
+    from app.workers.batch_tasks import ACTION_MAP, SUCCESS_CODES
+    instance_id = params["instance_id"]
+    name = params["name"]
+    act = params["act"]  # off/on/reboot/reip
+    db = SessionLocal()
+    try:
+        accounts = db.query(Account).order_by(Account.id).all()
+        items, _ = await instance_service.fetch_all_instances(accounts)
+    finally:
+        db.close()
+    inst = next((i for i in items if i.get("instance_id") == instance_id), None)
+    if not inst:
+        await _send(chat_id, "实例不存在或已删除")
+        return
+    account_id = inst.get("account_id")
+    if act == "reip":
+        # 换IP走现有流程
+        await _send(chat_id, "换IP请使用 /换IP 命令或面板操作")
+        return
+    action_map = {"off": "power_off", "on": "power_on", "reboot": "reboot"}
+    await _exec_power(chat_id, {
+        "account_id": account_id,
+        "instance_id": instance_id,
+        "display_name": name,
+        "action": action_map[act],
+    })
+
+
 _CONFIRM_ACTIONS = {
     "snipe_create": _exec_snipe_create,
     "power": _exec_power,
     "change_ip": _exec_change_ip,
     "new_account": _exec_new_account,
+    "inst_off": _exec_inst_action,
+    "inst_on": _exec_inst_action,
+    "inst_reboot": _exec_inst_action,
+    "inst_reip": _exec_inst_action,
 }
