@@ -497,100 +497,38 @@ class OciClient:
         return False
 
     async def get_subscription_plan_type(self) -> "str | None":
-        """查订阅 plan_type（10-08 验证成功版，直接搬 OCI-Noah read_subscription_metadata）。
+        """查订阅 plan_type（照搬 OCI-Noah，用官方 oci SDK）。
 
-        流程：Identity list_region_subscriptions 找 home region →
-        OSP SubscriptionServiceClient.list_subscriptions →
-        按 PAYG=30 > FREE_TIER=20 取最高分订阅的 plan_type。
-        不调 get_subscription（list 结果直接有 plan_type）。
-        失败返回 None 不抛异常。
+        SubscriptionServiceClient.list_subscriptions，走账号代理，
+        取评分最高的订阅（PAYG=30 > FREE_TIER=20 > UNKNOWN=10）的 plan_type。
+        返回 "PAYG" / "FREE_TIER" / None。失败返回 None 不抛异常。
         """
-        # 先试 raw HTTP（老版本 /20190111/subscriptions，用 subscriptionTier）
-        # endpoint 固定 us-ashburn-1（us-sanjose-1 无网关），参数传真实 home region
-        try:
-            hr = self.region
-            try:
-                hr = await self.get_tenancy_home_region() or self.region
-            except Exception:
-                pass
-            path = ("/20190111/subscriptions"
-                    f"?compartmentId={self.tenancy_ocid}&ospHomeRegion={hr}")
-            url = f"https://osp-gateway.us-ashburn-1.oraclecloud.com{path}"
-            headers = self._sign_headers("GET", url, None)
-            resp = await self._client.request("GET", url, headers=headers)
-            if resp.status_code == 200:
-                items = resp.json()
-                if isinstance(items, dict):
-                    items = items.get("items", [])
-                if items:
-                    tier = str(items[0].get("subscriptionTier", "")).upper()
-                    logger.info("订阅查询(raw)：tenancy=%s tier=%s", self.tenancy_ocid[-6:], tier)
-                    if tier in ("ALWAYS_FREE", "FREE"):
-                        return "FREE_TIER"
-                    if tier == "PAID":
-                        return "PAYG"
-            else:
-                logger.warning("订阅查询(raw) HTTP %s", resp.status_code)
-        except Exception as e:
-            logger.warning("订阅查询(raw)异常：%s", str(e)[:100])
-        # raw 不行，走 SDK（10-08 版）
         try:
             import oci
-            # 1. 找 home region（Identity 接口）
-            home_region_name = self.region
-            try:
-                id_cfg = {
-                    "tenancy": self.tenancy_ocid,
-                    "user": self.user_ocid,
-                    "fingerprint": self.fingerprint,
-                    "key_content": self._private_key_pem,
-                    "region": self.region,
-                }
-                id_client = oci.identity.IdentityClient(
-                    id_cfg, retry_strategy=oci.retry.NoneRetryStrategy())
-                if self._proxy_url:
-                    id_client.base_client.session.proxies = {
-                        "http": self._proxy_url, "https": self._proxy_url}
-                rs = id_client.list_region_subscriptions(
-                    self.tenancy_ocid,
-                    retry_strategy=oci.retry.NoneRetryStrategy()).data
-                for r in rs or []:
-                    if getattr(r, "is_home_region", False):
-                        home_region_name = r.region_name
-                        break
-            except Exception as e:
-                logger.warning("查 home region 失败，用 %s：%s", self.region, str(e)[:100])
-            # 2. OSP 查订阅列表
-            # 注意：osp-gateway 不是每个区都有 endpoint（如 us-sanjose-1 解析失败），
-            # client 用 us-ashburn-1（必有网关），osp_home_region 参数传真实 home region
             osp_config = {
                 "tenancy": self.tenancy_ocid,
                 "user": self.user_ocid,
                 "fingerprint": self.fingerprint,
                 "key_content": self._private_key_pem,
-                "region": "us-ashburn-1",
+                "region": self.region,
             }
             client = oci.osp_gateway.SubscriptionServiceClient(
-                osp_config, timeout=(10, 30))
-            # 强制 endpoint（防止 SDK 按 region 拼出不存在的域名）
-            try:
-                client.base_client.endpoint = "https://osp-gateway.us-ashburn-1.oraclecloud.com"
-            except Exception:
-                pass
+                osp_config, timeout=(10, 30)
+            )
             if self._proxy_url:
                 client.base_client.session.proxies = {
-                    "http": self._proxy_url, "https": self._proxy_url}
+                    "http": self._proxy_url,
+                    "https": self._proxy_url,
+                }
             resp = client.list_subscriptions(
-                osp_home_region=home_region_name,
+                osp_home_region=self.region,
                 compartment_id=self.tenancy_ocid,
                 limit=100,
                 retry_strategy=oci.retry.NoneRetryStrategy(),
             )
             items = list(getattr(resp.data, "items", None) or [])
             if not items:
-                logger.warning("订阅查询：items 为空，tenancy=%s", self.tenancy_ocid[-6:])
                 return None
-            # 3. 按评分取最高（PAYG=30 > FREE_TIER=20 > 其他=10）
             def _score(s) -> int:
                 pt = str(getattr(s, "plan_type", "") or "").upper()
                 us = str(getattr(s, "upgrade_state", "") or "").upper()
@@ -600,15 +538,10 @@ class OciClient:
                     return 20
                 return 10
             best = max(items, key=_score)
-            pt = getattr(best, "plan_type", None)
-            if pt is not None and not isinstance(pt, str):
-                pt = str(pt).split(".")[-1]
-            logger.info("订阅查询：tenancy=%s plan_type=%s（共 %d 个订阅）",
-                        self.tenancy_ocid[-6:], pt, len(items))
-            return pt
-        except Exception as e:
-            logger.warning("订阅查询异常：%s", str(e)[:200])
+            return getattr(best, "plan_type", None)
+        except Exception:
             return None
+
     @staticmethod
     def classify_account_type(plan_type: "str | None", upgrade_state: "str | None" = None) -> str:
         """搬用 OCI-Noah 的 classify_account_type。
@@ -651,13 +584,18 @@ class OciClient:
                 result["registered_at"] = self._parse_ocid_time(comp.get("timeCreated"))
 
             # 账号类型：osp-gateway 订阅 plan_type 优先（搬用 OCI-Noah）
-            # 只有 plan_type 明确返回 PAYG/FREE_TIER 才采信；接口失败时不猜，
-            # 避免 shapes fallback 把免费号误判为升级号（2026-10-07/10-10 均出现过）
             plan_type = await self.get_subscription_plan_type()
             classified = self.classify_account_type(plan_type)
             if classified in ("upgraded", "free"):
                 result["account_type"] = classified
-            # else: 保持 None，不覆盖已有值
+            else:
+                # 回退：ListShapes 查大内存 AMD
+                shapes = await self.list_shapes(self.tenancy_ocid)
+                can_amd = self._can_create_large_amd(shapes)
+                result["account_type"] = "upgraded" if can_amd else "free"
+
+            logger.info("账号信息识别：type=%s plan_type=%s, registered_at=%s",
+                        result["account_type"], plan_type, result["registered_at"])
 
             logger.info("账号信息识别：type=%s plan_type=%s, registered_at=%s",
                         result["account_type"], plan_type, result["registered_at"])
