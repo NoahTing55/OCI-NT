@@ -466,7 +466,7 @@ async def _handle_snipe_acc_pick(chat_id, account_id):
         db.close()
 
     # 免费号：直接用主区域，跳过选择
-    if atype == "FREE_TIER":
+    if atype == "free":
         wiz["data"]["region"] = home_region
         wiz["step"] = "count"
         await _send(chat_id,
@@ -827,7 +827,7 @@ async def cmd_accounts(chat_id, args, msg_id=None):
             return
         kb_rows = []
         for a in accounts:
-            atype = {"PAYG": "升级号", "FREE_TIER": "免费号"}.get(
+            atype = {"upgraded": "升级号", "free": "免费号", "unknown": "未知"}.get(
                 a.account_type or "", a.account_type or "未知")
             label = f"☁️ {a.name}｜{atype}｜存活{_alive_days(a)}天"
             kb_rows.append([(label, f"acc_detail:{a.id}")])
@@ -1443,7 +1443,7 @@ async def _exec_new_account(chat_id, params):
         log_operation(db, "account.create", account_id=account.id,
                       detail="TG Bot 新建账号「%s」" % params["alias"],
                       operator="telegram")
-        atype = {"PAYG": "升级号", "FREE_TIER": "免费号"}.get(
+        atype = {"upgraded": "升级号", "free": "免费号"}.get(
             account.account_type or "", "")
         extra = "｜" + atype if atype else ""
         await _send(chat_id,
