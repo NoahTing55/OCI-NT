@@ -72,6 +72,26 @@ def _tg_chat_id():
     return str(get_setting("TG_CHAT_ID") or "").strip()
 
 
+async def _edit(chat_id, msg_id, text, reply_markup=None):
+    """编辑已有消息（按钮点击后原地更新，不弹新消息）。"""
+    token = _tg_token()
+    if not token:
+        return False
+    try:
+        payload = {"chat_id": chat_id, "message_id": msg_id, "text": text}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            r = await client.post(
+                "https://api.telegram.org/bot%s/editMessageText" % token,
+                json=payload,
+            )
+            return r.status_code == 200
+    except Exception:
+        logger.exception("TG editMessage 失败")
+        return False
+
+
 async def _send(chat_id, text, reply_markup=None):
     """给指定 chat 发消息（Bot 控制专用，不经过通知渠道的 chat_id）。
 
@@ -348,7 +368,7 @@ async def _dispatch_callback(cq):
         elif data.startswith("menu:"):
             _pending.pop(chat_id, None)
             await _answer_callback(cq_id)
-            await _handle_menu(chat_id, data[5:])
+            await _handle_menu(chat_id, data[5:], msg_id)
         elif data.startswith("region:"):
             await _answer_callback(cq_id)
             await _handle_region_pick(chat_id, data[7:])
@@ -367,17 +387,17 @@ async def _dispatch_callback(cq):
         logger.exception("处理 TG 回调异常")
 
 
-async def _handle_menu(chat_id, menu):
-    """主菜单按钮分发。"""
+async def _handle_menu(chat_id, menu, msg_id=None):
+    """主菜单按钮分发。msg_id 不为空时原地编辑消息。"""
     try:
         if menu == "status":
             await cmd_status(chat_id, [])
         elif menu == "accounts":
-            await cmd_accounts(chat_id, [])
+            await cmd_accounts(chat_id, [], msg_id)
         elif menu == "instances":
-            await cmd_instances(chat_id, [])
+            await cmd_instances(chat_id, [], msg_id)
         elif menu == "tasks":
-            await cmd_tasks(chat_id, [])
+            await cmd_tasks(chat_id, [], msg_id)
         elif menu == "snipe":
             await _wiz_start_snipe(chat_id)
         elif menu == "new_account":
@@ -716,10 +736,16 @@ async def cmd_status(chat_id, args):
     ]
     if errors:
         lines.append("⚠️ %d 个账号实例查询失败" % len(errors))
-    await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
+    kb = _kb([
+        [("📊 账号：%d 个" % account_count, "menu:accounts")],
+        [("💻 实例：%d 台（运行中 %d 台）" % (len(items), running), "menu:instances")],
+        [("🎯 抢机任务（进行中）：%d 个" % running_tasks, "menu:tasks")],
+        [("🏠 主菜单", "menu:main")],
+    ])
+    await _send(chat_id, "📊 面板状态", reply_markup=kb)
 
 
-async def cmd_accounts(chat_id, args):
+async def cmd_accounts(chat_id, args, msg_id=None):
     db = SessionLocal()
     try:
         accounts = db.query(Account).order_by(Account.id).all()
@@ -733,12 +759,17 @@ async def cmd_accounts(chat_id, args):
             label = f"☁️ {a.name}｜{atype}｜存活{_alive_days(a)}天"
             kb_rows.append([(label, f"acc_detail:{a.id}")])
         kb_rows.append([("🏠 主菜单", "menu:main")])
-        await _send(chat_id, "👤 账号列表\n点击查看实例：", reply_markup=_kb(kb_rows))
+        text = "👤 账号列表\n点击查看实例："
+        kb = _kb(kb_rows)
+        if msg_id:
+            await _edit(chat_id, msg_id, text, reply_markup=kb)
+        else:
+            await _send(chat_id, text, reply_markup=kb)
     finally:
         db.close()
 
 
-async def cmd_instances(chat_id, args):
+async def cmd_instances(chat_id, args, msg_id=None):
     keyword = args[0] if args else ""
     db = SessionLocal()
     try:
@@ -764,10 +795,15 @@ async def cmd_instances(chat_id, args):
         lines.append("…还有 %d 台未显示" % (len(items) - 30))
     if errors:
         lines.append("⚠️ %d 个账号查询失败" % len(errors))
-    await _send(chat_id, "\n".join(lines), reply_markup=_back_kb())
+    text = "\n".join(lines)
+    kb = _back_kb()
+    if msg_id:
+        await _edit(chat_id, msg_id, text, reply_markup=kb)
+    else:
+        await _send(chat_id, text, reply_markup=kb)
 
 
-async def cmd_tasks(chat_id, args):
+async def cmd_tasks(chat_id, args, msg_id=None):
     from app.api.sniper import STATUS_TEXT
     db = SessionLocal()
     try:
@@ -783,7 +819,12 @@ async def cmd_tasks(chat_id, args):
             label = f"🎯 #{t.id} {aname} {st} {t.success_count}/{t.target_count}"
             kb_rows.append([(label, f"task_detail:{t.id}")])
         kb_rows.append([("🏠 主菜单", "menu:main")])
-        await _send(chat_id, "🎯 抢机任务（最近 10 个）\n点击查看详情：", reply_markup=_kb(kb_rows))
+        text = "🎯 抢机任务（最近 10 个）\n点击查看详情："
+        kb = _kb(kb_rows)
+        if msg_id:
+            await _edit(chat_id, msg_id, text, reply_markup=kb)
+        else:
+            await _send(chat_id, text, reply_markup=kb)
     finally:
         db.close()
 
