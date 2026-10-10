@@ -17,7 +17,6 @@ from app.core.deps import SessionLocal, engine, get_current_operator
 from app.core.migrations import run_db_migrations
 from app.core.security import hash_password
 from app.models.models import Base, Operator
-from app.services import tg_bot
 from app.workers.scheduler import start_scheduler
 from app.workers.sniper import sniper_manager
 
@@ -54,9 +53,7 @@ async def lifespan(app: FastAPI):
     _seed_admin()
     start_scheduler()
     await sniper_manager.start()
-    await tg_bot.start()
     yield
-    await tg_bot.stop()
     await sniper_manager.stop()
     logger.info("服务关闭")
 
