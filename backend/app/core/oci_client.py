@@ -590,15 +590,13 @@ class OciClient:
                 result["registered_at"] = self._parse_ocid_time(comp.get("timeCreated"))
 
             # 账号类型：osp-gateway 订阅 plan_type 优先（搬用 OCI-Noah）
+            # 只有 plan_type 明确返回 PAYG/FREE_TIER 才采信；接口失败时不猜，
+            # 避免 shapes fallback 把免费号误判为升级号（2026-10-07/10-10 均出现过）
             plan_type = await self.get_subscription_plan_type()
             classified = self.classify_account_type(plan_type)
             if classified in ("upgraded", "free"):
                 result["account_type"] = classified
-            else:
-                # 回退：ListShapes 查大内存 AMD
-                shapes = await self.list_shapes(self.tenancy_ocid)
-                can_amd = self._can_create_large_amd(shapes)
-                result["account_type"] = "upgraded" if can_amd else "free"
+            # else: 保持 None，不覆盖已有值
 
             logger.info("账号信息识别：type=%s plan_type=%s, registered_at=%s",
                         result["account_type"], plan_type, result["registered_at"])
