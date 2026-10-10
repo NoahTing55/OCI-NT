@@ -497,55 +497,55 @@ class OciClient:
         return False
 
     async def get_subscription_plan_type(self) -> "str | None":
-        """查订阅 plan_type（照搬 OCI-Noah，用官方 oci SDK）。
+        """查订阅 plan_type（10-08 验证成功版，直接搬 OCI-Noah read_subscription_metadata）。
 
-        SubscriptionServiceClient.list_subscriptions，走账号代理，
-        取评分最高的订阅（PAYG=30 > FREE_TIER=20 > UNKNOWN=10）的 plan_type。
-        返回 "PAYG" / "FREE_TIER" / None。失败返回 None 不抛异常。
+        流程：Identity list_region_subscriptions 找 home region →
+        OSP SubscriptionServiceClient.list_subscriptions →
+        按 PAYG=30 > FREE_TIER=20 取最高分订阅的 plan_type。
+        不调 get_subscription（list 结果直接有 plan_type）。
+        失败返回 None 不抛异常。
         """
         try:
             import oci
-            osp_config = {
-                "tenancy": self.tenancy_ocid,
-                "user": self.user_ocid,
-                "fingerprint": self.fingerprint,
-                "key_content": self._private_key_pem,
-                "region": self.region,
-            }
-            client = oci.osp_gateway.SubscriptionServiceClient(
-                osp_config, timeout=(10, 30)
-            )
-            if self._proxy_url:
-                client.base_client.session.proxies = {
-                    "http": self._proxy_url,
-                    "https": self._proxy_url,
-                }
-            # 按 OCI-Start 方式：先查 regionSubscriptions 找 home region，
-            # 再用 home region 调订阅接口（OciGateWayUtils.getAccountTypeInfo）
-            home_region = self.region
+            # 1. 找 home region（Identity 接口）
+            home_region_name = self.region
             try:
-                import oci as _oci
-                id_client = _oci.identity.IdentityClient(
-                    {"tenancy": self.tenancy_ocid, "user": self.user_ocid,
-                     "fingerprint": self.fingerprint, "key_content": self._private_key_pem,
-                     "region": self.region},
-                    retry_strategy=_oci.retry.NoneRetryStrategy(),
-                )
+                id_cfg = {
+                    "tenancy": self.tenancy_ocid,
+                    "user": self.user_ocid,
+                    "fingerprint": self.fingerprint,
+                    "key_content": self._private_key_pem,
+                    "region": self.region,
+                }
+                id_client = oci.identity.IdentityClient(
+                    id_cfg, retry_strategy=oci.retry.NoneRetryStrategy())
                 if self._proxy_url:
                     id_client.base_client.session.proxies = {
                         "http": self._proxy_url, "https": self._proxy_url}
                 rs = id_client.list_region_subscriptions(
                     self.tenancy_ocid,
-                    retry_strategy=_oci.retry.NoneRetryStrategy()).data
+                    retry_strategy=oci.retry.NoneRetryStrategy()).data
                 for r in rs or []:
                     if getattr(r, "is_home_region", False):
-                        home_region = r.region_name
+                        home_region_name = r.region_name
                         break
             except Exception as e:
-                logger.warning("查 home region 失败，用账号区域 %s：%s", self.region, str(e)[:100])
-            logger.info("订阅查询：tenancy=%s home_region=%s", self.tenancy_ocid[-6:], home_region)
+                logger.warning("查 home region 失败，用 %s：%s", self.region, str(e)[:100])
+            # 2. OSP 查订阅列表
+            osp_config = {
+                "tenancy": self.tenancy_ocid,
+                "user": self.user_ocid,
+                "fingerprint": self.fingerprint,
+                "key_content": self._private_key_pem,
+                "region": home_region_name,
+            }
+            client = oci.osp_gateway.SubscriptionServiceClient(
+                osp_config, timeout=(10, 30))
+            if self._proxy_url:
+                client.base_client.session.proxies = {
+                    "http": self._proxy_url, "https": self._proxy_url}
             resp = client.list_subscriptions(
-                osp_home_region=home_region,
+                osp_home_region=home_region_name,
                 compartment_id=self.tenancy_ocid,
                 limit=100,
                 retry_strategy=oci.retry.NoneRetryStrategy(),
@@ -554,47 +554,25 @@ class OciClient:
             if not items:
                 logger.warning("订阅查询：items 为空，tenancy=%s", self.tenancy_ocid[-6:])
                 return None
-            # 取第一个订阅的 ID，调 get_subscription 取完整信息
-            # （list 返回的是 Summary，可能没有 planType）
-            # 逐个订阅取详情，打全日志，按评分取最高者（PAYG=30 > FREE_TIER=20）
-            best_pt, best_score = None, -1
-            for item in items:
-                sub_id = getattr(item, "id", None)
-                if not sub_id:
-                    continue
-                try:
-                    detail_resp = client.get_subscription(
-                        subscription_id=sub_id,
-                        compartment_id=self.tenancy_ocid,
-                        osp_home_region=home_region,
-                        retry_strategy=oci.retry.NoneRetryStrategy(),
-                    )
-                except Exception as e:
-                    logger.warning("订阅详情查询失败 ..%s：%s", sub_id[-8:], str(e)[:100])
-                    continue
-                sub = detail_resp.data
-                pt = getattr(sub, "plan_type", None)
-                if pt is not None and not isinstance(pt, str):
-                    pt = str(pt).split(".")[-1]
-                us = getattr(sub, "upgrade_state", None)
-                if us is not None and not isinstance(us, str):
-                    us = str(us).split(".")[-1]
-                st = getattr(sub, "status", None)
-                if st is not None and not isinstance(st, str):
-                    st = str(st).split(".")[-1]
-                logger.info("订阅明细：tenancy=%s id=..%s plan_type=%s upgrade_state=%s status=%s",
-                            self.tenancy_ocid[-6:], sub_id[-8:], pt, us, st)
-                score = (30 if (str(pt).upper() == "PAYG" or str(us).upper() == "UPGRADED")
-                         else 20 if str(pt).upper() == "FREE_TIER" else 10)
-                if score > best_score:
-                    best_score, best_pt = score, pt
-            logger.info("订阅查询结论：tenancy=%s plan_type=%s（共 %d 个订阅）",
-                        self.tenancy_ocid[-6:], best_pt, len(items))
-            return best_pt
+            # 3. 按评分取最高（PAYG=30 > FREE_TIER=20 > 其他=10）
+            def _score(s) -> int:
+                pt = str(getattr(s, "plan_type", "") or "").upper()
+                us = str(getattr(s, "upgrade_state", "") or "").upper()
+                if pt == "PAYG" or us == "UPGRADED":
+                    return 30
+                if pt == "FREE_TIER":
+                    return 20
+                return 10
+            best = max(items, key=_score)
+            pt = getattr(best, "plan_type", None)
+            if pt is not None and not isinstance(pt, str):
+                pt = str(pt).split(".")[-1]
+            logger.info("订阅查询：tenancy=%s plan_type=%s（共 %d 个订阅）",
+                        self.tenancy_ocid[-6:], pt, len(items))
+            return pt
         except Exception as e:
             logger.warning("订阅查询异常：%s", str(e)[:200])
             return None
-
     @staticmethod
     def classify_account_type(plan_type: "str | None", upgrade_state: "str | None" = None) -> str:
         """搬用 OCI-Noah 的 classify_account_type。
