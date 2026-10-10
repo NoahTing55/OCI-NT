@@ -42,7 +42,7 @@ async def change_ip(request: Request, data: ChangeIpIn, db: Session = Depends(ge
         # 1. 主 VNIC 与旧公网 IP
         atts = await client.list_vnic_attachments(compartment, data.instance_id)
         if not atts:
-            raise HTTPException(status_code=400, detail="该实例没有 VNIC 附件")
+            raise HTTPException(status_code=400, detail="未找到该实例的 VNIC（实例可能未完全启动，或位于其他 compartment）")
         vnic_id = atts[0]["vnicId"]
         vnic = (await client.get_vnic(vnic_id)).json()
         old_public_ip = vnic.get("publicIp")
@@ -127,7 +127,7 @@ async def open_all_ports(request: Request, data: OpenPortsIn, db: Session = Depe
     # 查实例主 VNIC → 子网
     atts = await client.list_vnic_attachments(compartment, data.instance_id)
     if not atts:
-        raise HTTPException(status_code=400, detail="该实例没有 VNIC 附件")
+        raise HTTPException(status_code=400, detail="未找到该实例的 VNIC（实例可能未完全启动，或位于其他 compartment）")
     vnic = (await client.get_vnic(atts[0]["vnicId"])).json()
     subnet_id = vnic.get("subnetId")
     if not subnet_id:

@@ -22,11 +22,14 @@
           <el-checkbox v-model="ipForm.release_old">释放旧预留 IP</el-checkbox>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="changing" :disabled="!ipForm.instance_id" @click="submitChangeIp">
+          <el-button type="primary" :loading="changing" :disabled="!canChangeIp" @click="submitChangeIp">
             开始更换
           </el-button>
         </el-form-item>
       </el-form>
+      <el-alert v-if="ipForm.instance_id && !selectedInstanceHasIp" type="warning" :closable="false" style="margin-top: 8px">
+        该实例没有公网 IP，无法更换 IP。请先为实例分配公网 IP。
+      </el-alert>
       <div v-if="ipResult" style="font-size: 13px">
         旧 IP：{{ ipResult.old_ip }} → 新 IP：<b>{{ ipResult.new_ip }}</b>
         <span v-if="ipResult.released_old_public_ip_id">（已释放旧预留 IP）</span>
@@ -75,7 +78,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAccounts,
@@ -89,6 +92,11 @@ const accounts = ref([])
 // ---------- 换 IP ----------
 const ipForm = ref({ account_id: null, instance_id: '', release_old: true })
 const accountInstances = ref([])
+const selectedInstanceHasIp = computed(() => {
+  const inst = accountInstances.value.find(i => i.instance_id === ipForm.value.instance_id)
+  return !!(inst && inst.public_ip)
+})
+const canChangeIp = computed(() => !!(ipForm.value.instance_id && selectedInstanceHasIp.value))
 const changing = ref(false)
 const ipResult = ref(null)
 
