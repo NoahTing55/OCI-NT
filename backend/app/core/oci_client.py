@@ -528,6 +528,7 @@ class OciClient:
             )
             items = list(getattr(resp.data, "items", None) or [])
             if not items:
+                logger.warning("订阅查询：items 为空，tenancy=%s", self.tenancy_ocid[-6:])
                 return None
             def _score(s) -> int:
                 pt = str(getattr(s, "plan_type", "") or "").upper()
@@ -538,8 +539,13 @@ class OciClient:
                     return 20
                 return 10
             best = max(items, key=_score)
-            return getattr(best, "plan_type", None)
-        except Exception:
+            pt = getattr(best, "plan_type", None)
+            us = getattr(best, "upgrade_state", None)
+            logger.info("订阅查询：tenancy=%s plan_type=%s upgrade_state=%s（共 %d 个订阅）",
+                        self.tenancy_ocid[-6:], pt, us, len(items))
+            return pt
+        except Exception as e:
+            logger.warning("订阅查询异常：%s", str(e)[:200])
             return None
 
     @staticmethod

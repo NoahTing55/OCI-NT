@@ -76,14 +76,12 @@
       <!-- 账号类型：免费/试用/升级/未知（对标 OCI-Start） -->
       <el-table-column label="账号类型" min-width="120" align="center">
         <template #default="{ row }">
-          <el-tooltip content="点击重新自动识别" placement="top">
-            <span @click="redetect(row)" style="cursor: pointer;">
-              <el-tag v-if="row.account_type === 'free' || row.account_type === 'trial'" type="success" size="small">个人免费账户</el-tag>
-              <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级账户</el-tag>
-              <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
-              <el-tag v-else type="info" size="small">未知</el-tag>
-            </span>
-          </el-tooltip>
+          <span @click="redetect(row)" style="cursor: pointer;">
+            <el-tag v-if="row.account_type === 'free' || row.account_type === 'trial'" type="success" size="small">个人免费账户</el-tag>
+            <el-tag v-else-if="row.account_type === 'upgraded'" type="primary" size="small">个人升级账户</el-tag>
+            <el-tag v-else-if="row.account_type === 'paid'" type="primary" size="small">付费</el-tag>
+            <el-tag v-else type="info" size="small">未知</el-tag>
+          </span>
         </template>
       </el-table-column>
       <!-- 实例数：点击跳转筛选 -->
@@ -97,8 +95,8 @@
           <el-tag :type="STATUS[row.status]?.[1] || ''" size="small">{{ STATUS[row.status]?.[0] || row.status }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" width="120" align="center">
-        <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+      <el-table-column label="注册时间" width="120" align="center">
+        <template #default="{ row }">{{ fmtDate(row.registered_at || row.created_at) }}</template>
       </el-table-column>
       <!-- 操作收进下拉菜单 -->
             <el-table-column label="实例操作" width="110" align="center">
