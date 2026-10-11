@@ -3,16 +3,16 @@
     <!-- 顶栏 -->
     <div class="syslog-topbar">
       <span class="syslog-title">>_ 系统日志</span>
+      <div class="syslog-tabs">
+        <span
+          v-for="l in logs"
+          :key="l.name"
+          class="syslog-tab"
+          :class="{ active: current === l.name }"
+          @click="switchLog(l.name)"
+        >{{ l.name }}</span>
+      </div>
       <span style="flex: 1"></span>
-      <el-select v-model="current" style="width: 130px; margin-right: 8px" @change="load" size="small">
-        <el-option v-for="l in logs" :key="l.name" :label="l.name" :value="l.name" :disabled="!l.exists" />
-      </el-select>
-      <el-select v-model="lineCount" style="width: 100px; margin-right: 8px" @change="load" size="small">
-        <el-option :value="100" label="100 行" />
-        <el-option :value="200" label="200 行" />
-        <el-option :value="500" label="500 行" />
-        <el-option :value="1000" label="1000 行" />
-      </el-select>
       <el-select v-model="levelFilter" style="width: 110px; margin-right: 8px" size="small" placeholder="级别">
         <el-option value="" label="全部" />
         <el-option value="DEBUG" label="Debug" />
@@ -55,7 +55,7 @@ import { listSystemLogs, getSystemLog } from '../api/client.js'
 const logs = ref([])
 const current = ref('api')
 const lines = ref([])
-const lineCount = ref(200)
+const lineCount = 500
 const loading = ref(false)
 const autoScroll = ref(true)
 const levelFilter = ref('')
@@ -116,6 +116,12 @@ async function fetchList() {
   }
 }
 
+function switchLog(name) {
+  if (current.value === name) return
+  current.value = name
+  load()
+}
+
 async function load() {
   loading.value = true
   try {
@@ -162,6 +168,25 @@ onUnmounted(() => {
   padding: 8px 12px;
   background: #161b22;
   border-bottom: 1px solid #00ff4133;
+}
+.syslog-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 16px;
+}
+.syslog-tab {
+  padding: 4px 16px;
+  font-size: 13px;
+  color: #8b949e;
+  cursor: pointer;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  font-family: "Courier New", monospace;
+}
+.syslog-tab.active {
+  color: #00ff41;
+  border-color: #00ff41;
+  background: #00ff4111;
 }
 .syslog-title {
   color: #00ff41;
