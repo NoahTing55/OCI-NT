@@ -108,6 +108,28 @@ class SnipeTask(Base):
     updated_at = Column(DateTime, default=_now, onupdate=_now)
 
     account = relationship("Account")
+    instances = relationship("SnipeInstance", back_populates="task", cascade="all, delete-orphan", order_by="SnipeInstance.sequence")
+
+
+class SnipeInstance(Base):
+    """抢机任务的实例级记录：每台实例一行，sequence 永远从 1 连续编号。
+
+    - 删除中间项后，后续实例 sequence 前移（API 层事务内完成）；
+    - root_password 按 instance_ocid 精确绑定，绝不错位；
+    - task.instance_ocid（逗号分隔）保留做兼容，不再作为主数据源。
+    """
+
+    __tablename__ = "snipe_instances"
+
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey("snipe_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    instance_ocid = Column(String(255), nullable=False, unique=True, index=True)
+    sequence = Column(Integer, nullable=False, default=1)  # 1..N 连续编号
+    root_password = Column(String(255), default="")  # 该实例的 root 密码（加密存储，与任务密码一致）
+    display_name = Column(String(128), default="")  # 实例显示名，如 "xxx-1"
+    created_at = Column(DateTime, default=_now)
+
+    task = relationship("SnipeTask", back_populates="instances")
 
 
 class SnipeLog(Base):
