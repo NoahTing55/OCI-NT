@@ -2,6 +2,7 @@
   <div>
     <el-button type="primary" @click="createVisible = true">新建代理</el-button>
     <el-button @click="batchVisible = true">批量导入</el-button>
+    <el-button @click="doTestAll" :loading="testing">代理检测</el-button>
 
     <el-table :data="proxies" v-loading="loading" style="margin-top: 12px" border>
       <el-table-column prop="name" label="名称" width="140" />
@@ -28,7 +29,7 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" title="新建代理" width="480px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" title="新建代理" width="480px">
       <el-form :model="form" label-width="90px">
         <el-form-item label="名称"><el-input v-model="form.name" placeholder="如 HK-住宅-01" /></el-form-item>
         <el-form-item label="类型">
@@ -50,7 +51,7 @@
     </el-dialog>
 
     <!-- 批量导入 -->
-    <el-dialog v-model="batchVisible" title="批量导入代理" width="640px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchVisible" title="批量导入代理" width="640px">
       <el-input v-model="batchText" type="textarea" :rows="8" placeholder="每行一个，支持：&#10;socks5://user:pass@host:port&#10;http://host:port&#10;host:port:user:pass&#10;host:port（默认 socks5）&#10;# 开头为注释，会跳过" />
       <div style="margin: 8px 0; font-size:12px;color:#909399">
         端口缺省：socks5→1080，http/https→8080；名称自动生成 proxy-1、proxy-2…
