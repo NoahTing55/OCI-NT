@@ -5,6 +5,7 @@
     <el-button @click="checkAll" :loading="checkingAll">全部存活检查</el-button>
     <el-button @click="loadSummary" :loading="summaryLoading">刷新摘要</el-button>
     <el-button type="warning" @click="openBatchSubscribe" :disabled="!selectedAccounts.length">批量订阅区域</el-button>
+    <el-input v-model="searchText" placeholder="搜索名称/租户名" clearable style="width: 220px; margin-left: 8px" />
 
     <!-- 账户摘要卡片 -->
     <div v-if="summary.length" class="summary-cards">
@@ -29,7 +30,7 @@
     </div>
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
-    <el-table ref="acctTableRef" :data="accounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table" @selection-change="onSelectionChange">
+    <el-table ref="acctTableRef" :data="pagedAccounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table" @selection-change="onSelectionChange">
       <!-- 多选列：批量订阅区域用 -->
       <el-table-column type="selection" width="45" align="center" />
       <!-- 🛡️ 代理绑定状态：点击快速配置代理 -->
@@ -62,7 +63,7 @@
         </template>
       </el-table-column>
       <!-- 存活天数徽标 -->
-      <el-table-column label="存活天数" width="90" align="center">
+      <el-table-column label="存活天数" width="90" align="center" sortable :sort-method="(a,b) => (a.survival_days||0)-(b.survival_days||0)">
         <template #default="{ row }"><el-tag size="small" class="days-chip">{{ aliveDays(row) }}</el-tag></template>
       </el-table-column>
       <!-- 开机任务状态 -->
@@ -124,7 +125,7 @@
     </el-table>
 
     <!-- 导入 API：Config + PEM 一次填完，单栏无分栏 -->
-    <el-dialog v-model="createVisible" title="导入 API" width="620px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" title="导入 API" width="620px">
       <!-- 步骤 1：OCI API 配置 -->
           <div class="import-step">
             <span class="step-num">1</span>
@@ -200,7 +201,7 @@
     </el-dialog>
 
     <!-- 批量导入账号：多份 config 一次导入 -->
-    <el-dialog v-model="batchImportVisible" title="批量导入账号" width="620px" class="batch-dialog">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchImportVisible" title="批量导入账号" width="620px" class="batch-dialog">
 
       <div v-for="(item, idx) in batchItems" :key="idx" class="batch-item">
         <div class="batch-item-head">
@@ -249,7 +250,7 @@
     </el-dialog>
 
     <!-- 编辑账号（别名/区域/备注，不涉及密钥） -->
-    <el-dialog v-model="editVisible" title="编辑账号" width="480px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑账号" width="480px">
       <el-form :model="editForm" label-width="80px">
         <el-form-item label="别名"><el-input v-model="editForm.name" placeholder="如 香港-01" /></el-form-item>
         <el-form-item label="区域">
@@ -270,7 +271,7 @@
     </el-dialog>
 
     <!-- 绑定代理 -->
-    <el-dialog v-model="bindVisible" title="绑定代理（一账号一代理）" width="420px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="bindVisible" title="绑定代理（一账号一代理）" width="420px">
       <el-select v-model="bindProxyId" placeholder="选择代理（清空=解绑）" clearable style="width:100%">
         <el-option v-for="p in proxies" :key="p.id" :value="p.id" :label="`${p.name}（${p.scheme}://${p.host}:${p.port}）`" />
       </el-select>
@@ -281,7 +282,7 @@
     </el-dialog>
 
     <!-- 区域订阅（仅升级账户） -->
-    <el-dialog v-model="regionsVisible" :title="`区域订阅 - ${regionsAccountName}`" width="520px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="regionsVisible" :title="`区域订阅 - ${regionsAccountName}`" width="520px">
       <div class="import-sub">已订阅区域</div>
       <div v-loading="regionsLoading" style="min-height: 40px; margin-bottom: 16px">
         <el-tag v-for="r in subscribedRegions" :key="r.region_name" style="margin: 0 8px 8px 0"
@@ -304,7 +305,7 @@
     </el-dialog>
 
     <!-- 批量订阅区域（扩区）：勾选多个账号，一键订阅同一个新区域 -->
-    <el-dialog v-model="batchSubVisible" title="批量订阅区域" width="560px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchSubVisible" title="批量订阅区域" width="560px">
       <div class="import-sub">将为以下 {{ selectedAccounts.length }} 个账号订阅新区域</div>
       <div style="margin-bottom: 16px">
         <el-tag v-for="a in selectedAccounts" :key="a.id" style="margin: 0 8px 8px 0">
@@ -373,6 +374,21 @@ const STATUS = {
 }
 
 const accounts = ref([])
+const searchText = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const filteredAccounts = computed(() => {
+  if (!searchText.value) return accounts.value
+  const kw = searchText.value.toLowerCase()
+  return accounts.value.filter(a =>
+    (a.name || '').toLowerCase().includes(kw) ||
+    (a.tenancy_name || '').toLowerCase().includes(kw)
+  )
+})
+const pagedAccounts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredAccounts.value.slice(start, start + pageSize.value)
+})
 const proxies = ref([])
 const loading = ref(false)
 const checkingAll = ref(false)
