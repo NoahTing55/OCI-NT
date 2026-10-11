@@ -101,19 +101,22 @@ async def terminal_ws(
     websocket: WebSocket,
     account_id: int,
     instance_id: str,
-    token: str = Query(...),
     display_name: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    # JWT 校验
+    await websocket.accept()
+    # JWT 校验：从首条 auth 消息取 token（不放 URL，避免泄露）
     try:
-        username = decode_access_token(token)
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+        obj = json.loads(raw)
+        if obj.get("type") != "auth" or not obj.get("token"):
+            raise ValueError("missing auth")
+        username = decode_access_token(obj["token"])
         if not username:
             raise ValueError("invalid")
     except Exception:
         await websocket.close(code=4401)
         return
-    await websocket.accept()
 
     account = db.get(Account, account_id)
     if not account:
