@@ -3,21 +3,11 @@
     <!-- 顶栏 -->
     <div class="syslog-topbar">
       <span class="syslog-title">>_ 系统日志</span>
-      <div class="syslog-tabs">
-        <span
-          class="syslog-tab"
-          :class="{ active: current === 'merged' }"
-          @click="switchLog('merged')"
-        >全部</span>
-        <span
-          v-for="l in logs"
-          :key="l.name"
-          class="syslog-tab"
-          :class="{ active: current === l.name }"
-          @click="switchLog(l.name)"
-        >{{ l.name }}</span>
-      </div>
       <span style="flex: 1"></span>
+      <el-select v-model="sourceFilter" style="width: 100px; margin-right: 8px" size="small" placeholder="来源" @change="load" clearable>
+        <el-option value="merged" label="全部" />
+        <el-option v-for="l in logs" :key="l.name" :label="l.name" :value="l.name" :disabled="!l.exists" />
+      </el-select>
       <el-select v-model="levelFilter" style="width: 110px; margin-right: 8px" size="small" placeholder="级别">
         <el-option value="" label="全部" />
         <el-option value="DEBUG" label="Debug" />
@@ -58,7 +48,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { listSystemLogs, getSystemLog, getMergedSystemLog } from '../api/client.js'
 
 const logs = ref([])
-const current = ref('merged')
+const sourceFilter = ref('merged')
 const lines = ref([])
 const lineCount = 500
 const loading = ref(false)
@@ -115,24 +105,18 @@ function tick() {
 async function fetchList() {
   const data = await listSystemLogs()
   logs.value = data
-  if (!logs.value.find(l => l.name === current.value)?.exists) {
+  if (sourceFilter.value !== 'merged' && !logs.value.find(l => l.name === sourceFilter.value)?.exists) {
     const first = logs.value.find(l => l.exists)
-    if (first) current.value = first.name
+    if (first) sourceFilter.value = first.name
   }
-}
-
-function switchLog(name) {
-  if (current.value === name) return
-  current.value = name
-  load()
 }
 
 async function load() {
   loading.value = true
   try {
-    const data = current.value === 'merged'
+    const data = sourceFilter.value === 'merged'
       ? await getMergedSystemLog(lineCount.value)
-      : await getSystemLog(current.value, lineCount.value)
+      : await getSystemLog(sourceFilter.value, lineCount.value)
     lines.value = data.lines || []
     scrollBottom()
   } catch (e) {
@@ -176,25 +160,6 @@ onUnmounted(() => {
   padding: 8px 12px;
   background: #161b22;
   border-bottom: 1px solid #00ff4133;
-}
-.syslog-tabs {
-  display: flex;
-  gap: 4px;
-  margin-left: 16px;
-}
-.syslog-tab {
-  padding: 4px 16px;
-  font-size: 13px;
-  color: #8b949e;
-  cursor: pointer;
-  border: 1px solid #30363d;
-  border-radius: 4px;
-  font-family: "Courier New", monospace;
-}
-.syslog-tab.active {
-  color: #00ff41;
-  border-color: #00ff41;
-  background: #00ff4111;
 }
 .syslog-title {
   color: #00ff41;
