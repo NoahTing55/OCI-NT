@@ -68,7 +68,7 @@
         </el-card>
 
         <!-- 新增/编辑对话框 -->
-        <el-dialog v-model="dlgVisible" :title="editing ? '编辑 DNS 记录' : '新增 DNS 记录'" width="520px">
+        <el-dialog :style="{ maxWidth: '92vw' }" v-model="dlgVisible" :title="editing ? '编辑 DNS 记录' : '新增 DNS 记录'" width="520px">
           <el-form :model="form" label-width="90px">
             <el-form-item label="类型">
               <el-select v-model="form.type" style="width: 100%">
@@ -113,7 +113,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-dialog v-model="tokenVisible" title="新增 CF Token" width="460px">
+          <el-dialog :style="{ maxWidth: '92vw' }" v-model="tokenVisible" title="新增 CF Token" width="460px">
             <el-form :model="tokenForm" label-width="80px">
               <el-form-item label="名称"><el-input v-model="tokenForm.name" placeholder="如 主域名Token" /></el-form-item>
               <el-form-item label="Token">
@@ -170,7 +170,7 @@
             巡检完成：{{ checkedCount }} 个绑定全部一致
           </div>
 
-          <el-dialog v-model="bindVisible" title="新增域名绑定" width="520px">
+          <el-dialog :style="{ maxWidth: '92vw' }" v-model="bindVisible" title="新增域名绑定" width="520px">
             <el-form :model="bindForm" label-width="100px">
               <el-form-item label="CF Token">
                 <el-select v-model="bindForm.cf_token_id" style="width: 100%">
