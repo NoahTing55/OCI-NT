@@ -273,20 +273,21 @@ class OciClient:
     # GET https://limits.{region}.oraclecloud.com/20181004/services/compute/limits/{limitName}
     #     ?compartmentId={tenancy_ocid}
     # 返回 ResourceAvailability：{"available": 余量, "used": 已用}
-    async def get_compute_quota(self, compartment_id: str, limit_name: str) -> dict:
+    async def get_compute_quota(self, compartment_id: str, limit_name: str, account_name: str = "") -> dict:
         """查 compute 服务某项配额。返回 {"available": int, "used": int}；失败返回 None 值，不抛异常。"""
+        prefix = f"账号「{account_name}」" if account_name else ""
         try:
             resp = await self.request(
                 "GET", "limits",
                 f"/20181004/services/compute/limits/{limit_name}?compartmentId={compartment_id}",
             )
             if resp.status_code != 200:
-                logger.debug("配额查询 %s 失败：HTTP %s", limit_name, resp.status_code)
+                logger.debug("%s配额查询 %s 失败：HTTP %s", prefix, limit_name, resp.status_code)
                 return {"available": None, "used": None}
             data = resp.json()
             return {"available": data.get("available"), "used": data.get("used")}
         except Exception as e:
-            logger.debug("配额查询 %s 异常：%s", limit_name, str(e)[:120])
+            logger.debug("%s配额查询 %s 异常：%s", prefix, limit_name, str(e)[:120])
             return {"available": None, "used": None}
 
     # ---------------- 一键建网（VCN / IG / 路由表 / 子网） ----------------

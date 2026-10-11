@@ -37,7 +37,7 @@ async def _fetch_quotas(account: Account) -> dict:
     try:
         compartment = account.tenancy_ocid
         results = await asyncio.gather(
-            *[client.get_compute_quota(compartment, name) for name in QUOTA_LIMITS.values()],
+            *[client.get_compute_quota(compartment, name, account.name) for name in QUOTA_LIMITS.values()],
             return_exceptions=True,
         )
         quotas = {}
