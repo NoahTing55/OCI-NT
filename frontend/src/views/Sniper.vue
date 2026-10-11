@@ -186,7 +186,27 @@
         <el-button style="margin-left: 8px" @click="loadLogs">刷新</el-button>
         <span style="margin-left: 8px; font-size: 12px; color: #909399">每 3 秒自动刷新</span>
       </div>
-      <div style="background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 12px; height: 70vh; overflow-y: auto; font-family: monospace; font-size: 12px">
+      <div style="margin-bottom: 12px">
+        <div style="font-weight: bold; margin-bottom: 6px">实例列表（{{ taskInstances.length }} 台）</div>
+        <el-table :data="taskInstances" size="small" border style="width: 100%" empty-text="暂无实例">
+          <el-table-column prop="sequence" label="#" width="50" />
+          <el-table-column prop="display_name" label="显示名" min-width="120" />
+          <el-table-column label="OCID" min-width="180">
+            <template #default="{ row }">
+              <span :title="row.ocid">{{ row.ocid.slice(0, 24) }}...</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="创建时间" width="150">
+            <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" @click="delInstance(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <div style="background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 12px; height: 50vh; overflow-y: auto; font-family: monospace; font-size: 12px">
         <div v-for="l in logs" :key="l.id" style="margin-bottom: 4px">
           <span style="color: #858585">{{ l.created_at }}</span>
           <span :style="{ color: levelColor(l.level), margin: '0 6px' }">[{{ l.level }}]</span>
@@ -228,6 +248,8 @@ import {
   deleteSnipeTask,
   getSnipeLogs,
   getSnipeTemplates,
+  getSnipeInstances,
+  removeSnipeInstance,
   getOciAvailabilityDomains,
   getOciImages,
   getOciSubnets,
@@ -662,11 +684,35 @@ const loadLogs = async () => {
   }
 }
 
+const taskInstances = ref([])
+
+const loadTaskInstances = async () => {
+  if (!logTask.value) return
+  try {
+    taskInstances.value = await getSnipeInstances(logTask.value.id)
+  } catch (e) {
+    taskInstances.value = []
+  }
+}
+
+const delInstance = async (row) => {
+  try {
+    await ElMessageBox.confirm(`从任务中移除实例 ${row.display_name || '#' + row.sequence}？序号会自动前移补齐。`, '确认', { type: 'warning' })
+    const r = await removeSnipeInstance(logTask.value.id, row.ocid)
+    ElMessage.success(r.message || '已移除')
+    await loadTaskInstances()
+    load()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('移除失败：' + (e.response?.data?.detail || e.message))
+  }
+}
+
 const openLogs = (row) => {
   logTask.value = row
   logLevel.value = ''
   logsVisible.value = true
   loadLogs()
+  loadTaskInstances()
   stopLogPoll()
   logTimer = setInterval(loadLogs, 3000)
 }
