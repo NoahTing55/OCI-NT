@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.models.models import Account, SnipeLog, SnipeTask
+from app.models.models import Account, SnipeInstance, SnipeLog, SnipeTask
 from app.schemas.schemas import SnipeLogOut, SnipeTaskBatchCreate, SnipeTaskCreate, SnipeTaskOut, SnipeTaskUpdate
 from app.workers.sniper import sniper_manager
 
@@ -274,38 +274,80 @@ def list_logs(task_id: int, level: str = "", page: int = 1, size: int = 100,
         ],
     }
 
-@router.post("/{task_id}/remove-instance")
-def remove_instance_from_task(task_id: int, data: dict, db: Session = Depends(get_db)):
-    """从任务实例列表中移除指定 OCID（实例已删除时调用）。
-    
-    自动补齐序号：删除中间项后，后续实例序号前移。
-    密码按任务存储，不受序号变化影响。
+def _remove_instance_from_task(db: Session, task_id: int, ocid: str) -> dict:
+    """从任务中移除指定实例（事务内完成序号重排）。
+
+    - 按 OCID 找到 SnipeInstance 行，记下其 sequence 后删除；
+    - 同任务下 sequence 大于删除值的行全部 -1；
+    - 更新 task.success_count = 剩余行数；
+    - 如 success < target 且 status==success 则改回 running；
+    - 同步更新 task.instance_ocid 逗号字符串（兼容旧逻辑）。
+
+    返回 {"ok", "task_id", "success_count", "target_count", "instances"}。
+    找不到时抛 HTTPException。
     """
-    from app.models.models import SnipeTask
     task = db.get(SnipeTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    ocid = (data.get("instance_ocid") or "").strip()
+    ocid = (ocid or "").strip()
     if not ocid:
         raise HTTPException(status_code=400, detail="instance_ocid 不能为空")
-    
-    ocids = [o.strip() for o in (task.instance_ocid or "").split(",") if o.strip()]
-    if ocid not in ocids:
+
+    inst = db.query(SnipeInstance).filter(SnipeInstance.task_id == task_id, SnipeInstance.instance_ocid == ocid).first()
+    if not inst:
         raise HTTPException(status_code=404, detail="该实例不在任务列表中")
-    
-    ocids.remove(ocid)
-    task.instance_ocid = ",".join(ocids)
-    task.success_count = max(0, len(ocids))
-    # 如果删完后数量小于目标，任务状态改回 running（可继续抢）
-    if task.success_count < task.target_count and task.status == "success":
+    removed_seq = inst.sequence
+
+    # 事务内：删除 + 重排
+    db.delete(inst)
+    db.query(SnipeInstance).filter(
+        SnipeInstance.task_id == task_id,
+        SnipeInstance.sequence > removed_seq,
+    ).update({SnipeInstance.sequence: SnipeInstance.sequence - 1}, synchronize_session=False)
+
+    remaining = db.query(SnipeInstance).filter(SnipeInstance.task_id == task_id).order_by(SnipeInstance.sequence).all()
+    task.success_count = len(remaining)
+    # 同步兼容字段
+    task.instance_ocid = ",".join(i.instance_ocid for i in remaining)
+    if task.success_count < (task.target_count or 1) and task.status == "success":
         task.status = "running"
     db.commit()
-    
+
     return {
         "ok": True,
         "task_id": task_id,
         "success_count": task.success_count,
         "target_count": task.target_count,
-        "instance_ocids": ocids,
+        "instances": [
+            {"ocid": i.instance_ocid, "sequence": i.sequence, "display_name": i.display_name,
+             "created_at": i.created_at.isoformat() if i.created_at else None}
+            for i in remaining
+        ],
         "message": f"已移除实例，当前 {task.success_count}/{task.target_count} 台",
     }
+
+
+@router.get("/{task_id}/instances")
+def list_task_instances(task_id: int, db: Session = Depends(get_db)):
+    """返回任务的实例列表（按 sequence 排序）。"""
+    task = db.get(SnipeTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    rows = db.query(SnipeInstance).filter(SnipeInstance.task_id == task_id).order_by(SnipeInstance.sequence).all()
+    return [
+        {"id": r.id, "ocid": r.instance_ocid, "sequence": r.sequence,
+         "display_name": r.display_name,
+         "created_at": r.created_at.isoformat() if r.created_at else None}
+        for r in rows
+    ]
+
+
+@router.post("/{task_id}/remove-instance")
+def remove_instance_from_task(task_id: int, data: dict, db: Session = Depends(get_db)):
+    """从任务实例列表中移除指定 OCID（实例已删除时调用）。
+
+    自动补齐序号：删除中间项后，后续实例序号前移。
+    密码按实例 OCID 精确绑定，不受序号变化影响。
+    """
+    ocid = (data.get("instance_ocid") or "").strip()
+    return _remove_instance_from_task(db, task_id, ocid)
