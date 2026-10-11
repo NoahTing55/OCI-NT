@@ -3,16 +3,17 @@
     <!-- 顶部 4 张统计卡片 -->
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6" v-for="card in statCards" :key="card.label">
-        <el-card class="stat-card" shadow="hover" :body-style="{ padding: '18px' }">
-          <div class="stat-body">
-            <div class="stat-icon" :style="{ background: card.bg }">
-              <el-icon><component :is="card.icon" /></el-icon>
-            </div>
+        <el-card class="stat-card" shadow="hover" :body-style="{ padding: '20px' }">
+          <div class="stat-top">
             <div>
               <div class="stat-num">{{ card.value }}</div>
               <div class="stat-label">{{ card.label }}</div>
             </div>
+            <div class="stat-icon" :style="{ background: card.bg }">
+              <el-icon><component :is="card.icon" /></el-icon>
+            </div>
           </div>
+          <div v-if="card.trend" class="stat-trend" :style="{ color: card.trendColor }">{{ card.trend }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -78,10 +79,10 @@ import { User, Monitor, Aim, CircleCheck } from '@element-plus/icons-vue'
 import { listAccounts, listInstances, listSnipeTasks, getAccountSummary } from '../api/client'
 
 const statCards = ref([
-  { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)' },
-  { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#67c23a,#85ce61)' },
-  { label: '运行中开机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#e6a23c,#eebe77)' },
-  { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#f56c6c,#f78989)' },
+  { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)', trend: '', trendColor: '#8c8c8c' },
+  { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#722ed1,#b37feb)', trend: '', trendColor: '#389e0d' },
+  { label: '运行中开机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#fa8c16,#ffc53d)', trend: '', trendColor: '#fa8c16' },
+  { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#52c41a,#95de64)', trend: '', trendColor: '#8c8c8c' },
 ])
 const quotaWarnings = ref([])
 const recentTasks = ref([])
@@ -100,7 +101,7 @@ const fmtTime = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : '')
 onMounted(async () => {
   try {
     // 并发拉取聚合数据
-    const [accounts, instRes, tasks, summary] = await Promise.all([
+    const [accounts, instRes, taskList, summary] = await Promise.all([
       listAccounts().catch(() => []),
       listInstances({}).catch(() => ({ items: [] })),
       listSnipeTasks().catch(() => []),
@@ -108,16 +109,32 @@ onMounted(async () => {
     ])
 
     const items = instRes.items || instRes || []
-    const running = (tasks || []).filter((t) => t.status === 'running').length
+    const tasks = taskList || []
+    const accs = accounts || []
+    const runningTasks = tasks.filter((t) => t.status === 'running')
     const today = new Date().toISOString().slice(0, 10)
-    const todaySuccess = (tasks || []).filter(
+    const todaySuccess = tasks.filter(
       (t) => t.status === 'success' && String(t.finished_at || '').slice(0, 10) === today,
     ).length
 
-    statCards.value[0].value = (accounts || []).length
+    statCards.value[0].value = accs.length
     statCards.value[1].value = Array.isArray(items) ? items.length : 0
-    statCards.value[2].value = running
+    statCards.value[2].value = runningTasks.length
     statCards.value[3].value = todaySuccess
+
+    // 趋势文字
+    const upgraded = accs.filter((a) => ['upgraded', 'paid'].includes(a.account_type)).length
+    const free = accs.filter((a) => ['free', 'trial'].includes(a.account_type)).length
+    statCards.value[0].trend = accs.length ? `升级 ${upgraded} · 免费 ${free}` : ''
+    const runningInst = Array.isArray(items) ? items.filter((i) => i.lifecycle_state === 'RUNNING').length : 0
+    statCards.value[1].trend = items.length ? `运行中 ${runningInst} 台` : ''
+    statCards.value[2].trend = runningTasks.length
+      ? `${runningTasks[0].account_name || '某账号'} 进行中`
+      : '暂无进行中任务'
+    const totalSuccess = tasks
+      .filter((t) => t.status === 'success')
+      .reduce((s, t) => s + (t.success_count || 0), 0)
+    statCards.value[3].trend = `累计成功 ${totalSuccess} 台`
 
     // 配额预警：E2/A1/E5 使用率，取最高的列出
     const warnings = []
@@ -142,7 +159,7 @@ onMounted(async () => {
     quotaWarnings.value = warnings.slice(0, 8)
 
     // 最近 5 条开机任务
-    const sorted = [...(tasks || [])].sort((a, b) =>
+    const sorted = [...tasks].sort((a, b) =>
       String(b.created_at || '').localeCompare(String(a.created_at || '')),
     )
     recentTasks.value = sorted.slice(0, 5)

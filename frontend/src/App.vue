@@ -16,7 +16,7 @@
     <el-container>
       <!-- 侧边栏 -->
       <el-aside width="200px" class="app-aside">
-        <el-menu router :default-active="$route.path" background-color="#304156" text-color="#bfcbd9" active-text-color="#409eff">
+        <el-menu router :default-active="$route.path" background-color="transparent" text-color="rgba(255,255,255,0.65)" active-text-color="#fff">
           <el-menu-item index="/dashboard">
             <el-icon><DataBoard /></el-icon><span>总览</span>
           </el-menu-item>
@@ -107,14 +107,31 @@ body { margin: 0; }
   margin-right: 12px;
 }
 
-/* 侧边栏 */
+/* 侧边栏：渐变深蓝 + 悬停 + 选中高亮条 */
 .app-aside {
-  background: #304156;
+  background: linear-gradient(180deg, #001529 0%, #002140 100%);
 }
 .app-aside .el-menu {
   border-right: none;
+  background: transparent;
+  padding: 12px 0;
+}
+.app-aside .el-menu-item {
+  border-left: 3px solid transparent;
+  margin: 2px 0;
+  height: 48px;
+  line-height: 48px;
 }
 .app-aside .el-menu-item .el-icon {
-  margin-right: 8px;
+  margin-right: 10px;
+}
+.app-aside .el-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.app-aside .el-menu-item.is-active {
+  color: #fff;
+  background: linear-gradient(90deg, rgba(64, 158, 255, 0.28), transparent);
+  border-left-color: #409eff;
 }
 </style>
