@@ -13,7 +13,7 @@ from app.core import telegram
 from app.core.audit import log_operation
 from app.core.deps import SessionLocal
 from app.core.oci_factory import build_client_for_account
-from app.models.models import Account, BatchTask
+from app.models.models import Account, BatchTask, SnipeInstance, SnipeTask
 from app.services.instances import invalidate_instance_cache
 from app.workers.celery_app import celery
 
@@ -23,6 +23,35 @@ logger = logging.getLogger(__name__)
 # （terminate 特殊，走 DELETE /20160918/instances/{id}）
 ACTION_MAP = {"power_on": "START", "power_off": "STOP", "reboot": "RESET"}
 SUCCESS_CODES = {200, 201, 202, 204}
+
+
+def _reorder_after_terminate(db, instance_ocid: str):
+    """实例终止成功后：如该 OCID 在 snipe_instances 中，删除该行并重排序号（事务内）。
+
+    与 api/sniper._remove_instance_from_task 逻辑一致，为避免循环导入在此独立实现。
+    """
+    inst = db.query(SnipeInstance).filter(SnipeInstance.instance_ocid == instance_ocid).first()
+    if not inst:
+        return
+    task_id, removed_seq = inst.task_id, inst.sequence
+    try:
+        db.delete(inst)
+        db.query(SnipeInstance).filter(
+            SnipeInstance.task_id == task_id,
+            SnipeInstance.sequence > removed_seq,
+        ).update({SnipeInstance.sequence: SnipeInstance.sequence - 1}, synchronize_session=False)
+        remaining = db.query(SnipeInstance).filter(SnipeInstance.task_id == task_id).order_by(SnipeInstance.sequence).all()
+        task = db.get(SnipeTask, task_id)
+        if task:
+            task.success_count = len(remaining)
+            task.instance_ocid = ",".join(i.instance_ocid for i in remaining)
+            if task.success_count < (task.target_count or 1) and task.status == "success":
+                task.status = "running"
+        db.commit()
+        logger.info("终止联动重排：task=%d 移除实例 %s，后续序号前移", task_id, instance_ocid[:20])
+    except Exception:
+        db.rollback()
+        logger.exception("终止联动重排失败 task=%d ocid=%s", task_id, instance_ocid[:20])
 
 
 async def _run_async(task_id: int):
@@ -56,6 +85,9 @@ async def _run_async(task_id: int):
                 results.append({**it, "ok": ok, "error": err, "status_code": resp.status_code})
                 if ok:
                     task.success_count += 1
+                    # 终止成功：如该实例在某个开机任务的实例列表中，自动重排序号
+                    if task.task_type == "terminate":
+                        _reorder_after_terminate(db, it["instance_id"])
                 else:
                     task.fail_count += 1
             except Exception as e:
