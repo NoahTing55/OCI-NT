@@ -51,7 +51,7 @@ if __name__ == "__main__":
     # 供 celery worker 容器在启动前执行：
     #   python -m app.core.migrations && celery -A app.workers.celery_app.celery worker ...
     # 避免 worker 在 api 的 lifespan 迁移完成前就连库查到缺列。
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(name)s:%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     from app.core.deps import engine as _engine
 
     run_db_migrations(_engine)

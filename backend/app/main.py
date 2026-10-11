@@ -21,7 +21,10 @@ from app.models.models import Base, Operator
 from app.workers.scheduler import start_scheduler
 from app.workers.sniper import sniper_manager
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(name)s:%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+# 关掉 noisy 的库日志：httpx 请求明细、uvicorn 访问日志（只留 WARNING 以上）
+for _n in ("httpx", "uvicorn.access"):
+    logging.getLogger(_n).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

@@ -6,9 +6,14 @@
 worker 启动命令（见 docker-compose.yml）：
     celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=4
 """
+import logging
+
 from celery import Celery
 
 from app.core.config import settings
+
+# 关掉 noisy 的库日志：httpx 请求明细只留 WARNING 以上
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 celery = Celery("oci_panel", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 celery.conf.update(
