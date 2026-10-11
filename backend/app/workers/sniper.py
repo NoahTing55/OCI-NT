@@ -41,7 +41,7 @@ from app.core.cloud_init import build_root_password_script
 from app.services.settings import get_setting
 from app.core.deps import SessionLocal
 from app.core.oci_factory import build_client_for_account, compartment_of
-from app.models.models import Account, SnipeLog, SnipeTask
+from app.models.models import Account, SnipeInstance, SnipeLog, SnipeTask
 from app.services.cloudflare import sync_instance_domains
 from app.services.instances import invalidate_instance_cache
 from app.services.network_ensure import ensure_subnet
@@ -519,6 +519,16 @@ class SniperManager:
             task.success_count = new_count
             old_ocids = (task.instance_ocid or "").strip()
             task.instance_ocid = (old_ocids + "," + instance_ocid).strip(",") if old_ocids else instance_ocid
+            # 实例级记录：sequence 连续编号，密码按实例精确绑定
+            base_name = (task.display_name or "").strip()
+            inst = SnipeInstance(
+                task_id=task_id,
+                instance_ocid=instance_ocid,
+                sequence=new_count,
+                root_password=task.root_password or "",
+                display_name=f"{base_name}-{new_count}" if base_name else "",
+            )
+            db.add(inst)
             task.last_error = ""
             done = new_count >= target
             if done:
