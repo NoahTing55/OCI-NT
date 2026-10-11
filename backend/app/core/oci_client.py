@@ -281,12 +281,12 @@ class OciClient:
                 f"/20181004/services/compute/limits/{limit_name}?compartmentId={compartment_id}",
             )
             if resp.status_code != 200:
-                logger.warning("配额查询 %s 失败：HTTP %s", limit_name, resp.status_code)
+                logger.debug("配额查询 %s 失败：HTTP %s", limit_name, resp.status_code)
                 return {"available": None, "used": None}
             data = resp.json()
             return {"available": data.get("available"), "used": data.get("used")}
         except Exception as e:
-            logger.warning("配额查询 %s 异常：%s", limit_name, str(e)[:120])
+            logger.debug("配额查询 %s 异常：%s", limit_name, str(e)[:120])
             return {"available": None, "used": None}
 
     # ---------------- 一键建网（VCN / IG / 路由表 / 子网） ----------------
