@@ -123,6 +123,14 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-pagination
+      v-model:current-page="currentPage"
+      v-model:page-size="pageSize"
+      :page-sizes="[20, 50, 100]"
+      :total="filteredAccounts.length"
+      layout="total, sizes, prev, pager, next"
+      style="margin-top: 12px; justify-content: flex-end"
+    />
 
     <!-- 导入 API：Config + PEM 一次填完，单栏无分栏 -->
     <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" title="导入 API" width="620px">

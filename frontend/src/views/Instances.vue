@@ -64,6 +64,14 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-pagination
+      v-model:current-page="currentPage"
+      v-model:page-size="pageSize"
+      :page-sizes="[20, 50, 100]"
+      :total="filteredInstances.length"
+      layout="total, sizes, prev, pager, next"
+      style="margin-top: 12px; justify-content: flex-end"
+    />
 
     <Terminal ref="terminalRef" />
     <!-- 批量任务进度 -->
@@ -322,7 +330,7 @@ const submitEdit = async () => {
 const ipVisible = ref(false)
 const changing = ref(false)
 const ipRow = ref({})
-const releaseOld = ref(true)
+const releaseOld = ref(false)
 const ipResult = ref(null)
 
 const openChangeIp = (row) => {
