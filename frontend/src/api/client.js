@@ -98,6 +98,7 @@ export const testTelegram = () => api.post('/settings/test-telegram').then((r) =
 // 系统日志
 export const listSystemLogs = () => api.get('/system-logs').then((r) => r.data)
 export const getSystemLog = (name, lines = 200) => api.get(`/system-logs/${name}`, { params: { lines } }).then((r) => r.data)
+export const getMergedSystemLog = (lines = 500) => api.get('/system-logs/merged', { params: { lines } }).then((r) => r.data)
 
 // 鉴权
 export const authStatus = () => api.get('/auth/status').then((r) => r.data)

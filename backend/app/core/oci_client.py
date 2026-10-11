@@ -543,7 +543,7 @@ class OciClient:
             if self._proxy_url:
                 client.base_client.session.proxies = {
                     "http": self._proxy_url, "https": self._proxy_url}
-            logger.info("订阅查询(OCI-Start)：region=%s home=%s", self.region, home_region)
+            logger.info("订阅查询：region=%s home=%s", self.region, home_region)
             resp = client.list_subscriptions(
                 osp_home_region=home_region,
                 compartment_id=self.tenancy_ocid,
@@ -565,7 +565,7 @@ class OciClient:
             pt = getattr(sub, "plan_type", None)
             if pt is not None and not isinstance(pt, str):
                 pt = str(pt).split(".")[-1].upper()
-            logger.info("订阅查询(OCI-Start)：plan_type=%s", pt)
+            logger.info("订阅查询：plan_type=%s", pt)
             return pt
         except Exception as e:
             logger.warning("订阅查询异常：%s", str(e)[:200])

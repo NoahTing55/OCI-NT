@@ -21,6 +21,34 @@ def list_logs(user=Depends(get_current_operator)):
         result.append({"name": name, "path": path, "exists": exists, "size": size})
     return result
 
+@router.get("/merged")
+def get_merged_log(
+    lines: int = Query(500, ge=1, le=2000),
+    user=Depends(get_current_operator),
+):
+    """合并 api + worker 日志，按时间戳排序"""
+    import re
+    all_entries = []
+    # 时间戳正则：2026-10-11 16:25:23 或 2026-10-11T16:25:23
+    ts_re = re.compile(r'^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})')
+    for name, path in LOG_FILES.items():
+        if not os.path.isfile(path):
+            continue
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            read_size = min(size, 256 * 1024)
+            f.seek(size - read_size)
+            data = f.read().decode("utf-8", errors="replace")
+        for line in data.splitlines():
+            m = ts_re.match(line)
+            # 用时间戳排序，无时间戳的放最后
+            key = m.group(1) + " " + m.group(2) if m else "9999"
+            all_entries.append((key, f"[{name}] {line}"))
+    all_entries.sort(key=lambda x: x[0])
+    merged = [e[1] for e in all_entries]
+    return {"name": "merged", "lines": merged[-lines:], "total": len(merged)}
+
 @router.get("/{name}")
 def get_log(
     name: str,

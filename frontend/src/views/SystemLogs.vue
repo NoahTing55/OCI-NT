@@ -5,6 +5,11 @@
       <span class="syslog-title">>_ 系统日志</span>
       <div class="syslog-tabs">
         <span
+          class="syslog-tab"
+          :class="{ active: current === 'merged' }"
+          @click="switchLog('merged')"
+        >全部</span>
+        <span
           v-for="l in logs"
           :key="l.name"
           class="syslog-tab"
@@ -50,10 +55,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { listSystemLogs, getSystemLog } from '../api/client.js'
+import { listSystemLogs, getSystemLog, getMergedSystemLog } from '../api/client.js'
 
 const logs = ref([])
-const current = ref('api')
+const current = ref('merged')
 const lines = ref([])
 const lineCount = 500
 const loading = ref(false)
@@ -125,7 +130,9 @@ function switchLog(name) {
 async function load() {
   loading.value = true
   try {
-    const data = await getSystemLog(current.value, lineCount.value)
+    const data = current.value === 'merged'
+      ? await getMergedSystemLog(lineCount.value)
+      : await getSystemLog(current.value, lineCount.value)
     lines.value = data.lines || []
     scrollBottom()
   } catch (e) {
