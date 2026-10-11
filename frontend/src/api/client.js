@@ -77,6 +77,8 @@ export const pauseSnipeTask = (id) => api.post(`/sniper/${id}/pause`).then((r) =
 export const deleteSnipeTask = (id) => api.delete(`/sniper/${id}`).then((r) => r.data)
 export const getSnipeLogs = (id, params) => api.get(`/sniper/${id}/logs`, { params }).then((r) => r.data)
 export const getSnipeTemplates = () => api.get('/sniper/templates').then((r) => r.data)
+export const getSnipeInstances = (id) => api.get(`/sniper/${id}/instances`).then((r) => r.data)
+export const removeSnipeInstance = (id, ocid) => api.post(`/sniper/${id}/remove-instance`, { instance_ocid: ocid }).then((r) => r.data)
 
 // OCI 选项查询（开机/批量创建表单级联下拉：可用域、平台镜像、子网、compartment）
 export const getOciAvailabilityDomains = (params) =>
