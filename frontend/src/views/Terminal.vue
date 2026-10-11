@@ -40,7 +40,7 @@ const termRef = ref(null)
 const instanceName = ref('')
 const connected = ref(false)
 const statusText = ref('等待连接...')
-const fontSize = ref(12)
+const fontSize = ref(16)
 const cols = ref(0)
 const rows = ref(0)
 let term = null
@@ -73,8 +73,7 @@ const initTerminal = (accountId, instanceId) => {
   term.focus()
   cols.value = term.cols
   rows.value = term.rows
-  term.writeln('\x1b[32m正在连接...\x1b[0m')
-  statusText.value = '正在连接...'
+  statusText.value = ''
 
   const token = localStorage.getItem('oci_token') || ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -156,7 +155,7 @@ defineExpose({ open })
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: #161b22;
   border-radius: 6px 6px 0 0;
   margin-bottom: 0;
@@ -181,13 +180,13 @@ defineExpose({ open })
   height: 60vh;
   min-height: 400px;
   background: #0d1117;
-  padding: 12px;
+  padding: 8px;
   box-sizing: border-box;
 }
 .term-statusbar {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 10px;
   background: #161b22;
   border-radius: 0 0 6px 6px;
   font-size: 12px;
@@ -207,7 +206,7 @@ defineExpose({ open })
   padding: 0 8px !important;
 }
 .term-dialog .el-dialog__header {
-  padding: 8px 12px !important;
+  padding: 6px 10px !important;
   margin: 0 !important;
 }
 .term-dialog .el-dialog__header .el-dialog__title {
@@ -218,7 +217,7 @@ defineExpose({ open })
   color: #8b949e !important;
 }
 .term-dialog .el-dialog__footer {
-  padding: 6px 12px !important;
+  padding: 4px 10px !important;
   background: #161b22 !important;
 }
 .term-dialog .el-dialog__footer .el-button {
