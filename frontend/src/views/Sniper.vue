@@ -41,7 +41,7 @@
     </el-table>
 
     <!-- 新建任务：分组布局（模板 → 基础 → 实例 → 高级折叠） -->
-    <el-dialog v-model="createVisible" :title="isEdit ? '编辑实例任务' : '新建实例'" width="640px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" :title="isEdit ? '编辑实例任务' : '新建实例'" width="640px">
       <el-form :model="form" label-width="100px">
         <!-- 分组1：选择模板（2×2 卡片网格） -->
         <div class="form-group-title">选择模板</div>
@@ -197,7 +197,7 @@
     </el-drawer>
 
     <!-- Root 密码查看 -->
-    <el-dialog v-model="pwdVisible" title="Root 密码" width="420px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="pwdVisible" title="Root 密码" width="420px">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="任务">#{{ pwdTask?.id }}（{{ pwdTask?.account_name }}）</el-descriptions-item>
         <el-descriptions-item label="用户">root</el-descriptions-item>
@@ -690,15 +690,24 @@ const handleAccountQuery = async () => {
     router.replace({ path: '/sniper' })
   }
 }
+let refreshTimer = null
 onMounted(async () => {
   await load()
   await handleAccountQuery()
+  // running 任务每 15 秒自动刷新
+  refreshTimer = setInterval(async () => {
+    const hasRunning = tasks.value?.some(t => t.status === 'running')
+    if (hasRunning) await load()
+  }, 15000)
 })
 // 路由复用时（如已在开机管理页点创建实例），onMounted 不触发，用 watch 补
 watch(() => route.query.account_id, async (v) => {
   if (v) await handleAccountQuery()
 })
-onUnmounted(stopLogPoll)
+onUnmounted(() => {
+  stopLogPoll()
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <style scoped>
