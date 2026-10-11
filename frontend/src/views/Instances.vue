@@ -7,7 +7,12 @@
         </el-select>
       </el-form-item>
       <el-form-item label="区域">
-        <el-input v-model="filters.region" clearable placeholder="如 ap-seoul-1" style="width: 160px" />
+        <el-select v-model="filters.region" clearable placeholder="全部" style="width: 180px">
+          <el-option v-for="r in regionOptions" :key="r.value" :value="r.value" :label="r.label" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="搜索">
+        <el-input v-model="filters.keyword" clearable placeholder="名称/IP" style="width: 180px" />
       </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="filters.state" clearable placeholder="全部" style="width: 150px">
@@ -31,20 +36,21 @@
     </div>
 
     <div style="margin: 8px 0">
+      <el-button size="small" :disabled="!selected.length" @click="runBatch('power_on')">批量开机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('power_off')">批量关机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('reboot')">批量重启</el-button>
       <el-button size="small" type="danger" :disabled="!selected.length" @click="runBatch('terminate')">批量终止</el-button>
       <span style="margin-left: 8px; color: #909399; font-size: 12px">已选 {{ selected.length }} 台</span>
     </div>
 
-    <el-table :data="instances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
+    <el-table :data="pagedInstances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140" />
       <el-table-column prop="display_name" label="名称" min-width="160" />
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
-          <el-tag :type="stateType(row.lifecycle_state)" size="small">{{ row.lifecycle_state }}</el-tag>
+          <el-tag :type="stateType(row.lifecycle_state)" size="small">{{ stateText(row.lifecycle_state) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="shape" label="Shape" width="170" />
@@ -61,7 +67,7 @@
 
     <Terminal ref="terminalRef" />
     <!-- 批量任务进度 -->
-    <el-dialog v-model="progressVisible" title="批量任务进度" width="680px" :close-on-click-modal="false">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="progressVisible" title="批量任务进度" width="680px" :close-on-click-modal="false">
       <el-progress :percentage="progressPct" :status="task.status === 'failed' ? 'exception' : ''" />
       <p>状态：{{ task.status }}，成功 {{ task.success_count }} / 失败 {{ task.fail_count }} / 共 {{ task.total }}</p>
       <el-table :data="taskDetail" size="small" max-height="300" border>
@@ -76,7 +82,7 @@
     </el-dialog>
 
     <!-- 编辑实例 -->
-    <el-dialog v-model="editVisible" title="编辑实例" width="520px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑实例" width="520px">
       <el-form :model="editForm" label-width="110px">
         <el-form-item label="名称"><el-input v-model="editForm.display_name" /></el-form-item>
         <el-form-item label="freeform_tags">
@@ -94,7 +100,7 @@
     </el-dialog>
 
     <!-- 换 IP -->
-    <el-dialog v-model="ipVisible" title="更换 IP（预留 IP 流程）" width="460px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="ipVisible" title="更换 IP（预留 IP 流程）" width="460px">
       <p>实例：{{ ipRow.display_name }}（当前 {{ ipRow.public_ip || '无公网 IP' }}）</p>
       <el-checkbox v-model="releaseOld">更换成功后释放旧的预留 IP</el-checkbox>
       <div v-if="ipResult" style="margin-top: 8px; font-size: 13px">
@@ -130,10 +136,40 @@ import {
 } from '../api/client.js'
 
 const STATES = ['RUNNING', 'STOPPED', 'STOPPING', 'STARTING', 'TERMINATED', 'TERMINATING']
+const STATE_TEXT = { RUNNING: '运行中', STOPPED: '已停止', STOPPING: '停止中', STARTING: '启动中', TERMINATED: '已终止', TERMINATING: '终止中' }
+const stateText = (s) => STATE_TEXT[s] || s
 const BATCH_TEXT = { power_on: '批量开机', power_off: '批量关机', reboot: '批量重启', terminate: '批量终止' }
 
 const accounts = ref([])
 const instances = ref([])
+const currentPage = ref(1)
+const pageSize = ref(20)
+// 区域选项：从实例数据构造（中文名+标识）
+const regionOptions = computed(() => {
+  const map = {}
+  for (const i of instances.value) {
+    if (i.region && !map[i.region]) {
+      map[i.region] = { value: i.region, label: i.region }
+    }
+  }
+  return Object.values(map).sort((a, b) => a.value.localeCompare(b.value))
+})
+const filteredInstances = computed(() => {
+  let list = instances.value
+  const kw = (filters.value.keyword || '').toLowerCase()
+  if (kw) {
+    list = list.filter(i =>
+      (i.display_name || '').toLowerCase().includes(kw) ||
+      (i.public_ip || '').includes(kw) ||
+      (i.private_ip || '').includes(kw)
+    )
+  }
+  return list
+})
+const pagedInstances = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredInstances.value.slice(start, start + pageSize.value)
+})
 const errors = ref([])
 const selected = ref([])
 const terminalRef = ref(null)
@@ -147,7 +183,7 @@ const openTerminal = (row) => {
   terminalRef.value?.open(accountId, instanceId, row.display_name)
 }
 const loading = ref(false)
-const filters = ref({ account_id: null, region: '', state: '' })
+const filters = ref({ account_id: null, region: '', state: '', keyword: '' })
 
 const stateType = (s) =>
   ({ RUNNING: 'success', STOPPED: '', TERMINATED: 'info', STOPPING: 'warning', STARTING: 'warning' }[s] || 'info')
