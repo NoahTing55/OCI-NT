@@ -20,7 +20,7 @@
         <el-option value="WARNING" label="Warning" />
         <el-option value="ERROR" label="Error" />
       </el-select>
-      <el-button size="small" type="primary" @click="clearLogs">清空日志</el-button>
+      <el-button size="small" type="primary" @click="clearLogs" title="仅清除显示，下次刷新会重新加载">清屏</el-button>
       <el-button size="small" type="primary" @click="$router.back()">返回</el-button>
     </div>
     <!-- 输出区标题 -->
@@ -28,7 +28,7 @@
       <span class="syslog-outtitle">>_ 系统日志输出</span>
       <span style="flex: 1"></span>
       <span class="live-dot"></span>
-      <span class="live-text">已连接实时流</span>
+      <span class="live-text">自动刷新中（10s）</span>
     </div>
     <!-- 日志区 -->
     <div ref="logBox" class="syslog-body">
@@ -40,7 +40,7 @@
     <!-- 底栏 -->
     <div class="syslog-footer">
       <span class="footer-time">◷ {{ nowTime }}</span>
-      <span class="footer-count">☰ {{ formattedLines.length }} Log entries</span>
+      <span class="footer-count">☰ 共 {{ formattedLines.length }} 条</span>
       <span style="flex: 1"></span>
       <el-checkbox v-model="autoScroll" class="footer-check">自动滚动</el-checkbox>
       <span class="footer-live">实时更新中…</span>
