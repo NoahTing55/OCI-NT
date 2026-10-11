@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.security import decrypt_text, decode_access_token
-from app.models.models import Account, SnipeTask
+from app.models.models import Account, SnipeInstance, SnipeTask
 from app.services import instances as instance_service
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,19 @@ IDLE_TIMEOUT = 300
 
 
 async def _get_root_password(db: Session, account, instance_id: str, display_name: str = "") -> str | None:
-    """按实例精确匹配 root 密码：先按 OCID，再按显示名。"""
+    """按实例精确匹配 root 密码：优先按 OCID 查 snipe_instances 表。"""
+    def _decrypt(enc):
+        try:
+            return decrypt_text(enc)
+        except Exception:
+            return enc
+
+    # 1. 实例级精确匹配（snipe_instances.instance_ocid 唯一）
+    inst = db.query(SnipeInstance).filter(SnipeInstance.instance_ocid == instance_id).first()
+    if inst and inst.root_password:
+        return _decrypt(inst.root_password)
+
+    # 2. 回退旧逻辑：按任务查
     tasks = (
         db.query(SnipeTask)
         .filter(SnipeTask.account_id == account.id)
@@ -41,26 +53,20 @@ async def _get_root_password(db: Session, account, instance_id: str, display_nam
     if not tasks:
         return None
 
-    def _decrypt(t):
-        try:
-            return decrypt_text(t.root_password)
-        except Exception:
-            return t.root_password
-
-    # 2. OCID 精确匹配（instance_ocid 可能是逗号分隔的多台）
+    # 2a. OCID 精确匹配（instance_ocid 可能是逗号分隔的多台）
     for task in tasks:
         ocids = [o.strip() for o in (task.instance_ocid or "").split(",") if o.strip()]
         if instance_id in ocids:
-            return _decrypt(task)
+            return _decrypt(task.root_password)
 
-    # 3. 显示名匹配：任务 display_name 是实例名前缀（多台时加 -序号后缀）
+    # 2b. 显示名匹配：任务 display_name 是实例名前缀（多台时加 -序号后缀）
     if display_name:
         for task in tasks:
             base = (task.display_name or "").strip()
             if base and (display_name == base or display_name.startswith(base + "-")):
-                return _decrypt(task)
+                return _decrypt(task.root_password)
 
-    # 4. 都没匹配到：返回 None，不再盲试其他任务的密码
+    # 3. 都没匹配到：返回 None，不再盲试其他任务的密码
     logger.warning("终端密码未匹配到: account=%s instance=%s display_name=%s", account.id, instance_id[:20], display_name)
     return None
 
