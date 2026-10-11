@@ -81,11 +81,12 @@ onMounted(async () => {
 }
 .log-box pre {
   color: #d4d4d4;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.8;
   padding: 12px 16px;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
+  font-family: "Courier New", monospace;
 }
 </style>
