@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="`SSH终端 - ${instanceName}`" width="95%" :close-on-click-modal="false" @closed="onClose" @opened="onOpened" class="term-dialog">
+  <el-dialog :style="{ maxWidth: '92vw' }" v-model="visible" :title="`SSH终端 - ${instanceName}`" width="95%" :close-on-click-modal="false" @closed="onClose" @opened="onOpened" class="term-dialog">
     <!-- 工具栏 -->
     <div class="term-toolbar">
       <el-button size="small" type="success" @click="reconnect" :disabled="connected">连接</el-button>
@@ -78,7 +78,12 @@ const initTerminal = (accountId, instanceId) => {
   const token = localStorage.getItem('oci_token') || ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const dn = encodeURIComponent(instanceName.value || '')
-  ws = new WebSocket(`${proto}//${location.host}/api/terminal/ws/${accountId}/${instanceId}?token=${token}&display_name=${dn}`)
+  ws = new WebSocket(`${proto}//${location.host}/api/terminal/ws/${accountId}/${instanceId}?display_name=${dn}`)
+
+  ws.onopen = () => {
+    // 首条消息发送 token 鉴权（不放 URL）
+    ws.send(JSON.stringify({ type: 'auth', token }))
+  }
 
   ws.onmessage = (e) => {
     try {
