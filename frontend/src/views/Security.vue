@@ -35,6 +35,9 @@
         <el-form-item label="新密码">
           <el-input v-model="pwdForm.new_password" type="password" show-password placeholder="至少 6 位" />
         </el-form-item>
+        <el-form-item label="确认新密码">
+          <el-input v-model="pwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码" />
+        </el-form-item>
         <el-button type="primary" @click="doChangePassword">修改密码</el-button>
       </el-form>
     </el-card>
@@ -51,7 +54,7 @@ const qr = ref('')
 const secret = ref('')
 const code = ref('')
 const password = ref('')
-const pwdForm = ref({ old_password: '', new_password: '' })
+const pwdForm = ref({ old_password: '', new_password: '', confirm_password: '' })
 
 async function load() {
   me.value = await getMe()
@@ -86,10 +89,14 @@ async function disableTotp() {
 }
 
 async function doChangePassword() {
+  if (pwdForm.value.new_password !== pwdForm.value.confirm_password) {
+    ElMessage.error('两次输入的新密码不一致')
+    return
+  }
   try {
     await changePassword(pwdForm.value)
     ElMessage.success('密码已修改')
-    pwdForm.value = { old_password: '', new_password: '' }
+    pwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '修改失败')
   }
