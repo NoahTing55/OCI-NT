@@ -90,7 +90,7 @@ import {
 const accounts = ref([])
 
 // ---------- 换 IP ----------
-const ipForm = ref({ account_id: null, instance_id: '', release_old: true })
+const ipForm = ref({ account_id: null, instance_id: '', release_old: false })
 const accountInstances = ref([])
 const selectedInstanceHasIp = computed(() => {
   const inst = accountInstances.value.find(i => i.instance_id === ipForm.value.instance_id)
@@ -113,6 +113,13 @@ const loadAccountInstances = async () => {
 }
 
 const submitChangeIp = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '更换 IP 会断开当前 SSH 连接，并触发 Cloudflare DNS 同步，确定继续吗？',
+      '确认更换 IP',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
   changing.value = true
   ipResult.value = null
   try {
