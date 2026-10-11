@@ -159,7 +159,8 @@ onUnmounted(() => {
   border-radius: 4px;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 100px);
+  min-height: 500px;
   overflow: hidden;
 }
 .syslog-topbar {
