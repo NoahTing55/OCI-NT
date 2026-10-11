@@ -13,6 +13,13 @@
         <el-option :value="500" label="500 行" />
         <el-option :value="1000" label="1000 行" />
       </el-select>
+      <el-select v-model="levelFilter" style="width: 110px; margin-right: 8px" size="small" placeholder="级别">
+        <el-option value="" label="全部" />
+        <el-option value="DEBUG" label="Debug" />
+        <el-option value="INFO" label="Info" />
+        <el-option value="WARNING" label="Warning" />
+        <el-option value="ERROR" label="Error" />
+      </el-select>
       <el-button size="small" type="primary" @click="clearLogs">清空日志</el-button>
       <el-button size="small" type="primary" @click="$router.back()">返回</el-button>
     </div>
@@ -33,7 +40,7 @@
     <!-- 底栏 -->
     <div class="syslog-footer">
       <span class="footer-time">◷ {{ nowTime }}</span>
-      <span class="footer-count">☰ {{ lines.length }} Log entries</span>
+      <span class="footer-count">☰ {{ formattedLines.length }} Log entries</span>
       <span style="flex: 1"></span>
       <el-checkbox v-model="autoScroll" class="footer-check">自动滚动</el-checkbox>
       <span class="footer-live">实时更新中…</span>
@@ -51,6 +58,7 @@ const lines = ref([])
 const lineCount = ref(200)
 const loading = ref(false)
 const autoScroll = ref(true)
+const levelFilter = ref('')
 const logBox = ref(null)
 const nowTime = ref('')
 let clockTimer = null
@@ -63,7 +71,26 @@ function fmtTime(line) {
   )
 }
 
-const formattedLines = computed(() => lines.value.map(fmtTime))
+function parseLevel(line) {
+  // 2026-10-11 04:31:22 WARNING:... -> WARNING
+  let m = line.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (DEBUG|INFO|WARNING|ERROR)/i)
+  if (m) return m[1].toUpperCase()
+  // 2026-10-10T16:10:31.717774[warning]... -> WARNING
+  m = line.match(/\[(debug|info|warning|error)\]/i)
+  if (m) return m[1].toUpperCase()
+  // INFO:... -> INFO
+  m = line.match(/^(DEBUG|INFO|WARNING|ERROR)[:]/i)
+  if (m) return m[1].toUpperCase()
+  return 'INFO'
+}
+
+const formattedLines = computed(() => {
+  let result = lines.value.map(fmtTime)
+  if (levelFilter.value) {
+    result = result.filter(line => parseLevel(line) === levelFilter.value)
+  }
+  return result
+})
 
 function scrollBottom() {
   if (autoScroll.value && logBox.value) {
