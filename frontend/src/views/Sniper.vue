@@ -6,7 +6,7 @@
       <span class="toolbar-tip">同一账号同一 shape 同时只允许一个进行中的任务</span>
     </div>
 
-    <el-table :data="tasks" v-loading="loading" border>
+    <el-table :data="tasks" v-loading="loading">
       <el-table-column prop="id" label="#" width="60" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140" />
@@ -44,7 +44,7 @@
     </el-table>
 
     <!-- 新建任务：分组布局（模板 → 基础 → 实例 → 高级折叠） -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" :title="isEdit ? '编辑实例任务' : '新建实例'" width="640px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" :title="isEdit ? '编辑实例任务' : '新建实例'" width="680px">
       <el-form :model="form" label-width="100px">
         <!-- 分组1：选择模板（2×2 卡片网格） -->
         <div class="form-group-title">选择模板</div>
@@ -230,7 +230,7 @@
     </el-drawer>
 
     <!-- 实例 Root 密码查看 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="instPwdVisible" title="实例 Root 密码" width="400px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="instPwdVisible" title="实例 Root 密码" width="440px">
       <div class="pwd-card">
         <div class="pwd-row"><span class="pwd-label">实例</span><span>#{{ instPwd?.sequence }}（{{ instPwd?.display_name }}）</span></div>
         <div class="pwd-row"><span class="pwd-label">用户</span><span class="pwd-user">root</span></div>

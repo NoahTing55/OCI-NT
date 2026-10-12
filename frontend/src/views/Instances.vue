@@ -48,7 +48,7 @@
       </el-radio-group>
     </div>
 
-    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" border size="small" style="width: 100%" @selection-change="selected = $event">
+    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" size="small" style="width: 100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140">
@@ -106,7 +106,7 @@
     <el-dialog :style="{ maxWidth: '92vw' }" v-model="progressVisible" title="批量任务进度" width="680px" :close-on-click-modal="false">
       <el-progress :percentage="progressPct" :status="task.status === 'failed' ? 'exception' : ''" />
       <p>状态：{{ statusCn(task.status) }}，成功 {{ task.success_count }} / 失败 {{ task.fail_count }} / 共 {{ task.total }}</p>
-      <el-table :data="taskDetail" size="small" max-height="300" border>
+      <el-table :data="taskDetail" size="small" max-height="300">
         <el-table-column prop="display_name" label="实例" width="180" />
         <el-table-column label="结果" width="80">
           <template #default="{ row }">
@@ -118,7 +118,7 @@
     </el-dialog>
 
     <!-- 编辑实例 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑实例" width="520px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑实例" width="560px">
       <el-form :model="editForm" label-width="110px">
         <el-form-item label="名称"><el-input v-model="editForm.display_name" /></el-form-item>
         <el-form-item label="OCPU">
@@ -145,7 +145,7 @@
     </el-dialog>
 
     <!-- 换 IP -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="ipVisible" title="更换 IP（预留 IP 流程）" width="460px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="ipVisible" title="更换 IP（预留 IP 流程）" width="560px">
       <p>实例：{{ ipRow.display_name }}（当前 {{ ipRow.public_ip || '无公网 IP' }}）</p>
       <el-checkbox v-model="releaseOld">更换成功后释放旧的预留 IP</el-checkbox>
       <div v-if="ipResult" style="margin-top: 8px; font-size: 13px">

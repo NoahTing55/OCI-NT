@@ -30,7 +30,7 @@
     </div>
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
-    <el-table ref="acctTableRef" :data="pagedAccounts" v-loading="loading" style="margin-top: 12px" border size="small" class="acct-table" @selection-change="onSelectionChange">
+    <el-table ref="acctTableRef" :data="pagedAccounts" v-loading="loading" style="margin-top: 12px" size="small" class="acct-table" @selection-change="onSelectionChange">
       <!-- 多选列：批量订阅区域用 -->
       <el-table-column type="selection" width="45" align="center" />
       <!-- 🛡️ 代理绑定状态：点击快速配置代理 -->
@@ -132,7 +132,7 @@
     />
 
     <!-- 导入 API：Config + PEM 一次填完，单栏无分栏 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" title="导入 API" width="620px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" title="导入 API" width="680px">
       <!-- 步骤 1：OCI API 配置 -->
           <div class="import-step">
             <span class="step-num">1</span>
@@ -209,7 +209,7 @@
     </el-dialog>
 
     <!-- 批量导入账号：多份 config 一次导入 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchImportVisible" title="批量导入账号" width="620px" class="batch-dialog">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchImportVisible" title="批量导入账号" width="680px" class="batch-dialog">
 
       <div v-for="(item, idx) in batchItems" :key="idx" class="batch-item">
         <div class="batch-item-head">
@@ -258,7 +258,7 @@
     </el-dialog>
 
     <!-- 编辑账号（别名/区域/备注，不涉及密钥） -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑账号" width="480px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑账号" width="560px">
       <el-form :model="editForm" label-width="80px">
         <el-form-item label="别名"><el-input v-model="editForm.name" placeholder="如 香港-01" /></el-form-item>
         <el-form-item label="区域">
@@ -279,7 +279,7 @@
     </el-dialog>
 
     <!-- 绑定代理 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="bindVisible" title="绑定代理（一账号一代理）" width="420px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="bindVisible" title="绑定代理（一账号一代理）" width="440px">
       <el-select v-model="bindProxyId" placeholder="选择代理（清空=解绑）" clearable style="width:100%">
         <el-option v-for="p in proxies" :key="p.id" :value="p.id" :label="`${p.name}（${p.scheme}://${p.host}:${p.port}）`" />
       </el-select>
@@ -290,7 +290,7 @@
     </el-dialog>
 
     <!-- 区域订阅（仅升级账户） -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="regionsVisible" :title="`区域订阅 - ${regionsAccountName}`" width="520px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="regionsVisible" :title="`区域订阅 - ${regionsAccountName}`" width="560px">
       <div class="import-sub">已订阅区域</div>
       <div v-loading="regionsLoading" style="min-height: 40px; margin-bottom: 16px">
         <el-tag v-for="r in subscribedRegions" :key="r.region_name" style="margin: 0 8px 8px 0"
