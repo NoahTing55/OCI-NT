@@ -15,9 +15,12 @@
         <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span></template>
 
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="150">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
+          <div v-if="row.status === 'running'" style="font-size: 11px; color: #909399; margin-top: 4px; line-height: 1.4">
+            {{ aliveText(row) }}
+          </div>
         </template>
       </el-table-column>
       <el-table-column prop="attempts" label="尝试" width="70" />
@@ -190,7 +193,10 @@
         <span class="log-auto">● 每 3 秒自动刷新</span>
       </div>
       <div class="log-section">
-        <div class="card-title" style="margin-bottom: 8px">实例列表（{{ taskInstances.length }} 台）</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+          <div class="card-title">实例列表（{{ taskInstances.length }} 台）</div>
+          <el-button v-if="taskInstances.length" size="small" @click="copyAllInstances">复制全部</el-button>
+        </div>
         <el-table :data="taskInstances" size="small" style="width: 100%" empty-text="暂无实例">
           <el-table-column prop="sequence" label="#" width="45" />
           <el-table-column prop="display_name" label="显示名" min-width="110" show-overflow-tooltip>
@@ -269,11 +275,24 @@ import {
   getOciSubnets,
   getOciCompartments,
   listRegionSubscriptions,
+  listInstances,
 } from '../api/client'
 
 const STATUS_MAP = {
   pending: '待启动', running: '运行中', paused: '已暂停',
   success: '已完成', stopped: '已停止', failed: '失败',
+}
+const aliveText = (row) => {
+  if (!row.updated_at) return ''
+  const updated = new Date(row.updated_at).getTime()
+  const now = Date.now()
+  const elapsedSec = Math.floor((now - updated) / 1000)
+  const mins = Math.floor(elapsedSec / 60)
+  const agoText = mins < 1 ? '刚刚' : mins < 60 ? `${mins} 分钟前` : `${Math.floor(mins / 60)} 小时前`
+  const interval = row.interval_seconds || 60
+  const remain = interval - elapsedSec
+  const retryText = remain <= 0 ? '即将重试' : `约 ${remain} 秒后重试`
+  return `${agoText}尝试 · ${retryText}`
 }
 const statusText = (s) => STATUS_MAP[s] || s
 // 格式化时间：2026-10-07T05:24:25 → 2026-10-07 05:24
@@ -520,6 +539,41 @@ const copyInstPwd = async () => {
     }
     ElMessage.success('已复制')
   } catch (e) { ElMessage.error('复制失败，请手动选中复制') }
+}
+const copyAllInstances = async () => {
+  try {
+    // 按 OCID 查 IP（实例聚合接口）
+    let ipMap = {}
+    try {
+      const res = await listInstances()
+      const items = res.items || res || []
+      for (const it of items) {
+        // 实例聚合接口返回的 id 可能是 OCID
+        const ocid = it.instance_id || it.ocid || it.id
+        if (ocid) ipMap[ocid] = it.public_ip || ''
+      }
+    } catch (e) { /* 查不到 IP 就留空 */ }
+    const lines = taskInstances.value.map((r, i) => {
+      const ip = ipMap[r.ocid] || '无IP'
+      const pwd = r.root_password || '无密码'
+      const name = r.display_name || `#${r.sequence}`
+      return `${i + 1}. ${name} | ${ip} | root | ${pwd}`
+    })
+    const text = lines.join('\n')
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success(`已复制 ${taskInstances.value.length} 台实例信息`)
+  } catch (e) { ElMessage.error('复制失败') }
 }
 const logTask = ref(null)
 const logs = ref([])

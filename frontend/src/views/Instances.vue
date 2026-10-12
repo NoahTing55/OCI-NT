@@ -61,7 +61,15 @@
         </template>
       </el-table-column>
       <el-table-column prop="shape" label="Shape" width="170" />
-      <el-table-column prop="public_ip" label="公网 IP" width="140" />
+      <el-table-column prop="public_ip" label="公网 IP" width="150">
+        <template #default="{ row }">
+          <span v-if="row.public_ip" style="display: inline-flex; align-items: center; gap: 4px">
+            {{ row.public_ip }}
+            <el-icon size="14" style="cursor: pointer; color: #409eff" @click="copyIp(row.public_ip)"><CopyDocument /></el-icon>
+          </span>
+          <span v-else style="color: #c0c4cc">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="private_ip" label="私网 IP" width="140" />
       <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
@@ -221,6 +229,23 @@ const errors = ref([])
 const selected = ref([])
 const viewMode = ref('table')
 const terminalRef = ref(null)
+const copyIp = async (ip) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(ip)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = ip
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success('IP 已复制')
+  } catch (e) { ElMessage.error('复制失败') }
+}
 const openTerminal = (row) => {
   const accountId = row.account_id
   const instanceId = row.instance_id
