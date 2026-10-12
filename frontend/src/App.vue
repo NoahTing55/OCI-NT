@@ -7,8 +7,7 @@
     <!-- 顶部导航：深蓝渐变 -->
     <el-header class="app-header">
       <el-icon class="logo-icon"><Cloudy /></el-icon>
-      <span class="header-title">OCI 多账号管理面板</span>
-      <span class="header-badge">M4</span>
+      <span class="header-title">N&T的账号管理面板</span>
       <span style="flex: 1"></span>
       <span class="header-user">{{ username }}</span>
       <el-button size="small" @click="logout">退出</el-button>
@@ -92,14 +91,6 @@ body { margin: 0; }
   font-size: 18px;
   font-weight: bold;
   letter-spacing: 1px;
-}
-.app-header .header-badge {
-  margin-left: 12px;
-  font-size: 12px;
-  color: #a0aec0;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2px 8px;
-  border-radius: 10px;
 }
 .app-header .header-user {
   font-size: 13px;
