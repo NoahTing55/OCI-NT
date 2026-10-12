@@ -40,7 +40,7 @@
             <el-button size="small" type="danger" @click="batchDelete">批量删除</el-button>
             <span style="margin-left: 8px; font-size: 12px; color: #909399">已选 {{ selected.length }} 条</span>
           </div>
-          <el-table :data="records" stripe style="width: 100%" v-loading="recordsLoading" @selection-change="onSelect">
+          <el-table :data="records" style="width: 100%" v-loading="recordsLoading" @selection-change="onSelect">
             <el-table-column type="selection" width="45" />
             <el-table-column prop="type" label="类型" width="80" />
             <el-table-column prop="name" label="记录名" min-width="200" show-overflow-tooltip />
@@ -69,8 +69,8 @@
         </el-card>
 
         <!-- 新增/编辑对话框 -->
-        <el-dialog :style="{ maxWidth: '92vw' }" v-model="dlgVisible" :title="editing ? '编辑 DNS 记录' : '新增 DNS 记录'" width="520px">
-          <el-form :model="form" label-width="90px">
+        <el-dialog :style="{ maxWidth: '92vw' }" v-model="dlgVisible" :title="editing ? '编辑 DNS 记录' : '新增 DNS 记录'" width="560px">
+          <el-form ref="dnsFormRef" :model="form" :rules="dnsRules" label-width="90px">
             <el-form-item label="类型">
               <el-select v-model="form.type" style="width: 100%">
                 <el-option label="A" value="A" />
@@ -79,10 +79,10 @@
                 <el-option label="TXT" value="TXT" />
               </el-select>
             </el-form-item>
-            <el-form-item label="记录名">
+            <el-form-item label="记录名" prop="name">
               <el-input v-model="form.name" placeholder="如 www，@ 表示根域名" />
             </el-form-item>
-            <el-form-item label="内容">
+            <el-form-item label="内容" prop="content">
               <el-input v-model="form.content" :placeholder="contentPlaceholder" />
             </el-form-item>
             <el-form-item label="TTL">
@@ -106,7 +106,7 @@
           <div class="card-title">Cloudflare Token</div>
           <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">加密存储，权限最小化：Zone.DNS 编辑</div>
           <el-button size="small" type="primary" @click="tokenVisible = true">新增 Token</el-button>
-          <el-table :data="tokens" size="small" style="margin-top: 8px" border>
+          <el-table :data="tokens" size="small" style="margin-top: 8px">
             <el-table-column prop="name" label="名称" width="160" />
             <el-table-column prop="remark" label="备注" />
             <el-table-column prop="created_at" label="创建时间" width="180" />
@@ -116,7 +116,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-dialog :style="{ maxWidth: '92vw' }" v-model="tokenVisible" title="新增 CF Token" width="460px">
+          <el-dialog :style="{ maxWidth: '92vw' }" v-model="tokenVisible" title="新增 CF Token" width="560px">
             <el-form :model="tokenForm" label-width="80px">
               <el-form-item label="名称"><el-input v-model="tokenForm.name" placeholder="如 主域名Token" /></el-form-item>
               <el-form-item label="Token">
@@ -142,7 +142,7 @@
             <el-button size="small" :loading="checking" @click="runCheck">一致性巡检</el-button>
             <el-button size="small" :loading="syncingAll" @click="runSyncAll">一键同步全部</el-button>
           </div>
-          <el-table :data="bindings" size="small" border>
+          <el-table :data="bindings" size="small">
             <el-table-column prop="domain" label="域名" width="200" />
             <el-table-column prop="record_type" label="类型" width="70" />
             <el-table-column prop="instance_name" label="实例" width="160" />
@@ -175,7 +175,7 @@
             巡检完成：{{ checkedCount }} 个绑定全部一致
           </div>
 
-          <el-dialog :style="{ maxWidth: '92vw' }" v-model="bindVisible" title="新增域名绑定" width="520px">
+          <el-dialog :style="{ maxWidth: '92vw' }" v-model="bindVisible" title="新增域名绑定" width="560px">
             <el-form :model="bindForm" label-width="100px">
               <el-form-item label="CF Token">
                 <el-select v-model="bindForm.cf_token_id" style="width: 100%">
@@ -246,6 +246,11 @@ const editing = ref(null)
 
 const sel = reactive({ tokenId: null, zoneId: '', type: '' })
 const form = reactive({ type: 'A', name: '', content: '', ttl: 120, proxied: false })
+const dnsFormRef = ref(null)
+const dnsRules = {
+  name: [{ required: true, message: '请输入记录名', trigger: 'blur' }],
+  content: [{ required: true, message: '请输入记录内容', trigger: 'blur' }],
+}
 
 const canProxy = (t) => ['A', 'AAAA', 'CNAME'].includes(t)
 const contentPlaceholder = computed(() => {
@@ -324,8 +329,9 @@ const openEdit = (row) => {
   dlgVisible.value = true
 }
 const saveRecord = async () => {
-  if (!form.name.trim() || !form.content.trim()) {
-    ElMessage.warning('记录名和内容不能为空')
+  try {
+    await dnsFormRef.value?.validate()
+  } catch {
     return
   }
   saving.value = true

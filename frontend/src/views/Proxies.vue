@@ -4,7 +4,7 @@
     <el-button @click="batchVisible = true">批量导入</el-button>
     <el-button @click="doTestAll" :loading="testing">{{ testing ? '检测中…' : '代理检测' }}</el-button>
 
-    <el-table :data="proxies" v-loading="loading" style="margin-top: 12px" border>
+    <el-table :data="proxies" v-loading="loading" style="margin-top: 12px">
       <template #empty>
         <el-empty description="暂无代理" :image-size="80">
           <el-button type="primary" size="small" @click="createVisible = true">新建代理</el-button>
@@ -41,16 +41,16 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" :title="editingId ? '编辑代理' : '新建代理'" width="480px" @closed="resetForm">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="名称"><el-input v-model="form.name" placeholder="如 HK-住宅-01" /></el-form-item>
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" :title="editingId ? '编辑代理' : '新建代理'" width="560px" @closed="resetForm">
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
+        <el-form-item label="名称" prop="name"><el-input v-model="form.name" placeholder="如 HK-住宅-01" /></el-form-item>
         <el-form-item label="类型">
           <el-select v-model="form.scheme" style="width:100%">
             <el-option value="http" label="http" />
             <el-option value="socks5" label="socks5（DNS 走代理）" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Host"><el-input v-model="form.host" placeholder="proxy.example.com" /></el-form-item>
+        <el-form-item label="Host" prop="host"><el-input v-model="form.host" placeholder="proxy.example.com" /></el-form-item>
         <el-form-item label="端口"><el-input-number v-model="form.port" :min="1" :max="65535" style="width:100%" /></el-form-item>
         <el-form-item label="用户名"><el-input v-model="form.username" placeholder="可空" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="form.password" show-password :placeholder="editingId ? '留空不修改' : '可空，加密存储'" /></el-form-item>
@@ -63,13 +63,13 @@
     </el-dialog>
 
     <!-- 批量导入 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchVisible" title="批量导入代理" width="640px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="batchVisible" title="批量导入代理" width="680px">
       <el-input v-model="batchText" type="textarea" :rows="8" placeholder="每行一个，支持：&#10;socks5://user:pass@host:port&#10;http://host:port&#10;host:port:user:pass&#10;host:port（默认 socks5）&#10;# 开头为注释，会跳过" />
       <div style="margin: 8px 0; font-size:12px;color:#909399">
         端口缺省：socks5→1080，http/https→8080；名称自动生成 proxy-1、proxy-2…
       </div>
       <el-button @click="parseBatch">解析预览</el-button>
-      <el-table :data="batchList" style="margin-top:8px" border max-height="260">
+      <el-table :data="batchList" style="margin-top:8px" max-height="260">
         <el-table-column prop="name" label="名称" width="100" />
         <el-table-column prop="scheme" label="类型" width="80" />
         <el-table-column label="地址" width="200">
@@ -105,6 +105,11 @@ const testing = ref(false)
 const createVisible = ref(false)
 const submitting = ref(false)
 const form = ref({ name: '', scheme: 'http', host: '', port: 8080, username: '', password: '', remark: '' })
+const formRef = ref(null)
+const formRules = {
+  name: [{ required: true, message: '请输入代理名称', trigger: 'blur' }],
+  host: [{ required: true, message: '请输入 Host', trigger: 'blur' }],
+}
 const editingId = ref(null)
 
 const load = async () => {
@@ -128,6 +133,11 @@ const openEdit = (row) => {
   createVisible.value = true
 }
 const submitForm = async () => {
+  try {
+    await formRef.value?.validate()
+  } catch {
+    return
+  }
   submitting.value = true
   try {
     if (editingId.value) {
