@@ -257,9 +257,14 @@ async def ensure_subnet(
     account: Account,
     region: str = "",
     availability_domain: str = "",
-) -> str:
-    """worker 用的便捷入口：只返回可用的 subnet ocid。"""
+) -> tuple[str, str]:
+    """worker 用的便捷入口：返回 (subnet_ocid, availability_domain)。
+
+    注意：目标 AD 无可用子网时会复用其他 AD 的子网，
+    此时返回的 AD 是子网实际所在的 AD，调用方必须用这个 AD 建实例，
+    否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter。
+    """
     result = await ensure_network(
         account, region=region, availability_domain=availability_domain
     )
-    return result["subnet_ocid"]
+    return result["subnet_ocid"], result["availability_domain"]

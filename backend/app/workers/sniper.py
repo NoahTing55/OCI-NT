@@ -346,7 +346,13 @@ class SniperManager:
         if not cfg["subnet_ocid"]:
             self._log(task_id, "info", "子网未填，自动准备网络（有则复用、无则创建）…")
             try:
-                cfg["subnet_ocid"] = await ensure_subnet(account, cfg["region"], cfg["ad"])
+                subnet_ocid, real_ad = await ensure_subnet(account, cfg["region"], cfg["ad"])
+                cfg["subnet_ocid"] = subnet_ocid
+                # 关键：复用其他 AD 的子网时 AD 会切换，必须用实际 AD 建实例，
+                # 否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter
+                if real_ad and real_ad != cfg["ad"]:
+                    self._log(task_id, "info", "子网在 %s，自动切换可用域" % real_ad)
+                    cfg["ad"] = real_ad
             except Exception as e:
                 detail = e.detail if isinstance(e, HTTPException) else str(e)
                 await self._finish_failed(task_id, cfg, "自动建网失败：%s" % detail)
