@@ -121,6 +121,21 @@
     <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑实例" width="520px">
       <el-form :model="editForm" label-width="110px">
         <el-form-item label="名称"><el-input v-model="editForm.display_name" /></el-form-item>
+        <el-form-item label="OCPU">
+          <el-input-number v-model="editForm.ocpus" :min="1" :max="64" :step="1"
+            :disabled="!isFlex" style="width: 100%" />
+          <div v-if="!isFlex" style="font-size: 12px; color: #e6a23c">当前机型 {{ editRow.shape }} 非 Flex，不支持在线调整</div>
+          <div v-else style="font-size: 12px; color: #909399">仅 Flex 机型，需关机后修改</div>
+        </el-form-item>
+        <el-form-item label="内存 (GB)">
+          <el-input-number v-model="editForm.memory_in_gbs" :min="1" :max="1024" :step="1"
+            :disabled="!isFlex" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="硬盘 (GB)">
+          <el-input-number v-model="editForm.boot_volume_size_gb" :min="50" :max="16384" :step="10"
+            style="width: 100%" />
+          <div style="font-size: 12px; color: #909399">只能扩容不能缩容，当前 {{ curDiskGb }} GB</div>
+        </el-form-item>
         <el-collapse style="margin: 4px 0 8px">
           <el-collapse-item title="高级选项（标签 / 元数据）" name="adv">
             <el-form-item label="freeform_tags">
@@ -131,7 +146,7 @@
             </el-form-item>
           </el-collapse-item>
         </el-collapse>
-        <div style="font-size: 12px; color: #909399">shape / OCPU / 内存不支持在线变更，如需升配请重建实例</div>
+        <div style="font-size: 12px; color: #909399">机型（shape）本身不支持变更，如需换机型请重建实例</div>
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -171,6 +186,7 @@ import {
   listAccounts,
   listInstances,
   editInstance,
+  getBootVolume,
   createBatch,
   getBatchTask,
   changeIp,
@@ -323,12 +339,32 @@ const editForm = ref({ display_name: '' })
 const tagsText = ref('')
 const metaText = ref('')
 
-const openEdit = (row) => {
+const isFlex = computed(() => (editRow.value.shape || '').includes('Flex'))
+const curDiskGb = ref(null)
+const origShape = ref({ ocpus: null, memory_in_gbs: null })
+
+const openEdit = async (row) => {
   editRow.value = row
-  editForm.value = { display_name: row.display_name || '' }
+  const sc = row.shape_config || {}
+  origShape.value = { ocpus: sc.ocpus ?? null, memory_in_gbs: sc.memoryInGBs ?? null }
+  editForm.value = {
+    display_name: row.display_name || '',
+    ocpus: sc.ocpus ?? null,
+    memory_in_gbs: sc.memoryInGBs ?? null,
+    boot_volume_size_gb: null,
+  }
   tagsText.value = ''
   metaText.value = ''
+  curDiskGb.value = null
   editVisible.value = true
+  // 回填硬盘当前大小
+  try {
+    const bv = await getBootVolume(row.account_id, row.instance_id)
+    curDiskGb.value = bv.size_gb
+    editForm.value.boot_volume_size_gb = bv.size_gb
+  } catch {
+    // 查不到就不回填，用户手动输入目标大小
+  }
 }
 
 const submitEdit = async () => {
@@ -344,6 +380,12 @@ const submitEdit = async () => {
       }
     }
   }
+  if (editForm.value.ocpus != null && editForm.value.ocpus !== origShape.value.ocpus)
+    body.ocpus = editForm.value.ocpus
+  if (editForm.value.memory_in_gbs != null && editForm.value.memory_in_gbs !== origShape.value.memory_in_gbs)
+    body.memory_in_gbs = editForm.value.memory_in_gbs
+  if (editForm.value.boot_volume_size_gb != null && editForm.value.boot_volume_size_gb !== curDiskGb.value)
+    body.boot_volume_size_gb = editForm.value.boot_volume_size_gb
   if (!Object.keys(body).length) {
     ElMessage.warning('没有要修改的内容')
     return

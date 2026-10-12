@@ -35,6 +35,8 @@ export const checkAllAccounts = () => api.post('/health/check-all').then((r) => 
 export const listInstances = (params) => api.get('/instances', { params }).then((r) => r.data)
 export const editInstance = (accountId, instanceId, data) =>
   api.put(`/instances/${accountId}/${encodeURIComponent(instanceId)}`, data).then((r) => r.data)
+export const getBootVolume = (accountId, instanceId) =>
+  api.get(`/instances/${accountId}/${encodeURIComponent(instanceId)}/boot-volume`).then((r) => r.data)
 
 // 批量任务
 export const createBatch = (data) => api.post('/batch', data).then((r) => r.data)
