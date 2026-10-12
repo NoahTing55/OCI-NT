@@ -229,10 +229,11 @@
             </div>
             <div v-if="item.region" class="batch-region">区域：{{ fmtRegion(item.region) }}</div>
           </el-form-item>
-          <el-form-item label="私钥内容">
+          <el-form-item label="私钥内容" :error="item._keyError || ''">
             <div class="drop-zone" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="(e) => onDropFile(e, item, 'private_key')">
               <el-input v-model="item.private_key" type="textarea" :rows="2"
-                placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password />
+                placeholder="-----BEGIN PRIVATE KEY-----，或拖拽 PEM 文件到此" show-password
+                @blur="validatePrivateKey(item)" @paste="validatePrivateKey(item)" />
 
             </div>
           </el-form-item>
@@ -661,6 +662,27 @@ const removeBatchItem = (idx) => {
 const parseBatchRegion = (item) => {
   const m = (item.config_text || '').match(/^\s*region\s*=\s*(\S+)/m)
   if (m) item.region = m[1].trim()
+}
+const validatePrivateKey = (item) => {
+  // 延迟到粘贴完成后校验
+  setTimeout(() => {
+    const key = (item.private_key || '').trim()
+    if (!key) { item._keyError = ''; return }
+    if (!key.includes('-----BEGIN')) {
+      item._keyError = '缺少 -----BEGIN 标记，私钥格式不正确'
+      return
+    }
+    if (!key.includes('-----END')) {
+      item._keyError = '缺少 -----END 标记，私钥可能不完整'
+      return
+    }
+    const lines = key.split('\n').filter(l => l.trim())
+    if (lines.length < 3) {
+      item._keyError = '私钥行数太少，可能粘贴不完整'
+      return
+    }
+    item._keyError = ''
+  }, 50)
 }
 const onDropFile = (e, item, field) => {
   const file = e.dataTransfer?.files?.[0]

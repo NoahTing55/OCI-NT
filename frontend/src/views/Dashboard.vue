@@ -14,6 +14,7 @@
             </div>
           </div>
           <div v-if="card.trend" class="stat-trend" :style="{ color: card.trendColor }">{{ card.trend }}</div>
+          <div v-if="card.dataTime" style="font-size: 11px; color: #c0c4cc; margin-top: 4px">数据截至 {{ card.dataTime }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -38,6 +39,25 @@
               :color="w.pct >= 90 ? '#f56c6c' : w.pct >= 80 ? '#e6a23c' : '#409eff'"
               :show-text="false"
             />
+          </div>
+          <div v-if="allQuotas.length > quotaWarnings.length" style="text-align: center; margin-top: 8px">
+            <el-button type="primary" link @click="showAllQuotas = !showAllQuotas" style="font-size: 13px">
+              {{ showAllQuotas ? '收起 ▲' : `查看全部 ${allQuotas.length} 项 ▼` }}
+            </el-button>
+          </div>
+          <div v-if="showAllQuotas" style="margin-top: 12px; border-top: 1px dashed #e4e7ed; padding-top: 12px">
+            <div v-for="w in allQuotas" :key="'all-' + w.account_id + w.key" style="margin-bottom: 12px">
+              <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px">
+                <span>{{ w.name }} · {{ w.label }}</span>
+                <span :style="{ color: w.pct >= 80 ? '#f56c6c' : '#606266' }">{{ w.pct }}%</span>
+              </div>
+              <el-progress
+                :percentage="w.pct"
+                :stroke-width="10"
+                :color="w.pct >= 90 ? '#f56c6c' : w.pct >= 80 ? '#e6a23c' : '#409eff'"
+                :show-text="false"
+              />
+            </div>
           </div>
         </el-card>
       </el-col>
@@ -87,6 +107,8 @@ const statCards = ref([
 ])
 const cardsLoading = ref(true)
 const quotaWarnings = ref([])
+const showAllQuotas = ref(false)
+const allQuotas = ref([])
 const recentTasks = ref([])
 
 // 状态文案与颜色（与 Sniper.vue 保持一致）
@@ -115,13 +137,19 @@ onMounted(async () => {
     const tasks = taskList || []
     const accs = accounts || []
     const runningTasks = tasks.filter((t) => t.status === 'running')
-    const today = new Date().toISOString().slice(0, 10)
-    const todaySuccess = tasks.filter(
-      (t) => t.status === 'success' && String(t.finished_at || '').slice(0, 10) === today,
-    ).length
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const todaySuccess = tasks.filter((t) => {
+      if (t.status !== 'success' || !t.finished_at) return false
+      const fd = new Date(t.finished_at)
+      const fday = `${fd.getFullYear()}-${String(fd.getMonth() + 1).padStart(2, '0')}-${String(fd.getDate()).padStart(2, '0')}`
+      return fday === today
+    }).length
 
     statCards.value[0].value = accs.length
     statCards.value[1].value = Array.isArray(items) ? items.length : 0
+    const now = new Date()
+    statCards.value[1].dataTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     statCards.value[2].value = runningTasks.length
     statCards.value[3].value = todaySuccess
 
@@ -160,6 +188,25 @@ onMounted(async () => {
     }
     warnings.sort((a, b) => b.pct - a.pct)
     quotaWarnings.value = warnings.slice(0, 8)
+    // 全部配额（用于"查看全部"展开）
+    const all = []
+    for (const acc of summary || []) {
+      const quotas = acc.quotas || {}
+      for (const key of ['e2', 'a1', 'e5']) {
+        const q = quotas[key]
+        if (!q || q.available == null || q.available === 0) continue
+        const pct = Math.round(((q.used || 0) / q.available) * 100)
+        all.push({
+          account_id: acc.account_id,
+          name: acc.name,
+          key,
+          label: { e2: 'E2', a1: 'ARM A1', e5: 'E5' }[key],
+          pct: Math.min(pct, 100),
+        })
+      }
+    }
+    all.sort((a, b) => b.pct - a.pct)
+    allQuotas.value = all
 
     // 最近 5 条开机任务
     const sorted = [...tasks].sort((a, b) =>
