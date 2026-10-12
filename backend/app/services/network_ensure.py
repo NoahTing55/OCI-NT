@@ -9,7 +9,7 @@ import asyncio
 import httpx
 from fastapi import HTTPException
 
-from app.core.oci_client import OciClient
+from app.core.oci_client import OciClient, normalize_ad
 from app.core.oci_factory import build_client_for_account
 from app.models.models import Account
 
@@ -17,19 +17,6 @@ from app.models.models import Account
 # 用户已有的，实在没有才创建，保证幂等不建一堆。
 MANAGED_VCN_NAME = "oci-panel-vcn"
 MANAGED_IG_NAME = "oci-panel-ig"
-
-
-def normalize_ad(ad: str) -> str:
-    """归一化可用域名：VwCa:PHX-AD-1 -> phx-ad-1。
-
-    任务里存的可能是控制台显示格式（含 realm 前缀、大写），
-    OCI API 返回的是小写格式。比较前统一转小写并去 realm 前缀。
-    """
-    ad = (ad or "").strip().lower()
-    # 去掉 realm 前缀（如 vwca:phx-ad-1 -> phx-ad-1）
-    if ":" in ad:
-        ad = ad.split(":", 1)[1]
-    return ad
 MANAGED_SUBNET_NAME = "oci-panel-subnet"
 # 子网 CIDR 候选：第一个被占用就顺延
 SUBNET_CIDR_CANDIDATES = ("10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24")

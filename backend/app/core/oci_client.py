@@ -18,6 +18,18 @@ import hashlib
 import json as _json
 import logging
 from email.utils import formatdate
+
+
+def normalize_ad(ad: str) -> str:
+    """归一化可用域名：VwCa:PHX-AD-1 -> phx-ad-1。
+
+    前端存的可能是控制台显示格式（含 realm 前缀、大写），
+    OCI API 要的是小写无前缀格式。所有调 OCI API 传 AD 的地方都要过一遍。
+    """
+    ad = (ad or "").strip().lower()
+    if ":" in ad:
+        ad = ad.split(":", 1)[1]
+    return ad
 from urllib.parse import urlsplit
 
 import httpx
@@ -214,7 +226,7 @@ class OciClient:
         """
         body: dict = {
             "compartmentId": compartment_id,
-            "availabilityDomain": availability_domain,
+            "availabilityDomain": normalize_ad(availability_domain),
             "shape": shape,
             "displayName": display_name,
             "sourceDetails": {
@@ -408,7 +420,7 @@ class OciClient:
         """
         body: dict = {
             "compartmentId": compartment_id, "vcnId": vcn_id,
-            "availabilityDomain": availability_domain, "cidrBlock": cidr_block,
+            "availabilityDomain": normalize_ad(availability_domain), "cidrBlock": cidr_block,
             "displayName": display_name, "prohibitPublicIpOnVnic": False,
         }
         if route_table_id:
