@@ -452,6 +452,30 @@ class SniperManager:
                 kind, msg = classify_launch_error(resp.status_code, resp.text)
                 if kind == "success":
                     instance_ocid = (resp.json() or {}).get("id", "")
+                    # launch 返回 200 只是请求已接受，需轮询确认实例真正 RUNNING。
+                    # 工作请求可能失败（如网络/IG 问题），实例会进终止态。
+                    # 最多等 3 分钟，RUNNING 才算成功，否则按失败重试。
+                    running = False
+                    for _ in range(18):
+                        await self._sleep(task_id, 10)
+                        try:
+                            st_resp = await client.get_instance(instance_ocid)
+                            if st_resp.status_code == 200:
+                                state = (st_resp.json() or {}).get("lifecycleState", "")
+                                if state == "RUNNING":
+                                    running = True
+                                    break
+                                if state in ("TERMINATED", "TERMINATING"):
+                                    self._log(task_id, "warning",
+                                              "实例 %s 状态变为 %s（工作请求失败），视为开机失败，重试" % (instance_ocid[:20], state))
+                                    break
+                        except Exception as e:
+                            logger.warning("task=%s 查实例状态失败：%s", task_id, e)
+                    if not running:
+                        # 实例没起来，按"暂无可用容量"处理，继续重试
+                        self._log(task_id, "info", "实例未进入 RUNNING，%.1f 秒后重试" % cfg["interval_seconds"])
+                        await self._sleep(task_id, cfg["interval_seconds"] + random.uniform(0, 5))
+                        continue
                     done, snipe_done = await self._on_success(
                         task_id, cfg, client, instance_ocid, "开机成功", display_name=dn)
                     if done:
