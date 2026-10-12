@@ -295,7 +295,24 @@ def _remove_instance_from_task(db: Session, task_id: int, ocid: str) -> dict:
 
     inst = db.query(SnipeInstance).filter(SnipeInstance.task_id == task_id, SnipeInstance.instance_ocid == ocid).first()
     if not inst:
-        raise HTTPException(status_code=404, detail="该实例不在任务列表中")
+        # 兼容老任务：snipe_instances 表无记录时，直接从逗号分隔字段移除
+        ocids = [o.strip() for o in (task.instance_ocid or "").split(",") if o.strip()]
+        if ocid not in ocids:
+            raise HTTPException(status_code=404, detail="该实例不在任务列表中")
+        ocids.remove(ocid)
+        task.instance_ocid = ",".join(ocids)
+        task.success_count = len(ocids)
+        if task.success_count < (task.target_count or 1) and task.status == "success":
+            task.status = "running"
+        db.commit()
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "success_count": task.success_count,
+            "target_count": task.target_count,
+            "instances": [],
+            "message": f"已移除实例，当前 {task.success_count}/{task.target_count} 台",
+        }
     removed_seq = inst.sequence
 
     # 事务内：删除 + 重排
@@ -329,17 +346,32 @@ def _remove_instance_from_task(db: Session, task_id: int, ocid: str) -> dict:
 
 @router.get("/{task_id}/instances")
 def list_task_instances(task_id: int, db: Session = Depends(get_db)):
-    """返回任务的实例列表（按 sequence 排序）。"""
+    """返回任务的实例列表（按 sequence 排序）。
+
+    兼容老任务：0016 迁移前创建的任务实例只存在 task.instance_ocid
+    逗号分隔字段里，snipe_instances 表为空时回退解析该字段
+    （无独立密码，按任务级密码显示）。
+    """
     task = db.get(SnipeTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     rows = db.query(SnipeInstance).filter(SnipeInstance.task_id == task_id).order_by(SnipeInstance.sequence).all()
+    if rows:
+        return [
+            {"id": r.id, "ocid": r.instance_ocid, "sequence": r.sequence,
+             "display_name": r.display_name,
+             "root_password": r.root_password,
+             "created_at": r.created_at.isoformat() if r.created_at else None}
+            for r in rows
+        ]
+    # 回退：老任务的逗号分隔 OCID
+    ocids = [o.strip() for o in (task.instance_ocid or "").split(",") if o.strip()]
     return [
-        {"id": r.id, "ocid": r.instance_ocid, "sequence": r.sequence,
-         "display_name": r.display_name,
-         "root_password": r.root_password,
-         "created_at": r.created_at.isoformat() if r.created_at else None}
-        for r in rows
+        {"id": None, "ocid": ocid, "sequence": i + 1,
+         "display_name": f"{task.display_name}-{i + 1}" if task.display_name else "",
+         "root_password": task.root_password,  # 老任务只有任务级密码
+         "created_at": None}
+        for i, ocid in enumerate(ocids)
     ]
 
 
