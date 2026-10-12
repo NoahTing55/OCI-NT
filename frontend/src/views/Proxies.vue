@@ -5,6 +5,11 @@
     <el-button @click="doTestAll" :loading="testing">{{ testing ? '检测中…' : '代理检测' }}</el-button>
 
     <el-table :data="proxies" v-loading="loading" style="margin-top: 12px" border>
+      <template #empty>
+        <el-empty description="暂无代理" :image-size="80">
+          <el-button type="primary" size="small" @click="createVisible = true">新建代理</el-button>
+        </el-empty>
+      </template>
       <el-table-column prop="name" label="名称" width="140" />
       <el-table-column prop="scheme" label="类型" width="90" />
       <el-table-column label="地址" width="220">

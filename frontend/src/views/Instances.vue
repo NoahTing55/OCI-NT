@@ -48,7 +48,7 @@
       </el-radio-group>
     </div>
 
-    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
+    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" border size="small" style="width: 100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140">
@@ -272,11 +272,14 @@ const progressPct = computed(() => {
 })
 const statusCn = (s) => ({ done: '已完成', failed: '失败', running: '进行中' }[s] || s || '-')
 
+let pollFailCount = 0
 const pollTask = async (id) => {
   clearInterval(pollTimer)
+  pollFailCount = 0
   pollTimer = setInterval(async () => {
     try {
       const t = await getBatchTask(id)
+      pollFailCount = 0
       task.value = t
       taskDetail.value = t.detail?.results || []
       if (t.status === 'done' || t.status === 'failed') {
@@ -284,7 +287,11 @@ const pollTask = async (id) => {
         load()
       }
     } catch {
-      clearInterval(pollTimer)
+      pollFailCount += 1
+      if (pollFailCount >= 3) {
+        clearInterval(pollTimer)
+        ElMessage.error('批量任务状态查询失败，已停止轮询，请手动刷新查看结果')
+      }
     }
   }, 2000)
 }

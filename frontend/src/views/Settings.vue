@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-card v-for="g in groups" :key="g.key" style="margin-bottom: 16px">
-      <template #header><b>{{ g.name }}</b></template>
+      <template #header><span class="card-title" style="margin-bottom: 0">{{ g.name }}</span></template>
       <el-form label-width="230px">
         <el-form-item v-for="item in g.items" :key="item.key" :label="item.label">
           <el-input
