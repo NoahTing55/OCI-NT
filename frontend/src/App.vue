@@ -31,9 +31,6 @@
           <el-menu-item index="/instances">
             <el-icon><Monitor /></el-icon><span>实例运维</span>
           </el-menu-item>
-          <el-menu-item index="/network">
-            <el-icon><Share /></el-icon><span>网络 / 换 IP</span>
-          </el-menu-item>
           <el-menu-item index="/domains">
             <el-icon><Link /></el-icon><span>CF管理</span>
           </el-menu-item>
@@ -62,7 +59,7 @@
 // 主布局：侧边栏图标 + 渐变 header
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Cloudy, DataBoard, User, Connection, Monitor, Share, Link, Aim, Lock, Setting, Fold, Expand } from '@element-plus/icons-vue'
+import { Cloudy, DataBoard, User, Connection, Monitor, Link, Aim, Lock, Setting, Fold, Expand } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const username = computed(() => localStorage.getItem('oci_user') || '')

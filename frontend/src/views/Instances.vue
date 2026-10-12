@@ -40,6 +40,7 @@
       <el-button size="small" :disabled="!selected.length" @click="runBatch('power_off')">批量关机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('reboot')">批量重启</el-button>
       <el-button size="small" type="danger" :disabled="!selected.length" @click="runBatch('terminate')">批量终止</el-button>
+      <el-button size="small" type="info" :disabled="!selected.length" :loading="openingPorts" @click="batchOpenPorts">批量放行端口</el-button>
       <span style="margin-left: 8px; color: #909399; font-size: 12px">已选 {{ selected.length }} 台</span>
       <span style="flex: 1"></span>
       <el-radio-group v-model="viewMode" size="small">
@@ -76,12 +77,13 @@
         </template>
       </el-table-column>
       <el-table-column prop="private_ip" label="私网 IP" width="140" />
-      <el-table-column label="操作" width="230" fixed="right">
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <span class="hover-show">
             <el-button size="small" type="success" @click="openTerminal(row)">终端</el-button>
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" @click="openChangeIp(row)">换 IP</el-button>
+            <el-button size="small" type="info" @click="doOpenPorts(row)">放行端口</el-button>
           </span>
         </template>
       </el-table-column>
@@ -197,6 +199,7 @@ import {
   createBatch,
   getBatchTask,
   changeIp,
+  openAllPorts,
 } from '../api/client.js'
 
 const STATES = ['RUNNING', 'STOPPED', 'STOPPING', 'STARTING', 'TERMINATED', 'TERMINATING']
@@ -431,6 +434,39 @@ const openChangeIp = (row) => {
   ipRow.value = row
   ipResult.value = null
   ipVisible.value = true
+}
+
+// 放行所有端口（原网络页功能并入）
+const openingPorts = ref(false)
+const batchOpenPorts = async () => {
+  openingPorts.value = true
+  let ok = 0
+  try {
+    for (const row of selected.value) {
+      try {
+        const r = await openAllPorts({ account_id: row.account_id, instance_id: row.instance_id })
+        if (r.ok) ok++
+      } catch (e) { /* 单台失败继续 */ }
+    }
+    ElMessage.success(`批量放行完成：${ok}/${selected.value.length} 台成功`)
+  } finally {
+    openingPorts.value = false
+  }
+}
+const doOpenPorts = async (row) => {
+  openingPorts.value = true
+  try {
+    const r = await openAllPorts({
+      account_id: row.account_id,
+      instance_id: row.instance_id,
+    })
+    if (r.ok) ElMessage.success('已放行所有端口')
+    else ElMessage.warning(r.message || '操作失败')
+  } catch (e) {
+    ElMessage.error('操作失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    openingPorts.value = false
+  }
 }
 
 const submitChangeIp = async () => {
