@@ -40,12 +40,24 @@ def region_to_city(region: str) -> str:
     return _REGION_CITY_MAP.get(city_key, city_key.capitalize() or "OCI")
 
 
-def generate_account_name(region: str, account_id: int) -> str:
-    """自动生成自定义名称：{城市}-{id}-{日期}，如 Phoenix-3-20261008。"""
+def generate_account_name(region: str, db) -> str:
+    """自动生成自定义名称：{城市}-{日期}{序号}，如 Phoenix-2026101201。
+
+    同一城市同一天重复时序号自动递增（01、02...）。
+    """
     from datetime import datetime
+    from app.models.models import Account
     city = region_to_city(region)
     date_str = datetime.now().strftime("%Y%m%d")
-    return f"{city}-{account_id}-{date_str}"
+    prefix = f"{city}-{date_str}"
+    # 查已有同前缀的最大序号
+    existing = db.query(Account.name).filter(Account.name.like(f"{prefix}%")).all()
+    max_seq = 0
+    for (name,) in existing:
+        suffix = name[len(prefix):]
+        if suffix.isdigit():
+            max_seq = max(max_seq, int(suffix))
+    return f"{prefix}{max_seq + 1:02d}"
 # 与 app.services.instances.CACHE_PREFIX 保持一致（实例列表缓存 key 前缀）
 _INSTANCE_CACHE_PREFIX = "instances:"
 
@@ -213,13 +225,13 @@ async def _auto_detect_account_info(account: Account, db: Session):
 
 @router.post("", response_model=AccountOut)
 async def create_account(data: AccountCreate, db: Session = Depends(get_db)):
-    # 自定义名称为空时先用临时名，拿到 id 后按 {城市}-{id}-{日期} 生成
+    # 自定义名称为空时先用临时名，拿到 id 后按 {城市}-{日期}{序号} 生成
     use_auto_name = not (data.name or "").strip()
     if use_auto_name:
         data.name = "tmp-single"
     account = _create_account_core(data, db)
     if use_auto_name:
-        account.name = generate_account_name(account.region, account.id)
+        account.name = generate_account_name(account.region, db)
         db.commit()
         db.refresh(account)
     # 导入后自动识别账号类型和注册时间
@@ -295,8 +307,8 @@ async def batch_import_accounts(data: BatchImportRequest, db: Session = Depends(
             )
             account = _create_account_core(account_data, db)
             if use_auto_name:
-                # 按规则生成：{城市}-{id}-{日期}，如 Phoenix-3-20261008
-                account.name = generate_account_name(cfg["region"], account.id)
+                # 按规则生成：{城市}-{日期}{序号}，如 Phoenix-2026101201
+                account.name = generate_account_name(cfg["region"], db)
                 db.commit()
             # 自动识别账号类型和注册时间（失败不影响导入）
             await _auto_detect_account_info(account, db)
