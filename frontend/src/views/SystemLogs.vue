@@ -4,7 +4,7 @@
     <div class="syslog-topbar">
       <span class="syslog-title">>_ 系统日志</span>
       <span style="flex: 1"></span>
-      <el-select v-model="sourceFilter" style="width: 100px; margin-right: 8px" size="small" placeholder="来源" @change="load" clearable>
+      <el-select v-model="sourceFilter" style="width: 100px; margin-right: 8px" size="small" placeholder="来源" @change="onSourceChange" clearable>
         <el-option value="merged" label="全部" />
         <el-option v-for="l in logs" :key="l.name" :label="l.name" :value="l.name" :disabled="!l.exists" />
       </el-select>
@@ -109,6 +109,11 @@ async function fetchList() {
     const first = logs.value.find(l => l.exists)
     if (first) sourceFilter.value = first.name
   }
+}
+
+function onSourceChange() {
+  if (!sourceFilter.value) sourceFilter.value = 'merged'
+  load()
 }
 
 async function load() {

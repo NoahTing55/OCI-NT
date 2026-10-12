@@ -32,7 +32,8 @@
         </el-card>
 
         <!-- 记录列表 -->
-        <el-card header="DNS 记录">
+        <el-card>
+          <div class="card-title">DNS 记录</div>
           <div style="margin-bottom: 12px" v-if="selected.length">
             <el-button size="small" type="warning" @click="batchProxy(true)">批量开启 CDN</el-button>
             <el-button size="small" @click="batchProxy(false)">批量关闭 CDN</el-button>
@@ -101,7 +102,9 @@
 
       <!-- Tab 2: Token 管理 -->
       <el-tab-pane label="Token 管理" name="tokens">
-        <el-card header="Cloudflare Token（加密存储，权限最小化：Zone.DNS 编辑）">
+        <el-card>
+          <div class="card-title">Cloudflare Token</div>
+          <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">加密存储，权限最小化：Zone.DNS 编辑</div>
           <el-button size="small" type="primary" @click="tokenVisible = true">新增 Token</el-button>
           <el-table :data="tokens" size="small" style="margin-top: 8px" border>
             <el-table-column prop="name" label="名称" width="160" />
@@ -131,7 +134,9 @@
 
       <!-- Tab 3: 域名绑定 -->
       <el-tab-pane label="域名绑定" name="bindings">
-        <el-card header="域名绑定（实例 ↔ 域名，换 IP 后自动同步）">
+        <el-card>
+          <div class="card-title">域名绑定</div>
+          <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">实例 ↔ 域名，换 IP 后自动同步</div>
           <div style="margin-bottom: 8px">
             <el-button size="small" type="primary" @click="bindVisible = true">新增绑定</el-button>
             <el-button size="small" :loading="checking" @click="runCheck">一致性巡检</el-button>

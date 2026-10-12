@@ -1,9 +1,7 @@
 <template>
   <div>
-    <h2>安全设置</h2>
-
     <el-card style="margin-bottom: 16px">
-      <template #header><span>双因素认证（TOTP）</span></template>
+      <div class="card-title">双因素认证（TOTP）</div>
       <div v-if="me && !me.totp_enabled">
         <p style="color: #909399; font-size: 13px">绑定后登录时需要再输入验证器 App 上的 6 位动态码。</p>
         <div v-if="!qr">
@@ -27,7 +25,7 @@
     </el-card>
 
     <el-card>
-      <template #header><span>修改密码</span></template>
+      <div class="card-title">修改密码</div>
       <el-form label-width="100px" style="max-width: 400px">
         <el-form-item label="原密码">
           <el-input v-model="pwdForm.old_password" type="password" show-password />

@@ -1,7 +1,9 @@
 <template>
   <div>
     <!-- 换 IP -->
-    <el-card header="更换 IP（预留 IP 流程）" style="margin-bottom: 16px">
+    <el-card style="margin-bottom: 16px">
+      <div class="card-title">更换 IP</div>
+      <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">预留 IP 流程</div>
       <el-form :inline="true" :model="ipForm">
         <el-form-item label="账号">
           <el-select v-model="ipForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadAccountInstances">
@@ -49,7 +51,9 @@
     </el-card>
 
     <!-- 安全组：放行所有端口 -->
-    <el-card header="安全组（放行所有端口）" style="margin-bottom: 16px">
+    <el-card style="margin-bottom: 16px">
+      <div class="card-title">安全组</div>
+      <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">放行所有端口</div>
       <el-form :inline="true" :model="portsForm">
         <el-form-item label="账号">
           <el-select v-model="portsForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadPortsInstances">
