@@ -140,9 +140,16 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
 
 
 async def check_all_accounts(db: Session) -> list:
-    """全量检查（定时任务与一键检查共用）。"""
+    """全量检查（定时任务与一键检查共用）。
+
+    账号之间间隔 30 秒，避免连续调用 OCI 订阅接口触发 429 限流。
+    """
+    import asyncio
+
     accounts = db.query(Account).order_by(Account.id).all()
     results = []
-    for account in accounts:
+    for i, account in enumerate(accounts):
+        if i > 0:
+            await asyncio.sleep(30)
         results.append(await check_account_liveness(db, account.id))
     return results

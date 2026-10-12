@@ -10,6 +10,12 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="TripleDES has been moved",
+    category=Warning,
+)
 import paramiko
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
