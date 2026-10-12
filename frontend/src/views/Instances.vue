@@ -136,16 +136,6 @@
             style="width: 100%" />
           <div style="font-size: 12px; color: #909399">只能扩容不能缩容，当前 {{ curDiskGb }} GB</div>
         </el-form-item>
-        <el-collapse style="margin: 4px 0 8px">
-          <el-collapse-item title="高级选项（标签 / 元数据）" name="adv">
-            <el-form-item label="freeform_tags">
-              <el-input v-model="tagsText" type="textarea" :rows="3" placeholder='{"env":"prod"}' />
-            </el-form-item>
-            <el-form-item label="metadata">
-              <el-input v-model="metaText" type="textarea" :rows="3" placeholder='{"user_data":"..."}' />
-            </el-form-item>
-          </el-collapse-item>
-        </el-collapse>
         <div style="font-size: 12px; color: #909399">机型（shape）本身不支持变更，如需换机型请重建实例</div>
       </el-form>
       <template #footer>
@@ -336,8 +326,6 @@ const editVisible = ref(false)
 const editing = ref(false)
 const editRow = ref({})
 const editForm = ref({ display_name: '' })
-const tagsText = ref('')
-const metaText = ref('')
 
 const isFlex = computed(() => (editRow.value.shape || '').includes('Flex'))
 const curDiskGb = ref(null)
@@ -353,8 +341,6 @@ const openEdit = async (row) => {
     memory_in_gbs: sc.memoryInGBs ?? null,
     boot_volume_size_gb: null,
   }
-  tagsText.value = ''
-  metaText.value = ''
   curDiskGb.value = null
   editVisible.value = true
   // 回填硬盘当前大小
@@ -370,16 +356,6 @@ const openEdit = async (row) => {
 const submitEdit = async () => {
   const body = {}
   if (editForm.value.display_name) body.display_name = editForm.value.display_name
-  for (const [key, text] of [['freeform_tags', tagsText], ['metadata', metaText]]) {
-    if (text.value.trim()) {
-      try {
-        body[key] = JSON.parse(text.value)
-      } catch {
-        ElMessage.error(`${key} 不是合法 JSON`)
-        return
-      }
-    }
-  }
   if (editForm.value.ocpus != null && editForm.value.ocpus !== origShape.value.ocpus)
     body.ocpus = editForm.value.ocpus
   if (editForm.value.memory_in_gbs != null && editForm.value.memory_in_gbs !== origShape.value.memory_in_gbs)
