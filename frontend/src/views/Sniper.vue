@@ -24,20 +24,20 @@
         </template>
       </el-table-column>
       <el-table-column prop="attempts" label="尝试" width="70" />
-      <el-table-column prop="last_error" label="最后错误" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="last_error" label="最后错误" width="130" show-overflow-tooltip />
       <el-table-column label="创建时间" width="150">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="150" fixed="right">
+      <el-table-column label="操作" width="210" fixed="right">
         <template #default="{ row }">
           <span class="hover-show">
           <el-button size="small" @click="openLogs(row)">日志</el-button>
+          <el-button v-if="!['running', 'success'].includes(row.status)" size="small" type="primary" @click="handleTaskOp('start', row)">启动</el-button>
+          <el-button v-if="row.status === 'running'" size="small" type="warning" @click="handleTaskOp('pause', row)">暂停</el-button>
           <el-dropdown trigger="click" @command="(cmd) => handleTaskOp(cmd, row)">
             <el-button size="small">···</el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item v-if="!['running', 'success'].includes(row.status)" command="start">启动</el-dropdown-item>
-                <el-dropdown-item v-if="row.status === 'running'" command="pause">暂停</el-dropdown-item>
                 <el-dropdown-item command="edit" :disabled="['running', 'success'].includes(row.status)">编辑</el-dropdown-item>
                 <el-dropdown-item command="delete" divided :disabled="row.status === 'running'">删除</el-dropdown-item>
               </el-dropdown-menu>
