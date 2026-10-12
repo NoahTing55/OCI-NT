@@ -101,7 +101,7 @@
       </el-table-column>
       <el-table-column label="实例操作" width="110" align="center">
         <template #default="{ row }">
-          <el-button size="small" type="primary" @click="goCreateInstance(row.id)">创建实例</el-button>
+          <el-button size="small" type="warning" @click="goCreateInstance(row.id)">创建实例</el-button>
         </template>
       </el-table-column>
       <!-- 操作收进下拉菜单 -->
