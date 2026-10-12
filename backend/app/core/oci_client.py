@@ -226,7 +226,7 @@ class OciClient:
         """
         body: dict = {
             "compartmentId": compartment_id,
-            "availabilityDomain": normalize_ad(availability_domain),
+            "availabilityDomain": availability_domain,
             "shape": shape,
             "displayName": display_name,
             "sourceDetails": {
@@ -420,7 +420,7 @@ class OciClient:
         """
         body: dict = {
             "compartmentId": compartment_id, "vcnId": vcn_id,
-            "availabilityDomain": normalize_ad(availability_domain), "cidrBlock": cidr_block,
+            "availabilityDomain": availability_domain, "cidrBlock": cidr_block,
             "displayName": display_name, "prohibitPublicIpOnVnic": False,
         }
         if route_table_id:
