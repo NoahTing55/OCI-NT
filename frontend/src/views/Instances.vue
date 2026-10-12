@@ -121,12 +121,16 @@
     <el-dialog :style="{ maxWidth: '92vw' }" v-model="editVisible" title="编辑实例" width="520px">
       <el-form :model="editForm" label-width="110px">
         <el-form-item label="名称"><el-input v-model="editForm.display_name" /></el-form-item>
-        <el-form-item label="freeform_tags">
-          <el-input v-model="tagsText" type="textarea" :rows="3" placeholder='{"env":"prod"}' />
-        </el-form-item>
-        <el-form-item label="metadata">
-          <el-input v-model="metaText" type="textarea" :rows="3" placeholder='{"user_data":"..."}' />
-        </el-form-item>
+        <el-collapse style="margin: 4px 0 8px">
+          <el-collapse-item title="高级选项（标签 / 元数据）" name="adv">
+            <el-form-item label="freeform_tags">
+              <el-input v-model="tagsText" type="textarea" :rows="3" placeholder='{"env":"prod"}' />
+            </el-form-item>
+            <el-form-item label="metadata">
+              <el-input v-model="metaText" type="textarea" :rows="3" placeholder='{"user_data":"..."}' />
+            </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
         <div style="font-size: 12px; color: #909399">shape / OCPU / 内存不支持在线变更，如需升配请重建实例</div>
       </el-form>
       <template #footer>

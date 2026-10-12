@@ -99,6 +99,11 @@
       <el-table-column label="注册时间" width="120" align="center">
         <template #default="{ row }">{{ fmtDate(row.registered_at || row.created_at) }}</template>
       </el-table-column>
+      <el-table-column label="实例操作" width="110" align="center">
+        <template #default="{ row }">
+          <el-button size="small" type="primary" @click="goCreateInstance(row.id)">创建实例</el-button>
+        </template>
+      </el-table-column>
       <!-- 操作收进下拉菜单 -->
       <el-table-column label="操作" width="70" align="center">
         <template #default="{ row }">
@@ -106,7 +111,6 @@
             <el-button size="small">···</el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="create">创建实例</el-dropdown-item>
                 <el-dropdown-item command="edit">编辑</el-dropdown-item>
                 <el-dropdown-item command="bind">绑定代理</el-dropdown-item>
                 <el-dropdown-item command="check">存活检查</el-dropdown-item>
@@ -588,8 +592,7 @@ const saveCell = async (row, field) => {
 const fmtCost = (v) => Number(v ?? 0).toFixed(2)
 // 操作下拉菜单分发
 const handleOp = (cmd, row) => {
-  if (cmd === 'create') goCreateInstance(row.id)
-  else if (cmd === 'edit') openEdit(row)
+  if (cmd === 'edit') openEdit(row)
   else if (cmd === 'bind') openBind(row)
   else if (cmd === 'check') checkOne(row)
   else if (cmd === 'regions') openRegions(row)
