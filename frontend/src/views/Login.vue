@@ -18,7 +18,7 @@
             <el-input v-model="initForm.password" type="password" show-password placeholder="密码（至少 6 位）" prefix-icon="Lock" size="large" />
           </el-form-item>
           <el-alert v-if="error" :title="error" type="error" :closable="false" style="margin-bottom: 12px" />
-          <el-button type="primary" :loading="loading" class="login-btn" size="large" @click="onInit">创建管理员并登录</el-button>
+          <el-button type="primary" :loading="loading" class="login-btn" size="large" native-type="submit" @click="onInit">创建管理员并登录</el-button>
         </el-form>
       </div>
 
@@ -35,7 +35,7 @@
             <el-input v-model="form.totp_code" maxlength="6" placeholder="验证器 App 上的 6 位数字" prefix-icon="Key" size="large" />
           </el-form-item>
           <el-alert v-if="error" :title="error" type="error" :closable="false" style="margin-bottom: 12px" />
-          <el-button type="primary" :loading="loading" class="login-btn" size="large" @click="onLogin">登 录</el-button>
+          <el-button type="primary" :loading="loading" class="login-btn" size="large" native-type="submit" @click="onLogin">登 录</el-button>
         </el-form>
       </div>
 
