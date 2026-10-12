@@ -21,16 +21,36 @@ def list_logs(user=Depends(get_current_operator)):
         result.append({"name": name, "path": path, "exists": exists, "size": size})
     return result
 
+# 时间戳格式：
+#   2026-10-11 17:24:28 / 2026-10-11T17:24:28（标准）
+#   [2026-10-11 17:24:28,196: WARNING/MainProcess]（celery，方括号前缀+毫秒逗号）
+_TS_RES = []
+def _extract_ts(line: str) -> str | None:
+    """从一行日志提取时间戳，返回 'YYYY-MM-DD HH:MM:SS'，提不到返回 None。"""
+    import re
+    if not _TS_RES:
+        _TS_RES.extend([
+            re.compile(r'^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})'),
+            re.compile(r'^\[?(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})[,.]\d+'),
+        ])
+    for r in _TS_RES:
+        m = r.match(line)
+        if m:
+            return f"{m.group(1)} {m.group(2)}"
+    return None
+
+
 @router.get("/merged")
 def get_merged_log(
     lines: int = Query(500, ge=1, le=2000),
     user=Depends(get_current_operator),
 ):
-    """合并 api + worker 日志，按时间戳排序"""
-    import re
+    """合并 api + worker 日志，按时间戳排序。
+
+    无时间戳的行（uvicorn 输出、多行警告的后续行等）跟随上一行的时间戳，
+    保证它们不乱序、始终跟自己的上下文在一起。
+    """
     all_entries = []
-    # 时间戳正则：2026-10-11 16:25:23 或 2026-10-11T16:25:23
-    ts_re = re.compile(r'^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})')
     for name, path in LOG_FILES.items():
         if not os.path.isfile(path):
             continue
@@ -40,13 +60,15 @@ def get_merged_log(
             read_size = min(size, 256 * 1024)
             f.seek(size - read_size)
             data = f.read().decode("utf-8", errors="replace")
+        last_ts = "0000-00-00 00:00:00"  # 文件开头无时间戳的行放最前
         for line in data.splitlines():
-            m = ts_re.match(line)
-            # 用时间戳排序，无时间戳的放最后
-            key = m.group(1) + " " + m.group(2) if m else "9999"
-            all_entries.append((key, f"[{name}] {line}"))
-    all_entries.sort(key=lambda x: x[0])
-    merged = [e[1] for e in all_entries]
+            ts = _extract_ts(line)
+            if ts:
+                last_ts = ts
+            # (排序键, 文件内序号, 展示行)：序号保证同时间戳内保持原文件顺序
+            all_entries.append((last_ts, len(all_entries), f"[{name}] {line}"))
+    all_entries.sort(key=lambda x: (x[0], x[1]))
+    merged = [e[2] for e in all_entries]
     return {"name": "merged", "lines": merged[-lines:], "total": len(merged)}
 
 @router.get("/{name}")
