@@ -35,7 +35,6 @@
                 <el-dropdown-item v-if="!['running', 'success'].includes(row.status)" command="start">启动</el-dropdown-item>
                 <el-dropdown-item v-if="row.status === 'running'" command="pause">暂停</el-dropdown-item>
                 <el-dropdown-item command="edit" :disabled="['running', 'success'].includes(row.status)">编辑</el-dropdown-item>
-                <el-dropdown-item v-if="row.root_password" command="password">密码</el-dropdown-item>
                 <el-dropdown-item command="delete" divided :disabled="row.status === 'running'">删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -229,19 +228,6 @@
         </div>
       </div>
     </el-drawer>
-
-    <!-- Root 密码查看 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="pwdVisible" title="Root 密码" width="400px">
-      <div class="pwd-card">
-        <div class="pwd-row"><span class="pwd-label">任务</span><span>#{{ pwdTask?.id }}（{{ pwdTask?.account_name }}）</span></div>
-        <div class="pwd-row"><span class="pwd-label">用户</span><span class="pwd-user">root</span></div>
-        <div class="pwd-row"><span class="pwd-label">密码</span>
-          <code class="pwd-value" @click="selectPwd">{{ pwdTask?.root_password || '—' }}</code>
-        </div>
-        <el-button type="primary" class="pwd-copy" @click="copyPwd">复制密码</el-button>
-      </div>
-      <div class="pwd-tip">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
-    </el-dialog>
 
     <!-- 实例 Root 密码查看 -->
     <el-dialog :style="{ maxWidth: '92vw' }" v-model="instPwdVisible" title="实例 Root 密码" width="400px">
@@ -511,28 +497,6 @@ const fetchComps = async () => {
 }
 
 const logsVisible = ref(false)
-const pwdVisible = ref(false)
-const pwdTask = ref(null)
-const showPassword = (row) => { pwdTask.value = row; pwdVisible.value = true }
-const copyPwd = async () => {
-  const text = pwdTask.value?.root_password || ''
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      // HTTP 非安全上下文降级方案
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    }
-    ElMessage.success('已复制')
-  } catch (e) { ElMessage.error('复制失败，请手动选中复制') }
-}
 // 点击密码框自动选中，方便手动复制
 const selectPwd = (e) => { e.target.select() }
 // 实例级密码查看
@@ -742,7 +706,6 @@ const handleTaskOp = (cmd, row) => {
   if (cmd === 'start') startTask(row)
   else if (cmd === 'pause') pauseTask(row)
   else if (cmd === 'edit') openEdit(row)
-  else if (cmd === 'password') showPassword(row)
   else if (cmd === 'delete') delTask(row)
 }
 const openLogs = (row) => {
