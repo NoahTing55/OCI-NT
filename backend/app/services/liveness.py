@@ -35,7 +35,7 @@ STATUS_TEXT = {
 }
 
 
-def _classify(status_code, err):
+def _classify(status_code, err, has_proxy=False):
     if status_code == 200:
         return "healthy", "账号正常"
     if status_code == 401:
@@ -45,7 +45,11 @@ def _classify(status_code, err):
     if status_code == 404:
         return "not_found", "用户不存在"
     if status_code is None:
-        return "network_error", "网络或代理异常（%s）" % err
+        if err == "timeout":
+            return "network_error", "连接超时（代理或 OCI 接口响应慢，请检查代理是否在线）" if has_proxy else "连接超时（OCI 接口响应慢，请稍后重试）"
+        if err == "connect":
+            return "network_error", "代理连接失败，请检查代理是否在线" if has_proxy else "网络连接失败，请检查服务器网络"
+        return "network_error", "网络异常（%s）" % err
     return "unknown_error", "未知异常（HTTP %s）" % status_code
 
 
@@ -106,7 +110,7 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     finally:
         await client.aclose()
 
-    new_status, message = _classify(status_code, err)
+    new_status, message = _classify(status_code, err, has_proxy=bool(account.proxy_id))
     account.status = new_status
     account.last_check_at = datetime.utcnow()
     # 账号类型：用户手动锁定过则不再自动覆盖
