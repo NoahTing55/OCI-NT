@@ -350,7 +350,7 @@ class SniperManager:
         if cfg["subnet_ocid"] and cfg["ad"]:
             try:
                 sn = await client.get_subnet(cfg["subnet_ocid"])
-                sn_ad = (sn.json() or {}).get("availabilityDomain", "")
+                sn_ad = (sn or {}).get("availabilityDomain", "")
                 if sn_ad and normalize_ad(sn_ad) != normalize_ad(cfg["ad"]):
                     self._log(task_id, "info",
                               "子网在 %s，与目标可用域 %s 不一致，重新自动选子网" % (sn_ad, cfg["ad"]))

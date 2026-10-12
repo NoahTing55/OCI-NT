@@ -194,6 +194,12 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         db = SessionLocal()
         try:
+            # 账号可能已被删除（如 account.delete），先验证存在性，
+            # 不存在则置空，避免外键冲突
+            if account_id is not None:
+                from app.models.models import Account
+                if db.get(Account, account_id) is None:
+                    account_id = None
             db.add(
                 OperationLog(
                     action=action, account_id=account_id, detail=detail, operator=operator
