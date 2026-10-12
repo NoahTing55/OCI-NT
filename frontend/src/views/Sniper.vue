@@ -194,7 +194,11 @@
         <div class="card-title" style="margin-bottom: 8px">实例列表（{{ taskInstances.length }} 台）</div>
         <el-table :data="taskInstances" size="small" style="width: 100%" empty-text="暂无实例">
           <el-table-column prop="sequence" label="#" width="45" />
-          <el-table-column prop="display_name" label="显示名" min-width="110" show-overflow-tooltip />
+          <el-table-column prop="display_name" label="显示名" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.display_name || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="OCID" width="110">
             <template #default="{ row }">
               <span :title="row.ocid" style="font-family: monospace; font-size: 11px; color: #909399">{{ row.ocid.slice(-12) }}</span>
@@ -203,10 +207,12 @@
           <el-table-column prop="created_at" label="创建时间" width="135">
             <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
+          <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="row.root_password" size="small" @click="showInstPwd(row)">密码</el-button>
-              <el-button size="small" type="danger" @click="delInstance(row)">删除</el-button>
+              <div style="display: flex; gap: 6px">
+                <el-button v-if="row.root_password" size="small" @click="showInstPwd(row)">密码</el-button>
+                <el-button size="small" type="danger" @click="delInstance(row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
