@@ -44,7 +44,7 @@ from app.core.oci_factory import build_client_for_account, compartment_of
 from app.models.models import Account, SnipeInstance, SnipeLog, SnipeTask
 from app.services.cloudflare import sync_instance_domains
 from app.services.instances import invalidate_instance_cache
-from app.services.network_ensure import ensure_subnet
+from app.services.network_ensure import ensure_subnet, normalize_ad
 from app.services.security_rules import ensure_allow_all_ingress
 
 logger = logging.getLogger(__name__)
@@ -349,7 +349,7 @@ class SniperManager:
             try:
                 sn = await client.get_subnet(cfg["subnet_ocid"])
                 sn_ad = (sn.json() or {}).get("availabilityDomain", "")
-                if sn_ad and sn_ad != cfg["ad"]:
+                if sn_ad and normalize_ad(sn_ad) != normalize_ad(cfg["ad"]):
                     self._log(task_id, "info",
                               "子网在 %s，与目标可用域 %s 不一致，重新自动选子网" % (sn_ad, cfg["ad"]))
                     cfg["subnet_ocid"] = ""
@@ -362,7 +362,7 @@ class SniperManager:
                 cfg["subnet_ocid"] = subnet_ocid
                 # 关键：复用其他 AD 的子网时 AD 会切换，必须用实际 AD 建实例，
                 # 否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter
-                if real_ad and real_ad != cfg["ad"]:
+                if real_ad and normalize_ad(real_ad) != normalize_ad(cfg["ad"]):
                     self._log(task_id, "info", "子网在 %s，自动切换可用域" % real_ad)
                     cfg["ad"] = real_ad
             except Exception as e:

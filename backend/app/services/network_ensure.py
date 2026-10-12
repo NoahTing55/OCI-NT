@@ -17,6 +17,19 @@ from app.models.models import Account
 # 用户已有的，实在没有才创建，保证幂等不建一堆。
 MANAGED_VCN_NAME = "oci-panel-vcn"
 MANAGED_IG_NAME = "oci-panel-ig"
+
+
+def normalize_ad(ad: str) -> str:
+    """归一化可用域名：VwCa:PHX-AD-1 -> phx-ad-1。
+
+    任务里存的可能是控制台显示格式（含 realm 前缀、大写），
+    OCI API 返回的是小写格式。比较前统一转小写并去 realm 前缀。
+    """
+    ad = (ad or "").strip().lower()
+    # 去掉 realm 前缀（如 vwca:phx-ad-1 -> phx-ad-1）
+    if ":" in ad:
+        ad = ad.split(":", 1)[1]
+    return ad
 MANAGED_SUBNET_NAME = "oci-panel-subnet"
 # 子网 CIDR 候选：第一个被占用就顺延
 SUBNET_CIDR_CANDIDATES = ("10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24")
@@ -188,12 +201,13 @@ async def _ensure_network(
         subnets = await client.list_subnets_of_vcn(comp, vcn_id)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    in_ad = [s for s in subnets if s.get("availabilityDomain") == ad]
+    _ad_norm = normalize_ad(ad)
+    in_ad = [s for s in subnets if normalize_ad(s.get("availabilityDomain")) == _ad_norm]
     subnet = _prefer_managed(in_ad, MANAGED_SUBNET_NAME)
     if subnet is None:
         # 目标 AD 没有可用子网，看 VCN 内其他 AD 有没有
         other = _prefer_managed(
-            [s for s in subnets if s.get("availabilityDomain") != ad],
+            [s for s in subnets if normalize_ad(s.get("availabilityDomain")) != _ad_norm],
             MANAGED_SUBNET_NAME,
         )
         if other is not None:
