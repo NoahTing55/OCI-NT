@@ -13,6 +13,52 @@
       <el-table-column prop="shape" label="Shape" width="180" />
       <el-table-column label="配置" width="130">
         <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span></template>
+
+<style scoped>
+.log-drawer-head { display: flex; align-items: center; margin-bottom: 14px; }
+.log-auto { margin-left: 10px; font-size: 12px; color: #67c23a; }
+.log-section { margin-bottom: 16px; }
+.log-terminal {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 14px;
+  height: 52vh;
+  min-height: 320px;
+  overflow-y: auto;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.log-line { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; word-break: break-all; }
+.log-ts { color: #6e7681; flex-shrink: 0; }
+.log-lv { flex-shrink: 0; padding: 0 6px; border-radius: 4px; font-size: 11px; }
+.log-lv.lv-info { background: rgba(56, 139, 253, 0.15); color: #58a6ff; }
+.log-lv.lv-warning { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+.log-lv.lv-error { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+.log-msg { color: #c9d1d9; }
+.log-empty { color: #6e7681; text-align: center; padding: 40px 0; }
+.pwd-card { background: #f6f8fa; border-radius: 12px; padding: 20px; }
+.pwd-row { display: flex; align-items: center; margin-bottom: 14px; font-size: 14px; }
+.pwd-row:last-of-type { margin-bottom: 18px; }
+.pwd-label { width: 52px; flex-shrink: 0; color: #909399; font-size: 13px; }
+.pwd-user { font-family: monospace; background: #e8edf2; padding: 2px 10px; border-radius: 6px; }
+.pwd-value {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1677ff;
+  background: #fff;
+  border: 1px dashed #b3d4ff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: all;
+  word-break: break-all;
+}
+.pwd-copy { width: 100%; }
+.pwd-tip { color: #909399; font-size: 12px; margin-top: 14px; text-align: center; }
+</style>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -179,30 +225,30 @@
     </el-dialog>
 
     <!-- 实时日志 -->
-    <el-drawer v-model="logsVisible" :title="`任务 #${logTask?.id} 实时日志`" size="640px" @closed="stopLogPoll">
-      <div style="margin-bottom: 8px">
-        <el-select v-model="logLevel" clearable placeholder="全部级别" style="width: 140px" @change="loadLogs">
+    <el-drawer v-model="logsVisible" :title="`任务 #${logTask?.id} 实时日志`" size="720px" @closed="stopLogPoll">
+      <div class="log-drawer-head">
+        <el-select v-model="logLevel" clearable placeholder="全部级别" style="width: 130px" size="small" @change="loadLogs">
           <el-option value="info" label="info" />
           <el-option value="warning" label="warning" />
           <el-option value="error" label="error" />
         </el-select>
-        <el-button style="margin-left: 8px" @click="loadLogs">刷新</el-button>
-        <span style="margin-left: 8px; font-size: 12px; color: #909399">每 3 秒自动刷新</span>
+        <el-button size="small" style="margin-left: 8px" @click="loadLogs">刷新</el-button>
+        <span class="log-auto">● 每 3 秒自动刷新</span>
       </div>
-      <div style="margin-bottom: 12px">
-        <div style="font-weight: bold; margin-bottom: 6px">实例列表（{{ taskInstances.length }} 台）</div>
-        <el-table :data="taskInstances" size="small" border style="width: 100%" empty-text="暂无实例">
-          <el-table-column prop="sequence" label="#" width="50" />
-          <el-table-column prop="display_name" label="显示名" min-width="120" />
-          <el-table-column label="OCID" min-width="180">
+      <div class="log-section">
+        <div class="card-title" style="margin-bottom: 8px">实例列表（{{ taskInstances.length }} 台）</div>
+        <el-table :data="taskInstances" size="small" style="width: 100%" empty-text="暂无实例">
+          <el-table-column prop="sequence" label="#" width="45" />
+          <el-table-column prop="display_name" label="显示名" min-width="110" show-overflow-tooltip />
+          <el-table-column label="OCID" width="110">
             <template #default="{ row }">
-              <span :title="row.ocid">{{ row.ocid.slice(0, 24) }}...</span>
+              <span :title="row.ocid" style="font-family: monospace; font-size: 11px; color: #909399">{{ row.ocid.slice(-12) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="created_at" label="创建时间" width="150">
+          <el-table-column prop="created_at" label="创建时间" width="135">
             <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="130" fixed="right">
+          <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
               <el-button v-if="row.root_password" size="small" @click="showInstPwd(row)">密码</el-button>
               <el-button size="small" type="danger" @click="delInstance(row)">删除</el-button>
@@ -210,40 +256,43 @@
           </el-table-column>
         </el-table>
       </div>
-      <div style="background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 12px; height: 50vh; overflow-y: auto; font-family: monospace; font-size: 12px">
-        <div v-for="l in logs" :key="l.id" style="margin-bottom: 4px">
-          <span style="color: #858585">{{ l.created_at }}</span>
-          <span :style="{ color: levelColor(l.level), margin: '0 6px' }">[{{ l.level }}]</span>
-          <span>{{ l.message }}</span>
+      <div class="log-section">
+        <div class="card-title" style="margin-bottom: 8px">运行日志</div>
+        <div class="log-terminal">
+          <div v-for="l in logs" :key="l.id" class="log-line">
+            <span class="log-ts">{{ l.created_at }}</span>
+            <span class="log-lv" :class="'lv-' + l.level">{{ l.level }}</span>
+            <span class="log-msg">{{ l.message }}</span>
+          </div>
+          <div v-if="!logs.length" class="log-empty">暂无日志</div>
         </div>
-        <div v-if="!logs.length" style="color: #858585">暂无日志</div>
       </div>
     </el-drawer>
 
     <!-- Root 密码查看 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="pwdVisible" title="Root 密码" width="420px">
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="任务">#{{ pwdTask?.id }}（{{ pwdTask?.account_name }}）</el-descriptions-item>
-        <el-descriptions-item label="用户">root</el-descriptions-item>
-        <el-descriptions-item label="密码">
-          <el-input :value="pwdTask?.root_password" readonly show-password style="width: 220px" @click="selectPwd" />
-          <el-button size="small" @click="copyPwd" style="margin-left: 8px">复制</el-button>
-        </el-descriptions-item>
-      </el-descriptions>
-      <div style="color: #909399; font-size: 12px; margin-top: 12px">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="pwdVisible" title="Root 密码" width="400px">
+      <div class="pwd-card">
+        <div class="pwd-row"><span class="pwd-label">任务</span><span>#{{ pwdTask?.id }}（{{ pwdTask?.account_name }}）</span></div>
+        <div class="pwd-row"><span class="pwd-label">用户</span><span class="pwd-user">root</span></div>
+        <div class="pwd-row"><span class="pwd-label">密码</span>
+          <code class="pwd-value" @click="selectPwd">{{ pwdTask?.root_password || '—' }}</code>
+        </div>
+        <el-button type="primary" class="pwd-copy" @click="copyPwd">复制密码</el-button>
+      </div>
+      <div class="pwd-tip">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
     </el-dialog>
 
     <!-- 实例 Root 密码查看 -->
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="instPwdVisible" title="实例 Root 密码" width="420px">
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="实例">#{{ instPwd?.sequence }}（{{ instPwd?.display_name }}）</el-descriptions-item>
-        <el-descriptions-item label="用户">root</el-descriptions-item>
-        <el-descriptions-item label="密码">
-          <el-input :value="instPwd?.root_password" readonly show-password style="width: 220px" @click="selectPwd" />
-          <el-button size="small" @click="copyInstPwd" style="margin-left: 8px">复制</el-button>
-        </el-descriptions-item>
-      </el-descriptions>
-      <div style="color: #909399; font-size: 12px; margin-top: 12px">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="instPwdVisible" title="实例 Root 密码" width="400px">
+      <div class="pwd-card">
+        <div class="pwd-row"><span class="pwd-label">实例</span><span>#{{ instPwd?.sequence }}（{{ instPwd?.display_name }}）</span></div>
+        <div class="pwd-row"><span class="pwd-label">用户</span><span class="pwd-user">root</span></div>
+        <div class="pwd-row"><span class="pwd-label">密码</span>
+          <code class="pwd-value" @click="selectPwd">{{ instPwd?.root_password || '—' }}</code>
+        </div>
+        <el-button type="primary" class="pwd-copy" @click="copyInstPwd">复制密码</el-button>
+      </div>
+      <div class="pwd-tip">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
     </el-dialog>
   </div>
 </template>
