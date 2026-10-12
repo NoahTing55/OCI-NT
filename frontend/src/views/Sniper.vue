@@ -6,7 +6,7 @@
       <span class="toolbar-tip">同一账号同一 shape 同时只允许一个进行中的任务</span>
     </div>
 
-    <el-table :data="tasks" v-loading="loading">
+    <el-table :data="tasks" v-loading="loading" class="table-hover-actions">
       <el-table-column prop="id" label="#" width="60" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140" />
@@ -30,6 +30,7 @@
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
+          <span class="hover-show">
           <el-button size="small" @click="openLogs(row)">日志</el-button>
           <el-dropdown trigger="click" @command="(cmd) => handleTaskOp(cmd, row)">
             <el-button size="small">···</el-button>
@@ -42,6 +43,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          </span>
         </template>
       </el-table-column>
     </el-table>

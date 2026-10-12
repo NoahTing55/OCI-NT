@@ -6,6 +6,9 @@
   <el-container v-else style="height: 100vh">
     <!-- 顶部导航：深蓝渐变 -->
     <el-header class="app-header">
+      <el-icon class="collapse-btn" @click="toggleCollapse" :title="collapsed ? '展开侧边栏' : '收起侧边栏'">
+        <Fold v-if="!collapsed" /><Expand v-if="collapsed" />
+      </el-icon>
       <el-icon class="logo-icon"><Cloudy /></el-icon>
       <span class="header-title">N&T的账号管理面板</span>
       <span style="flex: 1"></span>
@@ -13,9 +16,9 @@
       <el-button size="small" @click="logout">退出</el-button>
     </el-header>
     <el-container>
-      <!-- 侧边栏 -->
-      <el-aside width="200px" class="app-aside">
-        <el-menu router :default-active="$route.path" background-color="transparent" text-color="rgba(255,255,255,0.65)" active-text-color="#fff">
+      <!-- 侧边栏：可折叠 -->
+      <el-aside :width="collapsed ? '64px' : '200px'" class="app-aside">
+        <el-menu router :default-active="$route.path" :collapse="collapsed" background-color="transparent" text-color="rgba(255,255,255,0.65)" active-text-color="#fff">
           <el-menu-item index="/dashboard">
             <el-icon><DataBoard /></el-icon><span>总览</span>
           </el-menu-item>
@@ -57,12 +60,19 @@
 
 <script setup>
 // 主布局：侧边栏图标 + 渐变 header
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Cloudy, DataBoard, User, Connection, Monitor, Share, Link, Aim, Lock, Setting } from '@element-plus/icons-vue'
+import { Cloudy, DataBoard, User, Connection, Monitor, Share, Link, Aim, Lock, Setting, Fold, Expand } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const username = computed(() => localStorage.getItem('oci_user') || '')
+
+// 侧边栏折叠：localStorage 持久化
+const collapsed = ref(localStorage.getItem('oci_sidebar_collapsed') === '1')
+function toggleCollapse() {
+  collapsed.value = !collapsed.value
+  localStorage.setItem('oci_sidebar_collapsed', collapsed.value ? '1' : '0')
+}
 
 function logout() {
   localStorage.removeItem('oci_token')
@@ -98,9 +108,30 @@ body { margin: 0; }
   margin-right: 12px;
 }
 
-/* 侧边栏：渐变深蓝 + 悬停 + 选中高亮条 */
+/* 侧边栏：渐变深蓝 + 悬停 + 选中高亮条 + 折叠动画 */
 .app-aside {
   background: linear-gradient(180deg, #001529 0%, #002140 100%);
+  transition: width 0.3s ease;
+  overflow: hidden;
+}
+.app-header .collapse-btn {
+  font-size: 20px;
+  margin-right: 12px;
+  cursor: pointer;
+  color: #bfcbd9;
+  transition: color 0.2s;
+}
+.app-header .collapse-btn:hover {
+  color: #fff;
+}
+
+/* 表格：操作列 hover 才显示，减少视觉噪音 */
+.table-hover-actions .el-table__row .hover-show {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.table-hover-actions .el-table__row:hover .hover-show {
+  opacity: 1;
 }
 .app-aside .el-menu {
   border-right: none;

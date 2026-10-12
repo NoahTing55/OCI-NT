@@ -40,7 +40,7 @@
             <el-button size="small" type="danger" @click="batchDelete">批量删除</el-button>
             <span style="margin-left: 8px; font-size: 12px; color: #909399">已选 {{ selected.length }} 条</span>
           </div>
-          <el-table :data="records" style="width: 100%" v-loading="recordsLoading" @selection-change="onSelect">
+          <el-table :data="records" class="table-hover-actions" style="width: 100%" v-loading="recordsLoading" @selection-change="onSelect">
             <el-table-column type="selection" width="45" />
             <el-table-column prop="type" label="类型" width="80" />
             <el-table-column prop="name" label="记录名" min-width="200" show-overflow-tooltip />
@@ -60,8 +60,10 @@
             </el-table-column>
             <el-table-column label="操作" width="140" align="center">
               <template #default="{ row }">
+                <span class="hover-show">
                 <el-button size="small" @click="openEdit(row)">编辑</el-button>
                 <el-button size="small" type="danger" @click="removeRecord(row)">删除</el-button>
+                </span>
               </template>
             </el-table-column>
           </el-table>
@@ -106,13 +108,15 @@
           <div class="card-title">Cloudflare Token</div>
           <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">加密存储，权限最小化：Zone.DNS 编辑</div>
           <el-button size="small" type="primary" @click="tokenVisible = true">新增 Token</el-button>
-          <el-table :data="tokens" size="small" style="margin-top: 8px">
+          <el-table :data="tokens" class="table-hover-actions" size="small" style="margin-top: 8px">
             <el-table-column prop="name" label="名称" width="160" />
             <el-table-column prop="remark" label="备注" />
             <el-table-column prop="created_at" label="创建时间" width="180" />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
+                <span class="hover-show">
                 <el-button size="small" type="danger" @click="removeToken(row)">删除</el-button>
+                </span>
               </template>
             </el-table-column>
           </el-table>
@@ -142,7 +146,7 @@
             <el-button size="small" :loading="checking" @click="runCheck">一致性巡检</el-button>
             <el-button size="small" :loading="syncingAll" @click="runSyncAll">一键同步全部</el-button>
           </div>
-          <el-table :data="bindings" size="small">
+          <el-table :data="bindings" class="table-hover-actions" size="small">
             <el-table-column prop="domain" label="域名" width="200" />
             <el-table-column prop="record_type" label="类型" width="70" />
             <el-table-column prop="instance_name" label="实例" width="160" />
@@ -156,8 +160,10 @@
             <el-table-column prop="last_sync_at" label="上次同步" width="180" />
             <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
+                <span class="hover-show">
                 <el-button size="small" @click="syncOne(row)">同步</el-button>
                 <el-button size="small" type="danger" @click="removeBinding(row)">删除</el-button>
+                </span>
               </template>
             </el-table-column>
           </el-table>

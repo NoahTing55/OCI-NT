@@ -68,6 +68,7 @@
           <div class="card-title">最近动态</div>
           <div v-if="recentTasks.length === 0" style="color: #909399; font-size: 13px; padding: 12px 0">
             暂无开机任务
+            <el-button type="primary" link @click="$router.push('/sniper')" style="font-size: 13px">去新建 →</el-button>
           </div>
           <div
             v-for="t in recentTasks"

@@ -4,7 +4,7 @@
     <el-button @click="batchVisible = true">批量导入</el-button>
     <el-button @click="doTestAll" :loading="testing">{{ testing ? '检测中…' : '代理检测' }}</el-button>
 
-    <el-table :data="proxies" v-loading="loading" style="margin-top: 12px">
+    <el-table :data="proxies" class="table-hover-actions" v-loading="loading" style="margin-top: 12px">
       <template #empty>
         <el-empty description="暂无代理" :image-size="80">
           <el-button type="primary" size="small" @click="createVisible = true">新建代理</el-button>
@@ -35,8 +35,10 @@
       <el-table-column prop="remark" label="备注" />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          <span class="hover-show">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          </span>
         </template>
       </el-table-column>
     </el-table>

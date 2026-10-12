@@ -48,7 +48,12 @@
       </el-radio-group>
     </div>
 
-    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" size="small" style="width: 100%" @selection-change="selected = $event">
+    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" size="small" style="width: 100%" class="table-hover-actions" @selection-change="selected = $event">
+      <template #empty>
+        <el-empty description="暂无实例" :image-size="80">
+          <el-button type="primary" size="small" @click="$router.push('/sniper')">去开机</el-button>
+        </el-empty>
+      </template>
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140">
@@ -73,9 +78,11 @@
       <el-table-column prop="private_ip" label="私网 IP" width="140" />
       <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" type="success" @click="openTerminal(row)">终端</el-button>
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" @click="openChangeIp(row)">换 IP</el-button>
+          <span class="hover-show">
+            <el-button size="small" type="success" @click="openTerminal(row)">终端</el-button>
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" @click="openChangeIp(row)">换 IP</el-button>
+          </span>
         </template>
       </el-table-column>
     </el-table>
@@ -96,8 +103,10 @@
           <el-button size="small" @click="openEdit(row)">详情</el-button>
         </div>
       </div>
-      <div v-if="!pagedInstances.length && !loading" style="color: #909399; font-size: 13px; padding: 24px; grid-column: 1 / -1; text-align: center">
-        暂无实例
+      <div v-if="!pagedInstances.length && !loading" style="grid-column: 1 / -1">
+        <el-empty description="暂无实例" :image-size="80">
+          <el-button type="primary" size="small" @click="$router.push('/sniper')">去开机</el-button>
+        </el-empty>
       </div>
     </div>
     <el-pagination
