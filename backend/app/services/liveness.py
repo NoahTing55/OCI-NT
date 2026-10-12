@@ -15,6 +15,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core import telegram
+from app.core.deps import SessionLocal
 from app.core.oci_factory import build_client_for_account, build_proxy_url
 from app.models.models import Account
 
@@ -142,14 +143,30 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
 async def check_all_accounts(db: Session) -> list:
     """全量检查（定时任务与一键检查共用）。
 
-    账号之间间隔 30 秒，避免连续调用 OCI 订阅接口触发 429 限流。
+    按代理分组：同一出口 IP 的账号串行检查、间隔 30 秒（避免 429 限流）；
+    不同代理（不同出口 IP）的账号并行检查。直连账号（proxy_id 为空）
+    共用服务器 IP，归为同一组串行检查。
     """
     import asyncio
+    from collections import defaultdict
 
     accounts = db.query(Account).order_by(Account.id).all()
-    results = []
-    for i, account in enumerate(accounts):
-        if i > 0:
-            await asyncio.sleep(30)
-        results.append(await check_account_liveness(db, account.id))
-    return results
+    groups = defaultdict(list)
+    for account in accounts:
+        groups[account.proxy_id].append(account)
+
+    async def _check_group(group_accounts: list) -> list:
+        group_results = []
+        for i, account in enumerate(group_accounts):
+            if i > 0:
+                await asyncio.sleep(30)
+            # 每个协程用独立 session，避免并发共用 Session
+            group_db = SessionLocal()
+            try:
+                group_results.append(await check_account_liveness(group_db, account.id))
+            finally:
+                group_db.close()
+        return group_results
+
+    nested = await asyncio.gather(*(_check_group(g) for g in groups.values()))
+    return [r for group_results in nested for r in group_results]
