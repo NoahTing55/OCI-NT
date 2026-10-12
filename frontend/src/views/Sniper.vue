@@ -24,7 +24,7 @@
         </template>
       </el-table-column>
       <el-table-column prop="attempts" label="尝试" width="70" />
-      <el-table-column prop="last_error" label="最后错误" width="130" show-overflow-tooltip />
+      <el-table-column prop="last_error" label="最后错误" min-width="130" show-overflow-tooltip />
       <el-table-column label="创建时间" width="150">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
