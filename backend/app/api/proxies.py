@@ -42,6 +42,30 @@ def create_proxy(data: ProxyCreate, db: Session = Depends(get_db)):
     # TODO(M2)：创建后自动做一次连通性 + 延迟测试，写入 status / latency_ms
     return ProxyOut.model_validate(proxy)
 
+@router.put("/{proxy_id}", response_model=ProxyOut)
+def update_proxy(proxy_id: int, data: ProxyCreate, db: Session = Depends(get_db)):
+    """更新代理（不影响账号绑定关系）。"""
+    proxy = db.get(Proxy, proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="代理不存在")
+    if data.scheme not in ("http", "socks5"):
+        raise HTTPException(status_code=400, detail="scheme 只能是 http 或 socks5")
+    proxy.name = data.name
+    proxy.scheme = data.scheme
+    proxy.host = data.host.strip()
+    proxy.port = data.port
+    proxy.username = data.username
+    # 密码留空则不修改
+    if data.password:
+        try:
+            proxy.password_enc = encrypt_text(data.password)
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    proxy.remark = data.remark
+    db.commit()
+    db.refresh(proxy)
+    return ProxyOut.model_validate(proxy)
+
 @router.delete("/{proxy_id}")
 def delete_proxy(proxy_id: int, db: Session = Depends(get_db)):
     proxy = db.get(Proxy, proxy_id)

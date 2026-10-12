@@ -2,7 +2,7 @@
   <div>
     <el-button type="primary" @click="createVisible = true">新建代理</el-button>
     <el-button @click="batchVisible = true">批量导入</el-button>
-    <el-button @click="doTestAll" :loading="testing">代理检测</el-button>
+    <el-button @click="doTestAll" :loading="testing">{{ testing ? '检测中…' : '代理检测' }}</el-button>
 
     <el-table :data="proxies" v-loading="loading" style="margin-top: 12px" border>
       <el-table-column prop="name" label="名称" width="140" />
@@ -21,15 +21,22 @@
       <el-table-column prop="latency_ms" label="延迟(ms)" width="100">
         <template #default="{ row }">{{ row.latency_ms ?? '-' }}</template>
       </el-table-column>
-      <el-table-column prop="remark" label="备注" />
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="绑定账号" width="140">
         <template #default="{ row }">
+          <el-link v-if="row.bound_account_name" type="primary" @click="goAccount(row.bound_account_name)">{{ row.bound_account_name }}</el-link>
+          <span v-else style="color: #c0c4cc">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="remark" label="备注" />
+      <el-table-column label="操作" width="160" fixed="right">
+        <template #default="{ row }">
+          <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" title="新建代理" width="480px">
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="createVisible" :title="editingId ? '编辑代理' : '新建代理'" width="480px" @closed="resetForm">
       <el-form :model="form" label-width="90px">
         <el-form-item label="名称"><el-input v-model="form.name" placeholder="如 HK-住宅-01" /></el-form-item>
         <el-form-item label="类型">
@@ -41,12 +48,12 @@
         <el-form-item label="Host"><el-input v-model="form.host" placeholder="proxy.example.com" /></el-form-item>
         <el-form-item label="端口"><el-input-number v-model="form.port" :min="1" :max="65535" style="width:100%" /></el-form-item>
         <el-form-item label="用户名"><el-input v-model="form.username" placeholder="可空" /></el-form-item>
-        <el-form-item label="密码"><el-input v-model="form.password" show-password placeholder="可空，加密存储" /></el-form-item>
+        <el-form-item label="密码"><el-input v-model="form.password" show-password :placeholder="editingId ? '留空不修改' : '可空，加密存储'" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreate" :loading="submitting">保存</el-button>
+        <el-button type="primary" @click="submitForm" :loading="submitting">保存</el-button>
       </template>
     </el-dialog>
 
@@ -82,8 +89,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listProxies, createProxy, deleteProxy, testAllProxies } from '../api/client.js'
+import { listProxies, createProxy, updateProxy, deleteProxy, testAllProxies } from '../api/client.js'
+const router = useRouter()
 
 const proxies = ref([])
 const loading = ref(false)
@@ -91,6 +100,7 @@ const testing = ref(false)
 const createVisible = ref(false)
 const submitting = ref(false)
 const form = ref({ name: '', scheme: 'http', host: '', port: 8080, username: '', password: '', remark: '' })
+const editingId = ref(null)
 
 const load = async () => {
   loading.value = true
@@ -103,20 +113,35 @@ const load = async () => {
   }
 }
 
-const submitCreate = async () => {
+const resetForm = () => {
+  editingId.value = null
+  form.value = { name: '', scheme: 'http', host: '', port: 8080, username: '', password: '', remark: '' }
+}
+const openEdit = (row) => {
+  editingId.value = row.id
+  form.value = { name: row.name, scheme: row.scheme, host: row.host, port: row.port, username: row.username || '', password: '', remark: row.remark || '' }
+  createVisible.value = true
+}
+const submitForm = async () => {
   submitting.value = true
   try {
-    await createProxy(form.value)
-    ElMessage.success('代理已创建')
+    if (editingId.value) {
+      await updateProxy(editingId.value, form.value)
+      ElMessage.success('代理已更新')
+    } else {
+      await createProxy(form.value)
+      ElMessage.success('代理已创建')
+    }
     createVisible.value = false
-    form.value = { name: '', scheme: 'http', host: '', port: 8080, username: '', password: '', remark: '' }
     load()
   } catch (e) {
-    ElMessage.error('创建失败：' + (e.response?.data?.detail || e.message))
+    ElMessage.error('保存失败：' + (e.response?.data?.detail || e.message))
   } finally {
     submitting.value = false
   }
 }
+
+const goAccount = (name) => router.push({ path: '/accounts', query: { search: name } })
 
 const remove = async (row) => {
   try {
@@ -202,11 +227,18 @@ const doTestAll = async () => {
   try {
     const r = await testAllProxies()
     ElMessage.success(r.message || '代理测速已开始')
-    // 10 秒后自动刷新
-    setTimeout(() => load(), 10000)
+    // 每 5 秒刷新一次，最多 3 次
+    let count = 0
+    const timer = setInterval(async () => {
+      count++
+      await load()
+      if (count >= 3) {
+        clearInterval(timer)
+        testing.value = false
+      }
+    }, 5000)
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '启动失败')
-  } finally {
     testing.value = false
   }
 }
