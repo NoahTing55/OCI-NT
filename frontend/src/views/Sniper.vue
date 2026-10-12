@@ -14,51 +14,6 @@
       <el-table-column label="配置" width="130">
         <template #default="{ row }">{{ row.ocpus }}C / {{ row.memory_gb }}G<span v-if="(row.target_count || 1) > 1"> ×{{ row.target_count }} 台</span></template>
 
-<style scoped>
-.log-drawer-head { display: flex; align-items: center; margin-bottom: 14px; }
-.log-auto { margin-left: 10px; font-size: 12px; color: #67c23a; }
-.log-section { margin-bottom: 16px; }
-.log-terminal {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 12px 14px;
-  height: 52vh;
-  min-height: 320px;
-  overflow-y: auto;
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.7;
-}
-.log-line { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; word-break: break-all; }
-.log-ts { color: #6e7681; flex-shrink: 0; }
-.log-lv { flex-shrink: 0; padding: 0 6px; border-radius: 4px; font-size: 11px; }
-.log-lv.lv-info { background: rgba(56, 139, 253, 0.15); color: #58a6ff; }
-.log-lv.lv-warning { background: rgba(210, 153, 34, 0.15); color: #d29922; }
-.log-lv.lv-error { background: rgba(248, 81, 73, 0.15); color: #f85149; }
-.log-msg { color: #c9d1d9; }
-.log-empty { color: #6e7681; text-align: center; padding: 40px 0; }
-.pwd-card { background: #f6f8fa; border-radius: 12px; padding: 20px; }
-.pwd-row { display: flex; align-items: center; margin-bottom: 14px; font-size: 14px; }
-.pwd-row:last-of-type { margin-bottom: 18px; }
-.pwd-label { width: 52px; flex-shrink: 0; color: #909399; font-size: 13px; }
-.pwd-user { font-family: monospace; background: #e8edf2; padding: 2px 10px; border-radius: 6px; }
-.pwd-value {
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1677ff;
-  background: #fff;
-  border: 1px dashed #b3d4ff;
-  border-radius: 8px;
-  padding: 8px 14px;
-  cursor: pointer;
-  user-select: all;
-  word-break: break-all;
-}
-.pwd-copy { width: 100%; }
-.pwd-tip { color: #909399; font-size: 12px; margin-top: 14px; text-align: center; }
-</style>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -951,4 +906,47 @@ onUnmounted(() => {
 .op-btns .el-button {
   margin-left: 0;
 }
+.log-drawer-head { display: flex; align-items: center; margin-bottom: 14px; }
+.log-auto { margin-left: 10px; font-size: 12px; color: #67c23a; }
+.log-section { margin-bottom: 16px; }
+.log-terminal {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 14px;
+  height: 52vh;
+  min-height: 320px;
+  overflow-y: auto;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.log-line { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; word-break: break-all; }
+.log-ts { color: #6e7681; flex-shrink: 0; }
+.log-lv { flex-shrink: 0; padding: 0 6px; border-radius: 4px; font-size: 11px; }
+.log-lv.lv-info { background: rgba(56, 139, 253, 0.15); color: #58a6ff; }
+.log-lv.lv-warning { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+.log-lv.lv-error { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+.log-msg { color: #c9d1d9; }
+.log-empty { color: #6e7681; text-align: center; padding: 40px 0; }
+.pwd-card { background: #f6f8fa; border-radius: 12px; padding: 20px; }
+.pwd-row { display: flex; align-items: center; margin-bottom: 14px; font-size: 14px; }
+.pwd-row:last-of-type { margin-bottom: 18px; }
+.pwd-label { width: 52px; flex-shrink: 0; color: #909399; font-size: 13px; }
+.pwd-user { font-family: monospace; background: #e8edf2; padding: 2px 10px; border-radius: 6px; }
+.pwd-value {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1677ff;
+  background: #fff;
+  border: 1px dashed #b3d4ff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: all;
+  word-break: break-all;
+}
+.pwd-copy { width: 100%; }
+.pwd-tip { color: #909399; font-size: 12px; margin-top: 14px; text-align: center; }
 </style>
