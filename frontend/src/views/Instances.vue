@@ -46,7 +46,9 @@
     <el-table :data="pagedInstances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
-      <el-table-column prop="region" label="区域" width="140" />
+      <el-table-column prop="region" label="区域" width="140">
+        <template #default="{ row }">{{ regionCn(row.region) }}</template>
+      </el-table-column>
       <el-table-column prop="display_name" label="名称" min-width="160" />
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
@@ -77,7 +79,7 @@
     <!-- 批量任务进度 -->
     <el-dialog :style="{ maxWidth: '92vw' }" v-model="progressVisible" title="批量任务进度" width="680px" :close-on-click-modal="false">
       <el-progress :percentage="progressPct" :status="task.status === 'failed' ? 'exception' : ''" />
-      <p>状态：{{ task.status }}，成功 {{ task.success_count }} / 失败 {{ task.fail_count }} / 共 {{ task.total }}</p>
+      <p>状态：{{ statusCn(task.status) }}，成功 {{ task.success_count }} / 失败 {{ task.fail_count }} / 共 {{ task.total }}</p>
       <el-table :data="taskDetail" size="small" max-height="300" border>
         <el-table-column prop="display_name" label="实例" width="180" />
         <el-table-column label="结果" width="80">
@@ -130,6 +132,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { regionCn, fmtRegion } from '../utils/regions.js'
 import { useRoute } from 'vue-router'
 const route = useRoute()
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -157,7 +160,7 @@ const regionOptions = computed(() => {
   const map = {}
   for (const i of instances.value) {
     if (i.region && !map[i.region]) {
-      map[i.region] = { value: i.region, label: i.region }
+      map[i.region] = { value: i.region, label: fmtRegion(i.region) }
     }
   }
   return Object.values(map).sort((a, b) => a.value.localeCompare(b.value))
@@ -230,6 +233,7 @@ const progressPct = computed(() => {
   if (!task.value.total) return 0
   return Math.round(((task.value.success_count + task.value.fail_count) / task.value.total) * 100)
 })
+const statusCn = (s) => ({ done: '已完成', failed: '失败', running: '进行中' }[s] || s || '-')
 
 const pollTask = async (id) => {
   clearInterval(pollTimer)

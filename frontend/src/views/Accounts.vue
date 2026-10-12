@@ -52,7 +52,7 @@
       </el-table-column>
       <el-table-column prop="tenancy_name" label="租户名称" min-width="140" show-overflow-tooltip />
       <el-table-column label="主区域" width="120">
-        <template #default="{ row }">{{ REGION_CN[row.region] || row.region }}</template>
+        <template #default="{ row }">{{ regionCn(row.region) }}</template>
       </el-table-column>
       <!-- 成本：点击单元格直接改 -->
       <el-table-column label="账号成本" width="100" align="center">
@@ -100,11 +100,6 @@
         <template #default="{ row }">{{ fmtDate(row.registered_at || row.created_at) }}</template>
       </el-table-column>
       <!-- 操作收进下拉菜单 -->
-            <el-table-column label="实例操作" width="110" align="center">
-        <template #default="{ row }">
-          <el-button size="small" type="warning" @click="goCreateInstance(row.id)"><el-icon><Aim /></el-icon>创建实例</el-button>
-        </template>
-      </el-table-column>
       <el-table-column label="操作" width="70" align="center">
         <template #default="{ row }">
           <el-dropdown trigger="click" @command="(cmd) => handleOp(cmd, row)">
@@ -176,9 +171,10 @@
             <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
             <el-form-item label="User OCID"><el-input v-model="form.user_ocid" placeholder="ocid1.user.oc1.." /></el-form-item>
             <el-form-item label="指纹"><el-input v-model="form.fingerprint" placeholder="aa:bb:cc:.." /></el-form-item>
+            <div v-if="detectedRegion" style="font-size: 12px; color: #67c23a; margin: -4px 0 8px 110px">已从配置文件识别出区域：{{ fmtRegion(detectedRegion) }}</div>
             <el-form-item label="区域">
               <el-select v-model="form.region" style="width:100%">
-                <el-option v-for="r in REGIONS" :key="r" :value="r" :label="r" />
+                <el-option v-for="r in REGIONS" :key="r" :value="r" :label="fmtRegion(r)" />
               </el-select>
             </el-form-item>
             <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
@@ -344,32 +340,14 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { regionCn, fmtRegion } from '../utils/regions.js'
 
-// 区域中文名映射
-const REGION_CN = {
-  "us-phoenix-1": "凤凰城", "us-ashburn-1": "阿什本", "us-sanjose-1": "圣何塞", "us-chicago-1": "芝加哥",
-  "ap-singapore-1": "新加坡", "ap-singapore-2": "新加坡西", "ap-tokyo-1": "东京", "ap-osaka-1": "大阪",
-  "ap-seoul-1": "首尔", "ap-chuncheon-1": "春川", "ap-mumbai-1": "孟买", "ap-hyderabad-1": "海得拉巴",
-  "ap-sydney-1": "悉尼", "ap-melbourne-1": "墨尔本", "ap-batam-1": "巴淡岛", "ap-kulai-2": "古来",
-  "eu-frankfurt-1": "法兰克福", "eu-paris-1": "巴黎", "eu-marseille-1": "马赛", "eu-milan-1": "米兰",
-  "eu-turin-1": "都灵", "eu-amsterdam-1": "阿姆斯特丹", "eu-madrid-1": "马德里", "eu-madrid-3": "马德里西",
-  "eu-stockholm-1": "斯德哥尔摩", "eu-zurich-1": "苏黎世", "eu-jovanovac-1": "约瓦诺瓦茨",
-  "uk-london-1": "伦敦", "uk-cardiff-1": "卡迪夫",
-  "ca-toronto-1": "多伦多", "ca-montreal-1": "蒙特利尔",
-  "sa-saopaulo-1": "圣保罗", "sa-vinhedo-1": "维涅杜", "sa-santiago-1": "圣地亚哥",
-  "sa-valparaiso-1": "瓦尔帕莱索", "sa-bogota-1": "波哥大",
-  "me-dubai-1": "迪拜", "me-abudhabi-1": "阿布扎比", "me-jeddah-1": "吉达", "me-riyadh-1": "利雅得",
-  "il-jerusalem-1": "耶路撒冷",
-  "mx-monterrey-1": "蒙特雷", "mx-queretaro-1": "克雷塔罗",
-  "af-johannesburg-1": "约翰内斯堡", "af-casablanca-1": "卡萨布兰卡",
-}
-const fmtRegion = (r) => r ? `${REGION_CN[r] ? REGION_CN[r] + ' ' : ''}${r}` : '-' 
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim } from '@element-plus/icons-vue'
 import { listAccounts, createAccount, batchImportAccounts, updateAccount, deleteAccount, bindProxy, checkAccount, checkAllAccounts, listProxies, getAccountSummary, listRegionSubscriptions, subscribeRegion, batchSubscribeRegions, listOciRegions, redetectAccount } from '../api/client.js'
 
 const router = useRouter()
+const route = useRoute()
 const REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osaka-1', 'us-phoenix-1', 'us-ashburn-1', 'eu-frankfurt-1']
 const STATUS = {
   healthy: ['正常', 'success'],
@@ -1010,7 +988,7 @@ function initColumnResize() {
   });
 }
 
-onMounted(() => { load(); initColumnResize(); });
+onMounted(() => { if (route.query.search) searchText.value = route.query.search; load(); initColumnResize(); });
 watch(accounts, () => initColumnResize());
 </script>
 
