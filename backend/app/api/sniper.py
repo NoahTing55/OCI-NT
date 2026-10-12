@@ -337,6 +337,7 @@ def list_task_instances(task_id: int, db: Session = Depends(get_db)):
     return [
         {"id": r.id, "ocid": r.instance_ocid, "sequence": r.sequence,
          "display_name": r.display_name,
+         "root_password": r.root_password,
          "created_at": r.created_at.isoformat() if r.created_at else None}
         for r in rows
     ]
