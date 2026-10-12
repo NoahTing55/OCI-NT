@@ -342,7 +342,19 @@ class SniperManager:
         finally:
             db.close()
 
-        # 子网留空则任务启动前自动建网（OCI-Start 思路）：有则复用、无则创建
+        # 子网留空则任务启动前自动建网（OCI-Start 思路）：有则复用、无则创建。
+        # 若任务之前已存了子网（比如暂停后改了 AD），需检查子网 AD 是否与目标 AD 一致，
+        # 不一致则清空重选，避免 VNIC 报 400 InvalidParameter。
+        if cfg["subnet_ocid"] and cfg["ad"]:
+            try:
+                sn = await client.get_subnet(cfg["subnet_ocid"])
+                sn_ad = (sn.json() or {}).get("availabilityDomain", "")
+                if sn_ad and sn_ad != cfg["ad"]:
+                    self._log(task_id, "info",
+                              "子网在 %s，与目标可用域 %s 不一致，重新自动选子网" % (sn_ad, cfg["ad"]))
+                    cfg["subnet_ocid"] = ""
+            except Exception as e:
+                logger.warning("task=%s 检查子网 AD 失败：%s", task_id, e)
         if not cfg["subnet_ocid"]:
             self._log(task_id, "info", "子网未填，自动准备网络（有则复用、无则创建）…")
             try:
