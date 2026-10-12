@@ -2,6 +2,7 @@
   <div>
     <!-- 共用：账号 + 实例选择器 -->
     <el-card style="margin-bottom: 16px">
+      <div class="card-title">目标实例</div>
       <el-form :inline="true" :model="sharedForm">
         <el-form-item label="账号">
           <el-select v-model="sharedForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadSharedInstances">

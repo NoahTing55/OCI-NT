@@ -16,7 +16,7 @@
         <el-option value="ERROR" label="Error" />
       </el-select>
       <el-button size="small" type="primary" @click="clearLogs" title="仅清除显示，下次刷新会重新加载">清屏</el-button>
-      <el-button size="small" type="primary" @click="$router.back()">返回</el-button>
+      <el-button size="small" type="primary" @click="$router.push('/dashboard')">返回</el-button>
     </div>
     <!-- 输出区标题 -->
     <div class="syslog-outhead">

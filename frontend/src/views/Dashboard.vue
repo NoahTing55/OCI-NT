@@ -1,9 +1,9 @@
 <template>
   <div class="dashboard">
     <!-- 顶部 4 张统计卡片 -->
-    <el-row :gutter="16" style="margin-bottom: 16px">
+    <el-row :gutter="16" style="margin-bottom: 16px" v-loading="cardsLoading">
       <el-col :span="6" v-for="card in statCards" :key="card.label">
-        <el-card class="stat-card" shadow="hover" :body-style="{ padding: '20px' }">
+        <el-card class="stat-card stat-clickable" shadow="hover" :body-style="{ padding: '20px' }" @click="$router.push(card.route)">
           <div class="stat-top">
             <div>
               <div class="stat-num">{{ card.value }}</div>
@@ -80,11 +80,12 @@ import { User, Monitor, Aim, CircleCheck } from '@element-plus/icons-vue'
 import { listAccounts, listInstances, listSnipeTasks, getAccountSummary } from '../api/client'
 
 const statCards = ref([
-  { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)', trend: '', trendColor: '#8c8c8c' },
-  { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#722ed1,#b37feb)', trend: '', trendColor: '#389e0d' },
-  { label: '运行中开机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#fa8c16,#ffc53d)', trend: '', trendColor: '#fa8c16' },
-  { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#52c41a,#95de64)', trend: '', trendColor: '#8c8c8c' },
+  { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)', trend: '', trendColor: '#8c8c8c', route: '/accounts' },
+  { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#722ed1,#b37feb)', trend: '', trendColor: '#389e0d', route: '/instances' },
+  { label: '运行中开机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#fa8c16,#ffc53d)', trend: '', trendColor: '#fa8c16', route: '/sniper' },
+  { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#52c41a,#95de64)', trend: '', trendColor: '#8c8c8c', route: '/sniper' },
 ])
+const cardsLoading = ref(true)
 const quotaWarnings = ref([])
 const recentTasks = ref([])
 
@@ -100,6 +101,7 @@ const statusType = (s) =>
 const fmtTime = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : '')
 
 onMounted(async () => {
+  cardsLoading.value = true
   try {
     // 并发拉取聚合数据
     const [accounts, instRes, taskList, summary] = await Promise.all([
@@ -166,6 +168,8 @@ onMounted(async () => {
     recentTasks.value = sorted.slice(0, 5)
   } catch (e) {
     console.error('总览数据加载失败', e)
+  } finally {
+    cardsLoading.value = false
   }
 })
 </script>
@@ -173,5 +177,12 @@ onMounted(async () => {
 <style scoped>
 .dashboard {
   padding: 4px;
+}
+.stat-clickable {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.stat-clickable:hover {
+  transform: translateY(-3px);
 }
 </style>

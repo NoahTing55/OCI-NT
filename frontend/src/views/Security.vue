@@ -13,14 +13,14 @@
           <p style="font-size: 12px; color: #909399">扫码失败可手动输入密钥：<el-tag>{{ secret }}</el-tag></p>
           <p>2. 输入 App 上的 6 位验证码完成启用：</p>
           <el-input v-model="code" maxlength="6" placeholder="6 位动态码" style="width: 200px; margin-right: 8px" />
-          <el-button type="success" @click="enableTotp">启用</el-button>
+          <el-button type="success" @click="enableTotp" :loading="enabling">启用</el-button>
         </div>
       </div>
       <div v-else-if="me && me.totp_enabled">
         <el-tag type="success">已启用</el-tag>
         <p style="color: #909399; font-size: 13px">解绑需要输入登录密码二次确认。</p>
         <el-input v-model="password" type="password" show-password placeholder="登录密码" style="width: 200px; margin-right: 8px" />
-        <el-button type="danger" @click="disableTotp">解绑双因素</el-button>
+        <el-button type="danger" @click="disableTotp" :loading="disabling">解绑双因素</el-button>
       </div>
     </el-card>
 
@@ -36,7 +36,7 @@
         <el-form-item label="确认新密码">
           <el-input v-model="pwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码" />
         </el-form-item>
-        <el-button type="primary" @click="doChangePassword">修改密码</el-button>
+        <el-button type="primary" @click="doChangePassword" :loading="changing">修改密码</el-button>
       </el-form>
     </el-card>
   </div>
@@ -53,6 +53,9 @@ const secret = ref('')
 const code = ref('')
 const password = ref('')
 const pwdForm = ref({ old_password: '', new_password: '', confirm_password: '' })
+const enabling = ref(false)
+const disabling = ref(false)
+const changing = ref(false)
 
 async function load() {
   me.value = await getMe()
@@ -65,6 +68,7 @@ async function startSetup() {
 }
 
 async function enableTotp() {
+  enabling.value = true
   try {
     await totpEnable(code.value)
     ElMessage.success('双因素已启用')
@@ -72,10 +76,13 @@ async function enableTotp() {
     await load()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '启用失败')
+  } finally {
+    enabling.value = false
   }
 }
 
 async function disableTotp() {
+  disabling.value = true
   try {
     await totpDisable(password.value)
     ElMessage.success('已解绑')
@@ -83,6 +90,8 @@ async function disableTotp() {
     await load()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '解绑失败')
+  } finally {
+    disabling.value = false
   }
 }
 
@@ -91,12 +100,15 @@ async function doChangePassword() {
     ElMessage.error('两次输入的新密码不一致')
     return
   }
+  changing.value = true
   try {
     await changePassword(pwdForm.value)
     ElMessage.success('密码已修改')
     pwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '修改失败')
+  } finally {
+    changing.value = false
   }
 }
 
