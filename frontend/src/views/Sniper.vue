@@ -24,18 +24,21 @@
       <el-table-column label="创建时间" width="150">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="300" fixed="right">
+      <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <div class="op-btns">
-            <el-button size="small" type="success" v-if="!['running', 'success'].includes(row.status)" @click="startTask(row)">启动</el-button>
-            <el-button size="small" type="warning" v-if="row.status === 'running'" @click="pauseTask(row)">暂停</el-button>
-            <el-tooltip :content="row.status === 'running' ? '任务运行中，不可编辑' : row.status === 'success' ? '任务已完成，不可编辑' : '编辑任务'" placement="top">
-              <el-button size="small" :disabled="['running', 'success'].includes(row.status)" @click="openEdit(row)">编辑</el-button>
-            </el-tooltip>
-            <el-button size="small" @click="openLogs(row)">日志</el-button>
-            <el-button size="small" v-if="row.root_password" @click="showPassword(row)">密码</el-button>
-            <el-button size="small" type="danger" :disabled="row.status === 'running'" @click="delTask(row)">删除</el-button>
-          </div>
+          <el-button size="small" @click="openLogs(row)">日志</el-button>
+          <el-dropdown trigger="click" @command="(cmd) => handleTaskOp(cmd, row)">
+            <el-button size="small">···</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-if="!['running', 'success'].includes(row.status)" command="start">启动</el-dropdown-item>
+                <el-dropdown-item v-if="row.status === 'running'" command="pause">暂停</el-dropdown-item>
+                <el-dropdown-item command="edit" :disabled="['running', 'success'].includes(row.status)">编辑</el-dropdown-item>
+                <el-dropdown-item v-if="row.root_password" command="password">密码</el-dropdown-item>
+                <el-dropdown-item command="delete" divided :disabled="row.status === 'running'">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -689,6 +692,13 @@ const delInstance = async (row) => {
   }
 }
 
+const handleTaskOp = (cmd, row) => {
+  if (cmd === 'start') startTask(row)
+  else if (cmd === 'pause') pauseTask(row)
+  else if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'password') showPassword(row)
+  else if (cmd === 'delete') delTask(row)
+}
 const openLogs = (row) => {
   logTask.value = row
   logLevel.value = ''

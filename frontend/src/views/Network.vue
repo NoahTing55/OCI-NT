@@ -1,25 +1,31 @@
 <template>
   <div>
-    <!-- 换 IP -->
+    <!-- 共用：账号 + 实例选择器 -->
     <el-card style="margin-bottom: 16px">
-      <div class="card-title">更换 IP</div>
-      <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">预留 IP 流程</div>
-      <el-form :inline="true" :model="ipForm">
+      <el-form :inline="true" :model="sharedForm">
         <el-form-item label="账号">
-          <el-select v-model="ipForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadAccountInstances">
+          <el-select v-model="sharedForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadSharedInstances">
             <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="a.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="实例">
-          <el-select v-model="ipForm.instance_id" placeholder="先选账号" style="width: 280px">
+          <el-select v-model="sharedForm.instance_id" placeholder="先选账号" style="width: 300px">
             <el-option
-              v-for="i in accountInstances"
+              v-for="i in sharedInstances"
               :key="i.instance_id"
               :value="i.instance_id"
               :label="`${i.display_name}（${i.public_ip || '无公网IP'}）`"
             />
           </el-select>
         </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 换 IP -->
+    <el-card style="margin-bottom: 16px">
+      <div class="card-title">更换 IP</div>
+      <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">预留 IP 流程</div>
+      <el-form :inline="true" :model="ipForm">
         <el-form-item>
           <el-checkbox v-model="ipForm.release_old">释放旧预留 IP</el-checkbox>
         </el-form-item>
@@ -29,7 +35,7 @@
           </el-button>
         </el-form-item>
       </el-form>
-      <el-alert v-if="ipForm.instance_id && !selectedInstanceHasIp" type="warning" :closable="false" style="margin-top: 8px">
+      <el-alert v-if="sharedForm.instance_id && !selectedInstanceHasIp" type="warning" :closable="false" style="margin-top: 8px">
         该实例没有公网 IP，无法更换 IP。请先为实例分配公网 IP。
       </el-alert>
       <div v-if="ipResult" style="font-size: 13px">
@@ -54,24 +60,9 @@
     <el-card style="margin-bottom: 16px">
       <div class="card-title">安全组</div>
       <div style="font-size: 12px; color: #909399; margin: -8px 0 12px">放行所有端口</div>
-      <el-form :inline="true" :model="portsForm">
-        <el-form-item label="账号">
-          <el-select v-model="portsForm.account_id" placeholder="选择账号" style="width: 180px" @change="loadPortsInstances">
-            <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="a.name" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="实例">
-          <el-select v-model="portsForm.instance_id" placeholder="先选账号" style="width: 280px">
-            <el-option
-              v-for="i in portsInstances"
-              :key="i.instance_id"
-              :value="i.instance_id"
-              :label="`${i.display_name}（${i.public_ip || '无公网IP'}）`"
-            />
-          </el-select>
-        </el-form-item>
+      <el-form :inline="true">
         <el-form-item>
-          <el-button type="primary" :loading="opening" :disabled="!portsForm.instance_id" @click="submitOpenPorts">
+          <el-button type="primary" :loading="opening" :disabled="!sharedForm.instance_id" @click="submitOpenPorts">
             放行所有端口
           </el-button>
         </el-form-item>
@@ -93,28 +84,32 @@ import {
 
 const accounts = ref([])
 
-// ---------- 换 IP ----------
-const ipForm = ref({ account_id: null, instance_id: '', release_old: false })
-const accountInstances = ref([])
-const selectedInstanceHasIp = computed(() => {
-  const inst = accountInstances.value.find(i => i.instance_id === ipForm.value.instance_id)
-  return !!(inst && inst.public_ip)
-})
-const canChangeIp = computed(() => !!(ipForm.value.instance_id && selectedInstanceHasIp.value))
-const changing = ref(false)
-const ipResult = ref(null)
+// ---------- 共用账号 + 实例选择器 ----------
+const sharedForm = ref({ account_id: null, instance_id: '' })
+const sharedInstances = ref([])
 
-const loadAccountInstances = async () => {
-  ipForm.value.instance_id = ''
-  accountInstances.value = []
-  if (!ipForm.value.account_id) return
+const loadSharedInstances = async () => {
+  sharedForm.value.instance_id = ''
+  sharedInstances.value = []
+  ipResult.value = null
+  if (!sharedForm.value.account_id) return
   try {
-    const data = await listInstances({ account_id: ipForm.value.account_id })
-    accountInstances.value = data.items
+    const data = await listInstances({ account_id: sharedForm.value.account_id })
+    sharedInstances.value = data.items
   } catch (e) {
     ElMessage.error('加载实例失败：' + (e.response?.data?.detail || e.message))
   }
 }
+
+// ---------- 换 IP ----------
+const ipForm = ref({ release_old: false })
+const selectedInstanceHasIp = computed(() => {
+  const inst = sharedInstances.value.find(i => i.instance_id === sharedForm.value.instance_id)
+  return !!(inst && inst.public_ip)
+})
+const canChangeIp = computed(() => !!(sharedForm.value.instance_id && selectedInstanceHasIp.value))
+const changing = ref(false)
+const ipResult = ref(null)
 
 const submitChangeIp = async () => {
   try {
@@ -128,8 +123,8 @@ const submitChangeIp = async () => {
   ipResult.value = null
   try {
     const r = await changeIp({
-      account_id: ipForm.value.account_id,
-      instance_id: ipForm.value.instance_id,
+      account_id: sharedForm.value.account_id,
+      instance_id: sharedForm.value.instance_id,
       release_old: ipForm.value.release_old,
     })
     ipResult.value = r
@@ -142,28 +137,14 @@ const submitChangeIp = async () => {
 }
 
 // ---------- 放行所有端口 ----------
-const portsForm = ref({ account_id: null, instance_id: '' })
-const portsInstances = ref([])
 const opening = ref(false)
-
-const loadPortsInstances = async () => {
-  portsForm.value.instance_id = ''
-  portsInstances.value = []
-  if (!portsForm.value.account_id) return
-  try {
-    const data = await listInstances({ account_id: portsForm.value.account_id })
-    portsInstances.value = data.items
-  } catch (e) {
-    ElMessage.error('加载实例失败：' + (e.response?.data?.detail || e.message))
-  }
-}
 
 const submitOpenPorts = async () => {
   opening.value = true
   try {
     const r = await openAllPorts({
-      account_id: portsForm.value.account_id,
-      instance_id: portsForm.value.instance_id,
+      account_id: sharedForm.value.account_id,
+      instance_id: sharedForm.value.instance_id,
     })
     if (r.ok) ElMessage.success('已放行所有端口')
     else ElMessage.warning(r.message || '操作失败')
