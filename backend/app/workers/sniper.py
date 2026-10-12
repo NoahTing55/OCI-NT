@@ -345,6 +345,8 @@ class SniperManager:
         # 子网留空则任务启动前自动建网（OCI-Start 思路）：有则复用、无则创建。
         # 若任务之前已存了子网（比如暂停后改了 AD），需检查子网 AD 是否与目标 AD 一致，
         # 不一致则清空重选，避免 VNIC 报 400 InvalidParameter。
+        # 用户手动换 AD 时用 strict_ad：只在目标 AD 里找/建，不许跨 AD 复用切回去。
+        ad_changed = False
         if cfg["subnet_ocid"] and cfg["ad"]:
             try:
                 sn = await client.get_subnet(cfg["subnet_ocid"])
@@ -353,28 +355,37 @@ class SniperManager:
                     self._log(task_id, "info",
                               "子网在 %s，与目标可用域 %s 不一致，重新自动选子网" % (sn_ad, cfg["ad"]))
                     cfg["subnet_ocid"] = ""
+                    ad_changed = True
             except Exception as e:
-                logger.warning("task=%s 检查子网 AD 失败：%s", task_id, e)
+                # 子网可能已被删除：清空后走自动建网重建，避免 launch 时报子网不存在
+                logger.warning("task=%s 检查子网 AD 失败，清空重建：%s", task_id, e)
+                self._log(task_id, "info", "原有子网不可用，重新自动准备网络…")
+                cfg["subnet_ocid"] = ""
         if not cfg["subnet_ocid"]:
             self._log(task_id, "info", "子网未填，自动准备网络（有则复用、无则创建）…")
             try:
-                subnet_ocid, real_ad = await ensure_subnet(account, cfg["region"], cfg["ad"])
+                subnet_ocid, real_ad = await ensure_subnet(
+                    account, cfg["region"], cfg["ad"], strict_ad=ad_changed)
                 cfg["subnet_ocid"] = subnet_ocid
                 # 关键：复用其他 AD 的子网时 AD 会切换，必须用实际 AD 建实例，
                 # 否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter
+                ad_switched = False
                 if real_ad and normalize_ad(real_ad) != normalize_ad(cfg["ad"]):
                     self._log(task_id, "info", "子网在 %s，自动切换可用域" % real_ad)
                     cfg["ad"] = real_ad
+                    ad_switched = True
             except Exception as e:
                 detail = e.detail if isinstance(e, HTTPException) else str(e)
                 await self._finish_failed(task_id, cfg, "自动建网失败：%s" % detail)
                 return
-            # 写回任务，方便在列表/表单看到实际用的子网
+            # 写回任务：子网 OCID 必写；AD 被自动切换时也写回，避免下次重跑重复切换
             db2 = SessionLocal()
             try:
                 t = db2.get(SnipeTask, task_id)
                 if t:
                     t.subnet_ocid = cfg["subnet_ocid"]
+                    if ad_switched:
+                        t.availability_domain = cfg["ad"]
                     db2.commit()
             finally:
                 db2.close()

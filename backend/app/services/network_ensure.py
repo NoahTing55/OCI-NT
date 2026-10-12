@@ -100,11 +100,15 @@ async def _ensure_network(
     tenancy_ocid: str,
     availability_domain: str = "",
     compartment_id: str = "",
+    strict_ad: bool = False,
 ) -> dict:
     """建网编排本体：client 为鸭子类型，测试可用 fake 注入。
 
     返回 {"subnet_ocid","vcn_ocid","vcn_name","availability_domain","created"}，
     created 标明 vcn / ig / subnet 哪些是本次新建的。
+
+    strict_ad=True 时：只在目标 AD 里找/建子网，不许跨 AD 复用。
+    用于用户手动切换 AD 的场景，尊重用户的明确选择。
     """
     comp = (compartment_id or "").strip() or tenancy_ocid
     created = {"vcn": False, "ig": False, "subnet": False}
@@ -191,8 +195,9 @@ async def _ensure_network(
     _ad_norm = normalize_ad(ad)
     in_ad = [s for s in subnets if normalize_ad(s.get("availabilityDomain")) == _ad_norm]
     subnet = _prefer_managed(in_ad, MANAGED_SUBNET_NAME)
-    if subnet is None:
+    if subnet is None and not strict_ad:
         # 目标 AD 没有可用子网，看 VCN 内其他 AD 有没有
+        # （strict_ad=True 时跳过：用户手动选了 AD，不许切回去）
         other = _prefer_managed(
             [s for s in subnets if normalize_ad(s.get("availabilityDomain")) != _ad_norm],
             MANAGED_SUBNET_NAME,
@@ -235,6 +240,7 @@ async def ensure_network(
     region: str = "",
     availability_domain: str = "",
     compartment_id: str = "",
+    strict_ad: bool = False,
 ) -> dict:
     """一键建网入口（API / worker 共用）：按账号构建带代理的 client。
 
@@ -249,6 +255,7 @@ async def ensure_network(
                 client, account.tenancy_ocid,
                 availability_domain=availability_domain,
                 compartment_id=compartment_id,
+                strict_ad=strict_ad,
             )
     finally:
         await client.aclose()
@@ -258,14 +265,16 @@ async def ensure_subnet(
     account: Account,
     region: str = "",
     availability_domain: str = "",
+    strict_ad: bool = False,
 ) -> tuple[str, str]:
     """worker 用的便捷入口：返回 (subnet_ocid, availability_domain)。
 
-    注意：目标 AD 无可用子网时会复用其他 AD 的子网，
+    注意：目标 AD 无可用子网时（且 strict_ad=False）会复用其他 AD 的子网，
     此时返回的 AD 是子网实际所在的 AD，调用方必须用这个 AD 建实例，
     否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter。
     """
     result = await ensure_network(
-        account, region=region, availability_domain=availability_domain
+        account, region=region, availability_domain=availability_domain,
+        strict_ad=strict_ad,
     )
     return result["subnet_ocid"], result["availability_domain"]
