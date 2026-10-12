@@ -35,15 +35,20 @@
       />
     </div>
 
-    <div style="margin: 8px 0">
+    <div style="margin: 8px 0; display: flex; align-items: center">
       <el-button size="small" :disabled="!selected.length" @click="runBatch('power_on')">批量开机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('power_off')">批量关机</el-button>
       <el-button size="small" :disabled="!selected.length" @click="runBatch('reboot')">批量重启</el-button>
       <el-button size="small" type="danger" :disabled="!selected.length" @click="runBatch('terminate')">批量终止</el-button>
       <span style="margin-left: 8px; color: #909399; font-size: 12px">已选 {{ selected.length }} 台</span>
+      <span style="flex: 1"></span>
+      <el-radio-group v-model="viewMode" size="small">
+        <el-radio-button value="table">表格</el-radio-button>
+        <el-radio-button value="card">卡片</el-radio-button>
+      </el-radio-group>
     </div>
 
-    <el-table :data="pagedInstances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
+    <el-table v-if="viewMode === 'table'" :data="pagedInstances" v-loading="loading" border stripe size="small" style="width: 100%" @selection-change="selected = $event">
       <el-table-column type="selection" width="45" />
       <el-table-column prop="account_name" label="账号" width="120" />
       <el-table-column prop="region" label="区域" width="140">
@@ -66,6 +71,27 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- 卡片视图 -->
+    <div v-if="viewMode === 'card'" v-loading="loading" class="inst-cards">
+      <div v-for="row in pagedInstances" :key="row.instance_id" class="inst-card">
+        <div class="inst-card-top">
+          <div>
+            <div class="inst-card-name">{{ row.display_name }}</div>
+            <div class="inst-card-sub">{{ row.account_name }} · {{ regionCn(row.region) }}</div>
+          </div>
+          <span class="inst-dot" :class="{ on: row.lifecycle_state === 'RUNNING' }"></span>
+        </div>
+        <div class="inst-card-info">{{ row.public_ip || '无公网 IP' }} · {{ row.shape }}</div>
+        <div class="inst-card-actions">
+          <el-button size="small" type="primary" @click="openTerminal(row)">终端</el-button>
+          <el-button size="small" @click="openEdit(row)">详情</el-button>
+        </div>
+      </div>
+      <div v-if="!pagedInstances.length && !loading" style="color: #909399; font-size: 13px; padding: 24px; grid-column: 1 / -1; text-align: center">
+        暂无实例
+      </div>
+    </div>
     <el-pagination
       v-model:current-page="currentPage"
       v-model:page-size="pageSize"
@@ -183,6 +209,7 @@ const pagedInstances = computed(() => {
 })
 const errors = ref([])
 const selected = ref([])
+const viewMode = ref('table')
 const terminalRef = ref(null)
 const openTerminal = (row) => {
   const accountId = row.account_id
@@ -370,3 +397,66 @@ onMounted(async () => {
 })
 onUnmounted(() => clearInterval(pollTimer))
 </script>
+
+<style scoped>
+.inst-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 4px;
+}
+.inst-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.inst-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+.inst-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.inst-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.inst-card-sub {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+.inst-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d9d9d9;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.inst-dot.on {
+  background: #52c41a;
+  box-shadow: 0 0 8px rgba(82, 196, 26, 0.6);
+}
+.inst-card-info {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-bottom: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inst-card-actions {
+  display: flex;
+  gap: 8px;
+}
+</style>

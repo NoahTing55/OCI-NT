@@ -24,7 +24,8 @@
         <el-card class="page-card" :body-style="{ padding: '20px' }" shadow="never">
           <div class="card-title">配额预警</div>
           <div v-if="quotaWarnings.length === 0" style="color: #909399; font-size: 13px; padding: 12px 0">
-            暂无配额数据，点击「账号管理」页刷新摘要后查看
+            暂无配额数据
+            <el-button type="primary" link @click="$router.push('/accounts')" style="font-size: 13px">去账号管理刷新 →</el-button>
           </div>
           <div v-for="w in quotaWarnings" :key="w.account_id + w.key" style="margin-bottom: 14px">
             <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px">
