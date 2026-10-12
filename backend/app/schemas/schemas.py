@@ -144,6 +144,7 @@ class InstanceItem(BaseModel):
     display_name: str | None = None
     lifecycle_state: str | None = None
     shape: str | None = None
+    shape_config: dict | None = None
     availability_domain: str | None = None
     compartment_id: str | None = None
     time_created: str | None = None
@@ -158,10 +159,9 @@ class InstanceListOut(BaseModel):
 
 
 class InstanceEditIn(BaseModel):
-    """编辑实例：只允许 display_name / freeform_tags / metadata。
+    """编辑实例：display_name / freeform_tags / metadata / ocpus / memory_in_gbs / boot_volume_size_gb。
 
-    extra="allow"：收到 shape 等字段时手动拦截，给出明确中文错误，
-    而不是让 pydantic 报晦涩的校验错误。
+    extra="allow"：未知字段直接忽略（不报错）。
     """
 
     model_config = ConfigDict(extra="allow")
@@ -169,6 +169,11 @@ class InstanceEditIn(BaseModel):
     display_name: str | None = None
     freeform_tags: dict | None = None
     metadata: dict | None = None
+    # OCPU/内存：仅 Flex 机型、需关机后修改（后端校验）
+    ocpus: float | None = None
+    memory_in_gbs: float | None = None
+    # 启动卷扩容（GB）：只能调大不能调小（后端校验）
+    boot_volume_size_gb: int | None = None
 
 
 # ---------------- 批量任务 ----------------

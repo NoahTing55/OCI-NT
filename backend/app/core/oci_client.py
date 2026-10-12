@@ -161,11 +161,33 @@ class OciClient:
         return await self.request("DELETE", "iaas", f"/20160918/instances/{instance_id}")
 
     async def update_instance(self, instance_id: str, details: dict) -> httpx.Response:
-        """PUT /20160918/instances/{id}：更新 displayName / freeformTags / definedTags / metadata。
+        """PUT /20160918/instances/{id}：更新 displayName / freeformTags / definedTags / metadata / shapeConfig。
 
-        注意：shape / OCPU / 内存不支持在线变更，调用方需提前拦截。
+        shapeConfig（OCPU/内存）仅 Flex 机型支持，且实例必须处于 STOPPED 状态，
+        调用方需提前校验（见 api/instances.edit_instance）。
         """
         return await self.request("PUT", "iaas", f"/20160918/instances/{instance_id}", details)
+
+    async def get_instance(self, instance_id: str) -> httpx.Response:
+        """GET /20160918/instances/{id}：查实例详情（含 shape / shapeConfig / lifecycleState）。"""
+        return await self.request("GET", "iaas", f"/20160918/instances/{instance_id}")
+
+    async def list_boot_volume_attachments(self, instance_id: str, compartment_id: str) -> httpx.Response:
+        """GET /20160918/bootVolumeAttachments：按实例查启动卷挂载（取 bootVolumeId）。"""
+        return await self.request(
+            "GET", "iaas",
+            f"/20160918/bootVolumeAttachments?instanceId={instance_id}&compartmentId={compartment_id}",
+        )
+
+    async def get_boot_volume(self, boot_volume_id: str) -> httpx.Response:
+        """GET /20160918/bootVolumes/{id}：查启动卷详情（含 sizeInGBs）。"""
+        return await self.request("GET", "iaas", f"/20160918/bootVolumes/{boot_volume_id}")
+
+    async def update_boot_volume(self, boot_volume_id: str, size_in_gbs: int) -> httpx.Response:
+        """PUT /20160918/bootVolumes/{id}：启动卷扩容（只能调大不能调小）。"""
+        return await self.request(
+            "PUT", "iaas", f"/20160918/bootVolumes/{boot_volume_id}", {"sizeInGBs": size_in_gbs}
+        )
 
     # ---------------- 抢机（M3） ----------------
     async def launch_instance(
