@@ -202,8 +202,9 @@
           <el-table-column prop="created_at" label="创建时间" width="150">
             <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="80" fixed="right">
+          <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
+              <el-button v-if="row.root_password" size="small" @click="showInstPwd(row)">密码</el-button>
               <el-button size="small" type="danger" @click="delInstance(row)">删除</el-button>
             </template>
           </el-table-column>
@@ -227,6 +228,19 @@
         <el-descriptions-item label="密码">
           <el-input :value="pwdTask?.root_password" readonly show-password style="width: 220px" @click="selectPwd" />
           <el-button size="small" @click="copyPwd" style="margin-left: 8px">复制</el-button>
+        </el-descriptions-item>
+      </el-descriptions>
+      <div style="color: #909399; font-size: 12px; margin-top: 12px">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
+    </el-dialog>
+
+    <!-- 实例 Root 密码查看 -->
+    <el-dialog :style="{ maxWidth: '92vw' }" v-model="instPwdVisible" title="实例 Root 密码" width="420px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="实例">#{{ instPwd?.sequence }}（{{ instPwd?.display_name }}）</el-descriptions-item>
+        <el-descriptions-item label="用户">root</el-descriptions-item>
+        <el-descriptions-item label="密码">
+          <el-input :value="instPwd?.root_password" readonly show-password style="width: 220px" @click="selectPwd" />
+          <el-button size="small" @click="copyInstPwd" style="margin-left: 8px">复制</el-button>
         </el-descriptions-item>
       </el-descriptions>
       <div style="color: #909399; font-size: 12px; margin-top: 12px">密码通过 cloud-init 注入，新机器首次启动后约 1-2 分钟生效</div>
@@ -511,6 +525,28 @@ const copyPwd = async () => {
 }
 // 点击密码框自动选中，方便手动复制
 const selectPwd = (e) => { e.target.select() }
+// 实例级密码查看
+const instPwdVisible = ref(false)
+const instPwd = ref(null)
+const showInstPwd = (row) => { instPwd.value = row; instPwdVisible.value = true }
+const copyInstPwd = async () => {
+  const text = instPwd.value?.root_password || ''
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success('已复制')
+  } catch (e) { ElMessage.error('复制失败，请手动选中复制') }
+}
 const logTask = ref(null)
 const logs = ref([])
 const logLevel = ref('')

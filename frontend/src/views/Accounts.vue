@@ -30,7 +30,7 @@
     </div>
     <el-empty v-else-if="summaryLoaded" description="暂无摘要数据" :image-size="60" style="margin: 12px 0" />
 
-    <el-table ref="acctTableRef" :data="pagedAccounts" v-loading="loading" style="margin-top: 12px" border stripe size="small" class="acct-table" @selection-change="onSelectionChange">
+    <el-table ref="acctTableRef" :data="pagedAccounts" v-loading="loading" style="margin-top: 12px" border size="small" class="acct-table" @selection-change="onSelectionChange">
       <!-- 多选列：批量订阅区域用 -->
       <el-table-column type="selection" width="45" align="center" />
       <!-- 🛡️ 代理绑定状态：点击快速配置代理 -->
@@ -945,6 +945,7 @@ const doBatchSubscribe = async () => {
     } else {
       ElMessage.warning(`批量订阅完成：成功 ${okCount} 个，失败 ${failCount} 个`)
     }
+    await load()
   } catch (e) {
     ElMessage.error('批量订阅失败：' + (e.response?.data?.detail || e.message))
   } finally {
@@ -1005,7 +1006,7 @@ watch(accounts, () => initColumnResize());
 .summary-card {
   width: 320px;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
 }
