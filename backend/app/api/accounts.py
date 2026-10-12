@@ -186,7 +186,11 @@ def _create_account_core(data: AccountCreate, db: Session) -> Account:
 
 
 async def _auto_detect_account_info(account: Account, db: Session):
-    """导入后自动识别账号信息：类型 + 注册时间 + 租户名（失败不抛异常）。"""
+    """导入后自动识别账号信息：类型 + 注册时间 + 租户名（失败不抛异常）。
+
+    API 能正常返回数据即证明密钥有效，状态直接标为正常，
+    不用等用户手动跑存活检查。
+    """
     try:
         client = build_client_for_account(account)
         try:
@@ -198,6 +202,8 @@ async def _auto_detect_account_info(account: Account, db: Session):
             tenancy_name = await client.get_tenancy_name()
             if tenancy_name:
                 account.tenancy_name = tenancy_name
+            # 能读到数据说明密钥有效
+            account.status = "healthy"
             db.commit()
         finally:
             await client.aclose()
