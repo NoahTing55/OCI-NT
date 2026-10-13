@@ -638,25 +638,28 @@ class SniperManager:
                 attempts = task_row.attempts if task_row else 0
             finally:
                 db_tmp.close()
+            # HTML 格式：标题加粗，IP/密码放 code 块一点即复制
+            import html as _html
             tg_ok = await telegram.send_message(
-            "🚀 ————ORACLE开机成功通知———— 🚀%s\n"
+            "🚀 <b>ORACLE 开机成功</b>%s\n"
             "\n"
-            "状态: 已成功启动\n"
-            "时间: %s\n"
-            "用户: %s\n"
-            "实例信息:\n"
-            "-----------------------------------\n"
-            "架构类型: %s\n"
-            "实例区域: %s\n"
-            "访问地址: %s\n"
-            "访问用户: [root]\n"
-            "访问密码: %s\n"
-            "创建次数: %d\n"
-            "-----------------------------------\n"
-            "实例已经创建成功，请登录验证"
-            % (count_tag, now_str, cfg["account_name"],
+            "✅ <b>状态</b>：已成功启动\n"
+            "🕐 <b>时间</b>：%s\n"
+            "👤 <b>账号</b>：%s\n"
+            "\n"
+            "🖥️ <b>实例信息</b>\n"
+            "├ 架构：%s\n"
+            "├ 区域：%s\n"
+            "├ IP：<code>%s</code>\n"
+            "├ 用户：<code>root</code>\n"
+            "├ 密码：<code>%s</code>\n"
+            "└ 尝试：%d 次\n"
+            "\n"
+            "👉 实例已创建成功，请登录验证"
+            % (count_tag, now_str, _html.escape(cfg["account_name"]),
                arch, region_cn,
-               ip or "获取中", cfg["root_password"] or "未设置",
+               _html.escape(ip or "获取中"),
+               _html.escape(cfg["root_password"] or "未设置"),
                attempts)
             )
             self._log(task_id, "info" if tg_ok else "warning",

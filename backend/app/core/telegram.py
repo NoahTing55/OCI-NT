@@ -13,6 +13,12 @@ from app.services.settings import get_setting, invalidate_cache
 
 logger = logging.getLogger(__name__)
 
+# TG Bot API 的 token 拼在请求 URL 里（/bot<token>/sendMessage），httpx 在 DEBUG
+# 级别会把完整 URL 打进日志；锁定 httpx/httpcore 日志级别，避免排查问题开 debug
+# 时把 token 泄露到日志里。
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 
 def reload() -> None:
     """手动刷新 TG 配置缓存。
@@ -40,7 +46,7 @@ async def _post_message(token: str, chat_id: str, text: str) -> tuple[bool, str]
         async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
             r = await client.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": text},
+                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
             )
             if r.status_code != 200:
                 return False, f"Telegram API 返回 {r.status_code}：{r.text[:200]}"

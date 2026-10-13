@@ -83,7 +83,7 @@
             <el-button size="small" type="success" @click="openTerminal(row)">终端</el-button>
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" @click="openChangeIp(row)">换 IP</el-button>
-            <el-button size="small" type="info" @click="doOpenPorts(row)">放行端口</el-button>
+            <el-button size="small" type="info" :loading="openingPorts" @click="doOpenPorts(row)">放行端口</el-button>
           </span>
         </template>
       </el-table-column>

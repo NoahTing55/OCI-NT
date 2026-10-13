@@ -41,11 +41,12 @@
 
       <div v-else class="login-loading">加载中…</div>
     </div>
-    <div class="login-foot">OCI-NT · 自托管多账号管理</div>
+    <div class="login-foot">OCI-NT · 自托管多账号管理 · 构建 {{ buildTime }}</div>
   </div>
 </template>
 
 <script setup>
+const buildTime = new Date(document.lastModified).toLocaleString('zh-CN', { hour12: false })
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { authStatus, initAdmin, login } from '../api/client'
