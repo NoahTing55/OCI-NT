@@ -15,6 +15,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - redisdata:/data
     environment:
+      - TZ=Asia/Shanghai
       - POSTGRES_USER=oci
       - POSTGRES_PASSWORD=oci
       - POSTGRES_DB=ocipanel
