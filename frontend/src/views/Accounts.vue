@@ -171,7 +171,7 @@
 
 
           <el-form :model="form" label-width="110px">
-            <el-form-item label="自定义名称"><el-input v-model="form.name" placeholder="如 Phoenix-01，留空按 {城市}-{id}-{日期} 自动生成" /></el-form-item>
+            <el-form-item label="自定义名称"><el-input v-model="form.name" placeholder="留空自动生成，如 Phoenix-2026101301" /></el-form-item>
             <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." /></el-form-item>
             <el-form-item label="User OCID"><el-input v-model="form.user_ocid" placeholder="ocid1.user.oc1.." /></el-form-item>
             <el-form-item label="指纹"><el-input v-model="form.fingerprint" placeholder="aa:bb:cc:.." /></el-form-item>
@@ -481,9 +481,8 @@ const parseConfig = () => {
   if (importForm.value.privateKey.trim()) {
     form.value.private_key = importForm.value.privateKey.trim()
   }
-  if (!form.value.name && kv.tenancy) {
-    form.value.name = 'oci-' + kv.tenancy.replace(/[^a-zA-Z0-9]/g, '').slice(-6)
-  }
+  // 名字留空，后端按 {城市}-{日期}{序号} 自动生成（如 Phoenix-2026101301），
+  // 不再用 oci-xxx 格式填充
   ElMessage.success('已解析并填入下方表单，请检查后保存')
 }
 
