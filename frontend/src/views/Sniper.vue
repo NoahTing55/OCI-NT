@@ -669,17 +669,29 @@ const submitCreate = async () => {
       await updateSnipeTask(editingId.value, payload)
       ElMessage.success('任务已更新')
     } else if (accountIds.length > 1) {
-      // 批量创建：同一配置应用到多个账号
-      const payload = { ...form.value }
-      delete payload.account_id
-      delete payload.compartment_ocid
-      const res = await batchCreateSnipeTasks({ account_ids: accountIds, task: payload })
-      const okNames = res.created.map((c) => c.account_name).join('、')
-      if (res.failed.length) {
-        const failInfo = res.failed.map((f) => `#${f.account_id}：${f.reason}`).join('；')
-        ElMessage.warning(`批量创建完成：成功 ${res.created.length} 个（${okNames}），失败 ${res.failed.length} 个：${failInfo}`)
+      // 批量创建：按账号各自区域分组，每组用对应区域创建
+      const groups = {}
+      for (const aid of accountIds) {
+        const acc = accounts.value.find((x) => x.id === aid)
+        const r = (acc && acc.region) || form.value.region
+        ;(groups[r] = groups[r] || []).push(aid)
+      }
+      const allCreated = []
+      const allFailed = []
+      for (const [region, ids] of Object.entries(groups)) {
+        const payload = { ...form.value, region }
+        delete payload.account_id
+        delete payload.compartment_ocid
+        const res = await batchCreateSnipeTasks({ account_ids: ids, task: payload })
+        allCreated.push(...res.created)
+        allFailed.push(...res.failed)
+      }
+      const okNames = allCreated.map((c) => c.account_name).join('、')
+      if (allFailed.length) {
+        const failInfo = allFailed.map((f) => `#${f.account_id}：${f.reason}`).join('；')
+        ElMessage.warning(`批量创建完成：成功 ${allCreated.length} 个（${okNames}），失败 ${allFailed.length} 个：${failInfo}`)
       } else {
-        ElMessage.success(`批量创建成功：${res.created.length} 个任务（${okNames}）`)
+        ElMessage.success(`批量创建成功：${allCreated.length} 个任务（${okNames}）`)
       }
     } else {
       await createSnipeTask(form.value)
