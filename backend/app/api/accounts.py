@@ -29,7 +29,11 @@ _REGION_CITY_MAP = {
     "zurich": "Zurich", "toronto": "Toronto", "montreal": "Montreal",
     "saopaulo": "SaoPaulo", "santiago": "Santiago", "vinhedo": "Vinhedo",
     "abudhabi": "AbuDhabi", "dubai": "Dubai", "jeddah": "Jeddah",
-    "monterrey": "Monterrey",
+    "monterrey": "Monterrey", "valparaiso": "Valparaiso", "bogota": "Bogota",
+    "marseille": "Marseille", "batam": "Batam", "jerusalem": "Jerusalem",
+    "turin": "Turin", "kulai": "Kulai", "queretaro": "Queretaro",
+    "casablanca": "Casablanca", "riyadh": "Riyadh", "johannesburg": "Johannesburg",
+    "jovanovac": "Jovanovac",
 }
 
 
