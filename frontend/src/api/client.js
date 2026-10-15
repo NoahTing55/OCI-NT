@@ -121,6 +121,7 @@ export const updateAzureAccount = (id, data) => api.put(`/azure/${id}`, data).th
 export const deleteAzureAccount = (id) => api.delete(`/azure/${id}`).then((r) => r.data)
 export const refreshAzureAccount = (id) => api.post(`/azure/${id}/refresh`, null, { timeout: 90000 }).then((r) => r.data)
 export const refreshAllAzureAccounts = () => api.post('/azure/refresh-all', null, { timeout: 300000 }).then((r) => r.data)
+export const batchImportAzureAccounts = (accounts) => api.post('/azure/batch-import', { accounts }).then((r) => r.data)
 
 // 请求拦截器：自动带上 JWT
 api.interceptors.request.use((cfg) => {

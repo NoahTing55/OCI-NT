@@ -14,6 +14,7 @@ from app.core.security import decrypt_text, encrypt_text
 from app.models.models import AzureAccount
 from app.schemas.schemas import (
     AzureAccountCreate, AzureAccountDetailOut, AzureAccountOut, AzureSubscriptionOut,
+    AzureBatchImportRequest, AzureBatchImportResponse, BatchImportFail,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,45 @@ def _to_out(a: AzureAccount) -> AzureAccountOut:
     out.has_secret = bool(a.client_secret_enc)
     return out
 
+
+
+
+@router.post("/batch-import", response_model=AzureBatchImportResponse)
+def batch_import_azure_accounts(data: AzureBatchImportRequest, db: Session = Depends(get_db)):
+    """批量导入 Azure 账号（JSON 数组）。单个失败不影响其他。"""
+    created: list[int] = []
+    failed: list[dict] = []
+    for idx, item in enumerate(data.accounts):
+        name = (item.name or "").strip() or f"Azure-{idx + 1}"
+        try:
+            if not item.tenant_id.strip() or not item.client_id.strip() or not item.client_secret:
+                raise ValueError("tenant_id / client_id / client_secret 均不能为空")
+            try:
+                secret_enc = encrypt_text(item.client_secret)
+            except RuntimeError as e:
+                raise ValueError(str(e))
+            acc = AzureAccount(
+                name=name,
+                tenant_id=item.tenant_id.strip(),
+                client_id=item.client_id.strip(),
+                client_secret_enc=secret_enc,
+                remark=item.remark or "",
+            )
+            db.add(acc)
+            db.commit()
+            db.refresh(acc)
+            created.append(acc.id)
+        except ValueError as e:
+            db.rollback()
+            failed.append({"name": name, "error": str(e)})
+        except Exception as e:
+            db.rollback()
+            logger.warning("Azure 批量导入第 %d 个异常：%s", idx + 1, e)
+            failed.append({"name": name, "error": f"未知错误：{e}"})
+    return AzureBatchImportResponse(
+        created=created,
+        failed=[BatchImportFail(**f) for f in failed],
+    )
 
 @router.get("", response_model=list[AzureAccountOut])
 def list_azure_accounts(db: Session = Depends(get_db)):

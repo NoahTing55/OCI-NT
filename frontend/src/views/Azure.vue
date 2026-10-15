@@ -4,6 +4,7 @@
     <el-button type="warning" @click="doRefreshAll" :loading="refreshingAll">
       {{ refreshingAll ? '查询中…' : '全部查询 Tier' }}
     </el-button>
+    <el-button @click="batchVisible = true">批量导入</el-button>
     <span style="margin-left: 8px; font-size: 12px; color: #909399">
       Tier 取自 CognitiveServices quotaTiers（currentTierName）
     </span>
@@ -64,6 +65,23 @@
       </el-table-column>
     </el-table>
 
+    <el-dialog v-model="batchVisible" title="批量导入 Azure 账号" width="680px" :style="{ maxWidth: '92vw' }">
+      <el-input v-model="batchText" type="textarea" :rows="10" placeholder='粘贴 JSON 数组，如：&#10;[{"name":"Azure-01","tenant_id":"...","client_id":"...","client_secret":"...","remark":""}]' />
+      <div style="margin: 8px 0; font-size: 12px; color: #909399">
+        用 <code>azure-sp-setup.sh</code> 脚本 20 个租户各跑一次，把输出的 JSONL 用
+        <code>jq -s . accounts.jsonl</code> 合成数组后粘贴到这里。
+      </div>
+      <div v-if="batchResult" style="margin-top: 8px; font-size: 13px">
+        <span style="color: #67c23a">成功 {{ batchResult.created.length }} 个</span>
+        <span v-if="batchResult.failed.length" style="color: #f56c6c; margin-left: 12px">失败 {{ batchResult.failed.length }} 个</span>
+        <div v-for="f in batchResult.failed" :key="f.name" style="color: #f56c6c">「{{ f.name }}」：{{ f.error }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="batchVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitBatch" :loading="batchSubmitting">确认导入</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑 Azure 账号' : '新建 Azure 账号'"
       width="560px" :style="{ maxWidth: '92vw' }" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="110px">
@@ -99,6 +117,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listAzureAccounts, createAzureAccount, updateAzureAccount,
   deleteAzureAccount, refreshAzureAccount, refreshAllAzureAccounts,
+  batchImportAzureAccounts,
 } from '../api/client.js'
 
 const accounts = ref([])
@@ -220,6 +239,41 @@ const submitForm = async () => {
     submitting.value = false
   }
 }
+const batchVisible = ref(false)
+const batchText = ref('')
+const batchSubmitting = ref(false)
+const batchResult = ref(null)
+
+const submitBatch = async () => {
+  let arr
+  try {
+    arr = JSON.parse(batchText.value)
+    if (!Array.isArray(arr)) throw new Error('顶层必须是数组')
+  } catch (e) {
+    ElMessage.error('JSON 解析失败：' + e.message)
+    return
+  }
+  batchSubmitting.value = true
+  try {
+    const res = await batchImportAzureAccounts(arr)
+    batchResult.value = res
+    if (res.failed.length === 0) {
+      ElMessage.success(`导入成功 ${res.created.length} 个`)
+      batchVisible.value = false
+      batchText.value = ''
+      batchResult.value = null
+      load()
+    } else {
+      ElMessage.warning(`成功 ${res.created.length} 个，失败 ${res.failed.length} 个`)
+      load()
+    }
+  } catch (e) {
+    ElMessage.error('导入失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
 const remove = async (row) => {
   try {
     await ElMessageBox.confirm(`删除 Azure 账号「${row.name}」？`, '确认', { type: 'warning' })

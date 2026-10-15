@@ -459,3 +459,20 @@ class AzureSubscriptionOut(BaseModel):
 class AzureAccountDetailOut(AzureAccountOut):
     subscriptions: list[AzureSubscriptionOut] = []
     error: str = ""
+
+
+class AzureBatchImportItem(BaseModel):
+    name: str = Field(default="", max_length=100)
+    tenant_id: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    remark: str = ""
+
+
+class AzureBatchImportRequest(BaseModel):
+    accounts: list[AzureBatchImportItem] = Field(..., min_length=1, max_length=100)
+
+
+class AzureBatchImportResponse(BaseModel):
+    created: list[int] = Field(default_factory=list)
+    failed: list[BatchImportFail] = Field(default_factory=list)
