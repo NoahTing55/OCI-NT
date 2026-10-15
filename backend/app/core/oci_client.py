@@ -841,7 +841,7 @@ class OciClient:
         try:
             resp = await self.request(
                 "POST", "identity", "/20180419/regionSubscriptions",
-                json_body={"tenancyId": tenancy_ocid, "regionKey": region_key},
+                json_body={"regionKey": region_key},
             )
         finally:
             self.region = orig_region
