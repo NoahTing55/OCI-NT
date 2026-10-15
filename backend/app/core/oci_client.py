@@ -68,6 +68,10 @@ _REGION_NAME_TO_KEY_FALLBACK = {
     "il-jerusalem-1": "MTZ",
     "af-casablanca-1": "LEJ", "af-johannesburg-1": "JNB",
 }
+# regionKey → regionName 反向表（home region 解析用，避免额外调 regions 接口）
+_REGION_KEY_TO_NAME_FALLBACK = {v: k for k, v in _REGION_NAME_TO_KEY_FALLBACK.items()}
+# tenancy_ocid → home region 名缓存（home region 永不变更）
+_HOME_REGION_CACHE: dict[str, str] = {}
 
 
 class OciClient:
@@ -778,8 +782,11 @@ class OciClient:
     async def resolve_region_key(self, region_name: str) -> str:
         """把区域名（us-ashburn-1）换成官方订阅接口要用的 regionKey（IAD）。
 
-        先用实时 /regions 列表建映射；接口失败时用内置常用区域映射兜底。
+        本地 45 区域表优先（零 API 调用）；未知区域才调实时 /regions 列表。
         """
+        key = _REGION_NAME_TO_KEY_FALLBACK.get(region_name)
+        if key:
+            return key
         try:
             regions = await self.list_all_regions()
             for r in regions:
@@ -787,34 +794,31 @@ class OciClient:
                     return r["regionKey"]
         except RuntimeError:
             pass
-        key = _REGION_NAME_TO_KEY_FALLBACK.get(region_name)
-        if key:
-            return key
         raise RuntimeError(f"无法解析区域 {region_name} 的 regionKey（区域列表不可用）")
 
     async def get_home_region(self, tenancy_ocid: str) -> str:
-        """GET /20160918/tenancies/{tenancyId}：取租户的 home region 名（如 us-ashburn-1）。"""
+        """取租户的 home region 名（如 us-ashburn-1）。
+
+        优先内存缓存；否则 GET /20160918/tenancies 取 homeRegionKey，
+        用本地反向表直接换算成 regionName（零额外 API 调用）。
+        """
+        if tenancy_ocid in _HOME_REGION_CACHE:
+            return _HOME_REGION_CACHE[tenancy_ocid]
         resp = await self.request("GET", "identity", f"/20160918/tenancies/{tenancy_ocid}")
         if resp.status_code != 200:
             raise RuntimeError(f"查询租户信息失败：HTTP {resp.status_code} {resp.text[:200]}")
-        home = resp.json().get("homeRegionKey") or resp.json().get("home-region-key")
-        # homeRegionKey 是 regionKey（如 IAD），需要转成 regionName；直接用订阅列表找
-        if home:
-            try:
-                regions = await self.list_all_regions()
-                for r in regions:
-                    if r.get("regionKey") == home and r.get("regionName"):
-                        return r["regionName"]
-            except RuntimeError:
-                pass
-        # 兜底：从区域订阅列表找 isHomeRegion
-        try:
-            subs = await self.list_region_subscriptions(tenancy_ocid)
-            for sub in subs:
-                if sub.get("isHomeRegion") and sub.get("regionName"):
-                    return sub["regionName"]
-        except RuntimeError:
-            pass
+        data = resp.json()
+        home_key = data.get("homeRegionKey") or data.get("home-region-key")
+        # 有些租户直接返回 homeRegion（regionName）
+        home_name = data.get("homeRegion") or data.get("home-region")
+        if home_name and "-" in home_name:
+            _HOME_REGION_CACHE[tenancy_ocid] = home_name
+            return home_name
+        if home_key:
+            name = _REGION_KEY_TO_NAME_FALLBACK.get(home_key.upper())
+            if name:
+                _HOME_REGION_CACHE[tenancy_ocid] = name
+                return name
         raise RuntimeError("无法确定 home region")
 
     async def create_region_subscription(self, tenancy_ocid: str, region_name: str) -> dict:
