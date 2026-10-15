@@ -124,6 +124,8 @@ class ProxyOut(BaseModel):
     remark: str
     # 该代理当前绑定的账号别名；未绑定为 None
     bound_account_name: str | None = None
+    # 该代理当前绑定的 AZ 账号别名；未绑定为 None（允许与 OCI 账号共用）
+    bound_azure_account_name: str | None = None
 
 
 # ---------------- 存活检查 ----------------

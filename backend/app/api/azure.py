@@ -159,13 +159,11 @@ def delete_azure_account(account_id: int, db: Session = Depends(get_db)):
 
 
 def _check_proxy_available(db, proxy_id: int, exclude_azure_id: int | None = None):
-    """校验代理存在且未被其他账号（OCI 或 Azure）占用。"""
+    """校验代理存在且未被其他 AZ 账号占用。允许与 OCI 账号共用同一代理。"""
     from fastapi import HTTPException
     p = db.get(Proxy, proxy_id)
     if not p:
         raise HTTPException(status_code=400, detail="代理不存在")
-    if p.account is not None:
-        raise HTTPException(status_code=400, detail=f"代理已被 OCI 账号「{p.account.name}」绑定")
     q = db.query(AzureAccount).filter(AzureAccount.proxy_id == proxy_id)
     if exclude_azure_id:
         q = q.filter(AzureAccount.id != exclude_azure_id)

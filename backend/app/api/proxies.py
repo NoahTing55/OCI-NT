@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.security import encrypt_text
-from app.models.models import Proxy
+from app.models.models import AzureAccount, Proxy
 from app.schemas.schemas import ProxyCreate, ProxyOut
 
 router = APIRouter()
@@ -16,6 +16,8 @@ def list_proxies(db: Session = Depends(get_db)):
         out = ProxyOut.model_validate(p)
         # 透出绑定状态，供新建账号时默认选中未使用代理
         out.bound_account_name = p.account.name if p.account is not None else None
+        az = db.query(AzureAccount).filter(AzureAccount.proxy_id == p.id).first()
+        out.bound_azure_account_name = az.name if az else None
         result.append(out)
     return result
 

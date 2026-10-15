@@ -77,10 +77,10 @@
         <el-form-item label="代理">
           <el-select v-model="form.proxy_id" clearable placeholder="直连" style="width: 100%">
             <el-option v-for="p in availableProxies" :key="p.id" :value="p.id"
-              :label="`${p.name} (${p.scheme}://${p.host}:${p.port})`"
-              :disabled="p.bound_account_name != null" />
+              :label="proxyLabel(p)"
+              :disabled="isProxyDisabled(p)" />
           </el-select>
-          <div style="font-size: 12px; color: #909399">已绑定其他账号的代理不可选（一代理一账号）</div>
+          <div style="font-size: 12px; color: #909399">一个 OCI + 一个 AZ 可共用同一代理；AZ 之间不可复用</div>
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
@@ -169,6 +169,20 @@ const flatRows = computed(() => {
 })
 
 const availableProxies = computed(() => proxies.value)
+const proxyLabel = (p) => {
+  let label = `${p.name} (${p.scheme}://${p.host}:${p.port})`
+  if (p.bound_account_name) label += ` [OCI:${p.bound_account_name}]`
+  return label
+}
+// 禁用被其他 AZ 账号占用的；编辑时自己当前绑定的不过滤
+const isProxyDisabled = (p) => {
+  if (!p.bound_azure_account_name) return false
+  if (editingId.value) {
+    const cur = accounts.value.find((a) => a.id === editingId.value)
+    if (cur && cur.proxy_name === p.bound_azure_account_name) return false
+  }
+  return true
+}
 
 const load = async () => {
   loading.value = true
