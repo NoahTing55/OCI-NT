@@ -800,10 +800,17 @@ class OciClient:
     async def create_region_subscription(self, tenancy_ocid: str, region_name: str) -> dict:
         """POST /20180419/regionSubscriptions：订阅新区域（仅升级账户可用）。
 
-        必须调用 home region 的 identity 接口，否则 OCI 返回 404。
+        优先调用 home region 的 identity 接口（跨 region 调订阅可能返回 404）；
+        查不到 home region 时用当前 region 兜底。
         """
+        import logging
+        logger = logging.getLogger(__name__)
         region_key = await self.resolve_region_key(region_name)
-        home_region = await self.get_home_region(tenancy_ocid)
+        try:
+            home_region = await self.get_home_region(tenancy_ocid)
+        except RuntimeError as e:
+            logger.warning("无法确定 home region（%s），用当前 region %s 重试", e, self.region)
+            home_region = self.region
         # 临时切到 home region 发请求
         orig_region = self.region
         self.region = home_region
