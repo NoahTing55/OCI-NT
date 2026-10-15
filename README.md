@@ -5,7 +5,7 @@
 ## 功能
 
 - **总览**：账号/实例/任务统计，配额预警
-- **账号管理**：**导入 API** 建号（Config/PEM 文件或粘贴，自动解析）；存活检查；账号类型自动识别；一键创建实例
+- **账号管理**：**导入 API** 建号（Config/PEM 文件或粘贴，自动解析）；存活检查；账号类型自动识别（个人免费/个人升级）；一键创建实例
 - **开机管理**：4 个模板（免费 AMD 1C1G / ARM 1C6G / ARM 2C12G / E5 1C6G），配置可改；自动建网；cloud-init root 密码；硬盘可调；成功 TG 推送实例信息、公网 IP、密码；任务可编辑
 - **实例运维**：多账号多区域聚合列表，批量开机/关机/重启/终止，编辑名称/标签
 - **换 IP**：预留 IP 标准流程，换完自动同步 Cloudflare
@@ -27,8 +27,8 @@ GitHub Actions 每次推送自动构建镜像到 GHCR，服务器直接拉取，
 
 ```bash
 # 1. 拉代码
-git clone https://github.com/NoahTing55/OCI-NT.git /opt/oci--nt
-cd /opt/oci--nt
+git clone https://github.com/NoahTing55/OCI-NT.git /opt/oci-nt
+cd /opt/oci-nt
 
 # 2. 配环境变量
 cp .env.example .env
@@ -62,7 +62,7 @@ docker compose logs --tail=50 worker
 ### 以后更新
 
 ```bash
-cd /opt/oci--nt
+cd /opt/oci-nt
 git pull
 docker compose pull
 docker compose up -d
