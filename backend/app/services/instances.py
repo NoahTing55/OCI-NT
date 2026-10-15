@@ -21,45 +21,79 @@ CACHE_PREFIX = "instances:"
 
 
 async def _fetch_one(account: Account) -> tuple:
-    """查单个账号的实例。返回 (account, items, error)。"""
-    client = build_client_for_account(account)
+    """查单个账号的实例（遍历所有订阅区域）。返回 (account, items, error)。"""
+    from app.core.oci_client import OciClient
+    from app.core.security import decrypt_text
+    from app.core.oci_factory import build_proxy_url
+
+    # 先拿订阅区域列表，失败时只查主区域
+    base_client = build_client_for_account(account)
     try:
-        compartment = compartment_of(account)
-        raw_list = await client.list_instances(compartment)
-        items = []
-        for inst in raw_list:
-            item = {
-                "account_id": account.id,
-                "account_name": account.name,
-                "region": account.region,
-                "instance_id": inst.get("id"),
-                "display_name": inst.get("displayName"),
-                "lifecycle_state": inst.get("lifecycleState"),
-                "shape": inst.get("shape"),
-                "availability_domain": inst.get("availabilityDomain"),
-                "compartment_id": inst.get("compartmentId"),
-                "time_created": inst.get("timeCreated"),
-                # shapeConfig：{"ocpus": x, "memoryInGBs": y}，账户摘要统计 OCPU/内存用
-                "shape_config": inst.get("shapeConfig") or {},
-                "public_ip": None,
-                "private_ip": None,
-            }
-            try:
-                atts = await client.list_vnic_attachments(compartment, inst["id"])
-                if atts:
-                    vnic = (await client.get_vnic(atts[0]["vnicId"])).json()
-                    item["public_ip"] = vnic.get("publicIp")
-                    item["private_ip"] = vnic.get("privateIp")
-            except Exception as e:
-                item["ip_error"] = str(e)[:120]
-                logger.warning("实例 %s 查 IP 失败：%s", inst.get("id"), e)
-            items.append(item)
-        return account, items, None
-    except Exception as e:
-        logger.warning("账号「%s」实例查询失败：%s", account.name, e)
-        return account, [], str(e)[:200]
+        try:
+            subs = await base_client.list_region_subscriptions(account.tenancy_ocid)
+            regions = [s["regionName"] for s in subs if s.get("regionName")]
+        except Exception as e:
+            logger.warning("账号 %s 查订阅区域失败，只查主区域：%s", account.name, str(e)[:100])
+            regions = []
     finally:
-        await client.aclose()
+        await base_client.aclose()
+    if not regions:
+        regions = [account.region]
+    # 去重保序
+    seen = set()
+    regions = [r for r in regions if not (r in seen or seen.add(r))]
+
+    private_key_pem = decrypt_text(account.private_key_enc)
+    proxy_url = build_proxy_url(account)
+    compartment = compartment_of(account)
+    items = []
+    region_errors = []
+    for region in regions:
+        client = OciClient(
+            tenancy_ocid=account.tenancy_ocid,
+            user_ocid=account.user_ocid,
+            fingerprint=account.fingerprint,
+            private_key_pem=private_key_pem,
+            region=region,
+            proxy_url=proxy_url,
+            timeout=20.0,
+        )
+        try:
+            raw_list = await client.list_instances(compartment)
+            for inst in raw_list:
+                item = {
+                    "account_id": account.id,
+                    "account_name": account.name,
+                    "region": region,
+                    "instance_id": inst.get("id"),
+                    "display_name": inst.get("displayName"),
+                    "lifecycle_state": inst.get("lifecycleState"),
+                    "shape": inst.get("shape"),
+                    "availability_domain": inst.get("availabilityDomain"),
+                    "compartment_id": inst.get("compartmentId"),
+                    "time_created": inst.get("timeCreated"),
+                    # shapeConfig：{"ocpus": x, "memoryInGBs": y}，账户摘要统计 OCPU/内存用
+                    "shape_config": inst.get("shapeConfig") or {},
+                    "public_ip": None,
+                    "private_ip": None,
+                }
+                try:
+                    atts = await client.list_vnic_attachments(compartment, inst["id"])
+                    if atts:
+                        vnic = (await client.get_vnic(atts[0]["vnicId"])).json()
+                        item["public_ip"] = vnic.get("publicIp")
+                        item["private_ip"] = vnic.get("privateIp")
+                except Exception as e:
+                    item["ip_error"] = str(e)[:120]
+                    logger.warning("实例 %s 查 IP 失败：%s", inst.get("id"), e)
+                items.append(item)
+        except Exception as e:
+            region_errors.append(f"{region}: {str(e)[:100]}")
+            logger.warning("账号「%s」区域 %s 实例查询失败：%s", account.name, region, e)
+        finally:
+            await client.aclose()
+    err = "; ".join(region_errors) if region_errors else None
+    return account, items, err
 
 
 async def fetch_all_instances(accounts: list) -> tuple:
