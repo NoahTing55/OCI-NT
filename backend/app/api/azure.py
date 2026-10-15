@@ -44,11 +44,13 @@ def _proxy_name_for(acc: AzureAccount, db) -> str | None:
 
 
 def _parse_cached(a: AzureAccount) -> list:
-    if not a.cached_subscriptions:
+    # 用 getattr 防御：模型字段缺失时返回空而不是 500
+    raw = getattr(a, 'cached_subscriptions', None)
+    if not raw:
         return []
     try:
         import json
-        v = json.loads(a.cached_subscriptions)
+        v = json.loads(raw)
         return v if isinstance(v, list) else []
     except Exception:
         return []
