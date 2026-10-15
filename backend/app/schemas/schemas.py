@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, field_validator, ConfigDict, Field
 
 
 # ---------------- 账号 ----------------
@@ -450,9 +450,25 @@ class AzureAccountOut(BaseModel):
     has_secret: bool = False
     proxy_id: int | None = None
     proxy_name: str | None = None
-    # 缓存的订阅列表（查一次后存库）；DB 为空时为 None，接口返回时解析为 list
-    cached_subscriptions: list | None = None
+    # 缓存的订阅列表（查一次后存库）；DB 存的是 JSON 字符串，validator 自动解析为 list
+    cached_subscriptions: list = []
     cached_at: datetime | None = None
+
+    @field_validator("cached_subscriptions", mode="before")
+    @classmethod
+    def _parse_cached_subs(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            try:
+                import json
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, list) else []
+            except Exception:
+                return []
+        return v if isinstance(v, list) else []
 
 
 class AzureSubscriptionOut(BaseModel):
