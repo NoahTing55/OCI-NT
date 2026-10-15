@@ -431,6 +431,7 @@ class AzureAccountCreate(BaseModel):
     client_id: str = Field(..., max_length=64)
     client_secret: str = Field(default="", description="留空则不修改（更新时）")
     remark: str = ""
+    proxy_id: int | None = None
 
 
 class AzureAccountOut(BaseModel):
@@ -445,6 +446,8 @@ class AzureAccountOut(BaseModel):
     updated_at: datetime | None = None
     # 密钥是否已设置（永不返回明文）
     has_secret: bool = False
+    proxy_id: int | None = None
+    proxy_name: str | None = None
 
 
 class AzureSubscriptionOut(BaseModel):

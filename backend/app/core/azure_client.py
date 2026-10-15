@@ -22,12 +22,19 @@ _SCOPE = "https://management.azure.com/.default"
 # (tenant_id, client_id) -> {"token": str, "expires_at": float}
 _token_cache: dict[tuple[str, str], dict] = {}
 
+def _client(proxy_url: str | None):
+    """返回 httpx Client（带代理）或顶层模块（直连），统一 .post/.get 接口。"""
+    if proxy_url:
+        return httpx.Client(proxy=proxy_url, trust_env=False, timeout=30)
+    return httpx
+
+
 
 def _cache_key(tenant_id: str, client_id: str) -> tuple[str, str]:
     return (tenant_id.strip(), client_id.strip())
 
 
-def get_azure_token(tenant_id: str, client_id: str, client_secret: str) -> str:
+def get_azure_token(tenant_id: str, client_id: str, client_secret: str, proxy_url: str | None = None) -> str:
     """取 Azure Management API token（带缓存）。失败抛 RuntimeError。"""
     key = _cache_key(tenant_id, client_id)
     cached = _token_cache.get(key)
@@ -35,8 +42,10 @@ def get_azure_token(tenant_id: str, client_id: str, client_secret: str) -> str:
         return cached["token"]
 
     url = _TOKEN_URL.format(tenant=tenant_id.strip())
+    _c = _client(proxy_url)
+    close_after = isinstance(_c, httpx.Client)
     try:
-        resp = httpx.post(
+        resp = _c.post(
             url,
             data={
                 "grant_type": "client_credentials",
@@ -48,6 +57,9 @@ def get_azure_token(tenant_id: str, client_id: str, client_secret: str) -> str:
         )
     except Exception as e:
         raise RuntimeError(f"Azure 认证请求失败：{e}") from e
+    finally:
+        if close_after:
+            _c.close()
 
     if resp.status_code != 200:
         # 只取错误摘要，不打密钥
@@ -75,17 +87,24 @@ def _headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def list_subscriptions(token: str) -> list[dict]:
+def list_subscriptions(token: str, proxy_url: str | None = None) -> list[dict]:
     """列出该服务主体可见的订阅。失败抛 RuntimeError。"""
     url = f"{_MGMT}/subscriptions?api-version=2022-12-01"
+    _c = _client(proxy_url)
+    close_after = isinstance(_c, httpx.Client)
     try:
-        resp = httpx.get(url, headers=_headers(token), timeout=20)
+        resp = _c.get(url, headers=_headers(token), timeout=20)
+        if resp.status_code == 401:
+            raise RuntimeError("AUTH_EXPIRED")
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询订阅失败（HTTP {resp.status_code}）：{resp.text[:200]}")
+    except RuntimeError:
+        raise
     except Exception as e:
         raise RuntimeError(f"查询订阅失败：{e}") from e
-    if resp.status_code == 401:
-        raise RuntimeError("AUTH_EXPIRED")
-    if resp.status_code != 200:
-        raise RuntimeError(f"查询订阅失败（HTTP {resp.status_code}）：{resp.text[:200]}")
+    finally:
+        if close_after:
+            _c.close()
     out = []
     for s in resp.json().get("value", []):
         out.append({
@@ -96,7 +115,7 @@ def list_subscriptions(token: str) -> list[dict]:
     return out
 
 
-def get_quota_tier(token: str, subscription_id: str) -> dict:
+def get_quota_tier(token: str, subscription_id: str, proxy_url: str | None = None) -> dict:
     """查单个订阅的 CognitiveServices quotaTier（用户截图里的 Tier 等级）。
 
     返回 {"tier": "Free Tier"/..., "raw": ...}；查不到返回 {"tier": ""}，不抛异常
@@ -107,11 +126,16 @@ def get_quota_tier(token: str, subscription_id: str) -> dict:
         f"/providers/Microsoft.CognitiveServices/quotaTiers"
         f"?api-version=2025-10-01-preview"
     )
+    _c = _client(proxy_url)
+    close_after = isinstance(_c, httpx.Client)
     try:
-        resp = httpx.get(url, headers=_headers(token), timeout=20)
+        resp = _c.get(url, headers=_headers(token), timeout=20)
     except Exception as e:
         logger.warning("Tier 查询网络异常 sub=%s：%s", subscription_id[:8], e)
         return {"tier": ""}
+    finally:
+        if close_after:
+            _c.close()
     if resp.status_code != 200:
         logger.warning("Tier 查询 HTTP %s sub=%s", resp.status_code, subscription_id[:8])
         return {"tier": ""}
@@ -124,7 +148,7 @@ def get_quota_tier(token: str, subscription_id: str) -> dict:
         return {"tier": ""}
 
 
-def get_month_cost(token: str, subscription_id: str) -> dict:
+def get_month_cost(token: str, subscription_id: str, proxy_url: str | None = None) -> dict:
     """查订阅本月累计消费（USD）。失败返回 {"cost": None}，不阻塞主流程。"""
     url = (
         f"{_MGMT}/subscriptions/{subscription_id}"
@@ -138,12 +162,17 @@ def get_month_cost(token: str, subscription_id: str) -> dict:
             "aggregation": {"totalCost": {"name": "Cost", "function": "Sum"}},
         },
     }
+    _c = _client(proxy_url)
+    close_after = isinstance(_c, httpx.Client)
     try:
-        resp = httpx.post(url, headers={**_headers(token), "Content-Type": "application/json"},
-                          json=body, timeout=25)
+        resp = _c.post(url, headers={**_headers(token), "Content-Type": "application/json"},
+                       json=body, timeout=25)
     except Exception as e:
         logger.warning("消费查询网络异常 sub=%s：%s", subscription_id[:8], e)
         return {"cost": None, "currency": ""}
+    finally:
+        if close_after:
+            _c.close()
     if resp.status_code != 200:
         logger.warning("消费查询 HTTP %s sub=%s", resp.status_code, subscription_id[:8])
         return {"cost": None, "currency": ""}

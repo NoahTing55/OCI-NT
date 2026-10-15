@@ -267,5 +267,6 @@ class AzureAccount(Base):
     client_id = Column(String(64), nullable=False)
     client_secret_enc = Column(Text, nullable=False)
     remark = Column(String(255), default="")
+    proxy_id = Column(Integer, ForeignKey("proxies.id", ondelete="SET NULL"), unique=True, nullable=True)
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)

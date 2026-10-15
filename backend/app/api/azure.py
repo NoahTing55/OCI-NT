@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core import azure_client
 from app.core.deps import get_db
 from app.core.security import decrypt_text, encrypt_text
-from app.models.models import AzureAccount
+from app.models.models import AzureAccount, Proxy
 from app.schemas.schemas import (
     AzureAccountCreate, AzureAccountDetailOut, AzureAccountOut, AzureSubscriptionOut,
     AzureBatchImportRequest, AzureBatchImportResponse, BatchImportFail,
@@ -21,9 +21,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _to_out(a: AzureAccount) -> AzureAccountOut:
+def _proxy_url_for(acc: AzureAccount, db) -> str | None:
+    """按账号绑定的代理拼 httpx proxy URL（socks5 用 socks5h）。"""
+    if not acc.proxy_id:
+        return None
+    p = db.get(Proxy, acc.proxy_id)
+    if not p:
+        return None
+    auth = ""
+    if p.username:
+        pwd = decrypt_text(p.password_enc) if p.password_enc else ""
+        auth = f"{p.username}:{pwd}@"
+    scheme = "socks5h" if p.scheme == "socks5" else "http"
+    return f"{scheme}://{auth}{p.host}:{p.port}"
+
+
+def _proxy_name_for(acc: AzureAccount, db) -> str | None:
+    if not acc.proxy_id:
+        return None
+    p = db.get(Proxy, acc.proxy_id)
+    return p.name if p else None
+
+
+def _to_out(a: AzureAccount, db=None) -> AzureAccountOut:
     out = AzureAccountOut.model_validate(a)
     out.has_secret = bool(a.client_secret_enc)
+    if db is not None:
+        out.proxy_id = a.proxy_id
+        out.proxy_name = _proxy_name_for(a, db)
     return out
 
 
@@ -68,7 +93,7 @@ def batch_import_azure_accounts(data: AzureBatchImportRequest, db: Session = Dep
 
 @router.get("", response_model=list[AzureAccountOut])
 def list_azure_accounts(db: Session = Depends(get_db)):
-    return [_to_out(a) for a in db.query(AzureAccount).order_by(AzureAccount.id).all()]
+    return [_to_out(a, db) for a in db.query(AzureAccount).order_by(AzureAccount.id).all()]
 
 
 @router.post("", response_model=AzureAccountOut)
@@ -79,17 +104,21 @@ def create_azure_account(data: AzureAccountCreate, db: Session = Depends(get_db)
         secret_enc = encrypt_text(data.client_secret)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    proxy_id = getattr(data, "proxy_id", None)
+    if proxy_id:
+        _check_proxy_available(db, proxy_id)
     acc = AzureAccount(
         name=data.name.strip(),
         tenant_id=data.tenant_id.strip(),
         client_id=data.client_id.strip(),
         client_secret_enc=secret_enc,
         remark=data.remark or "",
+        proxy_id=proxy_id,
     )
     db.add(acc)
     db.commit()
     db.refresh(acc)
-    return _to_out(acc)
+    return _to_out(acc, db)
 
 
 @router.put("/{account_id}", response_model=AzureAccountOut)
@@ -108,9 +137,14 @@ def update_azure_account(account_id: int, data: AzureAccountCreate, db: Session 
             raise HTTPException(status_code=500, detail=str(e))
         azure_client.invalidate_token(acc.tenant_id, acc.client_id)
     acc.remark = data.remark or ""
+    new_proxy_id = getattr(data, "proxy_id", None)
+    if new_proxy_id != acc.proxy_id:
+        if new_proxy_id:
+            _check_proxy_available(db, new_proxy_id, exclude_azure_id=acc.id)
+        acc.proxy_id = new_proxy_id
     db.commit()
     db.refresh(acc)
-    return _to_out(acc)
+    return _to_out(acc, db)
 
 
 @router.delete("/{account_id}")
@@ -124,10 +158,29 @@ def delete_azure_account(account_id: int, db: Session = Depends(get_db)):
     return {"ok": True, "name": name}
 
 
-def _query_account_detail(acc: AzureAccount) -> AzureAccountDetailOut:
+def _check_proxy_available(db, proxy_id: int, exclude_azure_id: int | None = None):
+    """校验代理存在且未被其他账号（OCI 或 Azure）占用。"""
+    from fastapi import HTTPException
+    p = db.get(Proxy, proxy_id)
+    if not p:
+        raise HTTPException(status_code=400, detail="代理不存在")
+    if p.account is not None:
+        raise HTTPException(status_code=400, detail=f"代理已被 OCI 账号「{p.account.name}」绑定")
+    q = db.query(AzureAccount).filter(AzureAccount.proxy_id == proxy_id)
+    if exclude_azure_id:
+        q = q.filter(AzureAccount.id != exclude_azure_id)
+    other = q.first()
+    if other:
+        raise HTTPException(status_code=400, detail=f"代理已被 Azure 账号「{other.name}」绑定")
+
+
+def _query_account_detail(acc: AzureAccount, db) -> AzureAccountDetailOut:
     """查单个账号的订阅 + Tier + 消费。出错时 error 字段说明，不抛异常。"""
     out = AzureAccountDetailOut.model_validate(acc)
     out.has_secret = bool(acc.client_secret_enc)
+    out.proxy_id = acc.proxy_id
+    out.proxy_name = _proxy_name_for(acc, db)
+    proxy_url = _proxy_url_for(acc, db)
     try:
         secret = decrypt_text(acc.client_secret_enc)
     except Exception as e:
@@ -135,19 +188,19 @@ def _query_account_detail(acc: AzureAccount) -> AzureAccountDetailOut:
         return out
 
     try:
-        token = azure_client.get_azure_token(acc.tenant_id, acc.client_id, secret)
+        token = azure_client.get_azure_token(acc.tenant_id, acc.client_id, secret, proxy_url)
     except RuntimeError as e:
         out.error = str(e)
         return out
 
     try:
-        subs = azure_client.list_subscriptions(token)
+        subs = azure_client.list_subscriptions(token, proxy_url)
     except RuntimeError as e:
         if "AUTH_EXPIRED" in str(e):
             azure_client.invalidate_token(acc.tenant_id, acc.client_id)
             try:
-                token = azure_client.get_azure_token(acc.tenant_id, acc.client_id, secret)
-                subs = azure_client.list_subscriptions(token)
+                token = azure_client.get_azure_token(acc.tenant_id, acc.client_id, secret, proxy_url)
+                subs = azure_client.list_subscriptions(token, proxy_url)
             except RuntimeError as e2:
                 out.error = str(e2)
                 return out
@@ -156,8 +209,8 @@ def _query_account_detail(acc: AzureAccount) -> AzureAccountDetailOut:
             return out
 
     for s in subs:
-        tier = azure_client.get_quota_tier(token, s["subscription_id"])["tier"]
-        cost_info = azure_client.get_month_cost(token, s["subscription_id"])
+        tier = azure_client.get_quota_tier(token, s["subscription_id"], proxy_url)["tier"]
+        cost_info = azure_client.get_month_cost(token, s["subscription_id"], proxy_url)
         out.subscriptions.append(AzureSubscriptionOut(
             subscription_id=s["subscription_id"],
             display_name=s["display_name"],
@@ -174,7 +227,7 @@ def refresh_azure_account(account_id: int, db: Session = Depends(get_db)):
     acc = db.get(AzureAccount, account_id)
     if not acc:
         raise HTTPException(status_code=404, detail="Azure 账号不存在")
-    return _query_account_detail(acc)
+    return _query_account_detail(acc, db)
 
 
 @router.post("/refresh-all", response_model=list[AzureAccountDetailOut])
@@ -183,11 +236,13 @@ def refresh_all_azure_accounts(db: Session = Depends(get_db)):
     result = []
     for acc in db.query(AzureAccount).order_by(AzureAccount.id).all():
         try:
-            result.append(_query_account_detail(acc))
+            result.append(_query_account_detail(acc, db))
         except Exception as e:
             logger.exception("Azure 账号 %s 刷新异常", acc.name)
             out = AzureAccountDetailOut.model_validate(acc)
             out.has_secret = bool(acc.client_secret_enc)
+            out.proxy_id = acc.proxy_id
+            out.proxy_name = _proxy_name_for(acc, db)
             out.error = f"内部异常：{e}"
             result.append(out)
     return result
