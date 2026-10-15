@@ -772,13 +772,48 @@ class OciClient:
             return key
         raise RuntimeError(f"无法解析区域 {region_name} 的 regionKey（区域列表不可用）")
 
+    async def get_home_region(self, tenancy_ocid: str) -> str:
+        """GET /20160918/tenancies/{tenancyId}：取租户的 home region 名（如 us-ashburn-1）。"""
+        resp = await self.request("GET", "identity", f"/20160918/tenancies/{tenancy_ocid}")
+        if resp.status_code != 200:
+            raise RuntimeError(f"查询租户信息失败：HTTP {resp.status_code} {resp.text[:200]}")
+        home = resp.json().get("homeRegionKey") or resp.json().get("home-region-key")
+        # homeRegionKey 是 regionKey（如 IAD），需要转成 regionName；直接用订阅列表找
+        if home:
+            try:
+                regions = await self.list_all_regions()
+                for r in regions:
+                    if r.get("regionKey") == home and r.get("regionName"):
+                        return r["regionName"]
+            except RuntimeError:
+                pass
+        # 兜底：从区域订阅列表找 isHomeRegion
+        try:
+            subs = await self.list_region_subscriptions(tenancy_ocid)
+            for sub in subs:
+                if sub.get("isHomeRegion") and sub.get("regionName"):
+                    return sub["regionName"]
+        except RuntimeError:
+            pass
+        raise RuntimeError("无法确定 home region")
+
     async def create_region_subscription(self, tenancy_ocid: str, region_name: str) -> dict:
-        """POST /20180419/regionSubscriptions：订阅新区域（仅升级账户可用）。"""
+        """POST /20180419/regionSubscriptions：订阅新区域（仅升级账户可用）。
+
+        必须调用 home region 的 identity 接口，否则 OCI 返回 404。
+        """
         region_key = await self.resolve_region_key(region_name)
-        resp = await self.request(
-            "POST", "identity", "/20180419/regionSubscriptions",
-            json_body={"tenancyId": tenancy_ocid, "regionKey": region_key},
-        )
+        home_region = await self.get_home_region(tenancy_ocid)
+        # 临时切到 home region 发请求
+        orig_region = self.region
+        self.region = home_region
+        try:
+            resp = await self.request(
+                "POST", "identity", "/20180419/regionSubscriptions",
+                json_body={"tenancyId": tenancy_ocid, "regionKey": region_key},
+            )
+        finally:
+            self.region = orig_region
         if resp.status_code not in (200, 201):
             raise RuntimeError(f"订阅区域失败：HTTP {resp.status_code} {resp.text[:200]}")
         return resp.json() if resp.text else {}
