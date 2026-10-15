@@ -376,21 +376,21 @@ const FALLBACK_REGIONS = ['ap-seoul-1', 'ap-tokyo-1', 'ap-singapore-1', 'ap-osak
 const regionOptions = ref([...FALLBACK_REGIONS])
 
 // 拉取账号的已订阅区域：成功用订阅列表；失败时（免费号 404）只用该账号主区域；
-// 无账号时才回退硬编码列表
+// 无账号时才回退硬编码列表。先立即显示主区域，避免异步返回前显示旧的 fallback 列表
 const loadRegionOptions = async (accountId) => {
   const a = accounts.value.find((x) => x.id === accountId)
   if (!accountId || !a) {
     regionOptions.value = [...FALLBACK_REGIONS]
     return
   }
+  // 立即先显示主区域，不等接口
+  regionOptions.value = a.region ? [a.region] : []
   try {
     const subs = await listRegionSubscriptions(accountId)
     const names = (subs || []).map((s) => s.region_name).filter(Boolean)
     if (names.length) regionOptions.value = names
-    else regionOptions.value = a.region ? [a.region] : [...FALLBACK_REGIONS]
   } catch {
-    // 免费账户调订阅接口 404，只显示主区域
-    regionOptions.value = a.region ? [a.region] : [...FALLBACK_REGIONS]
+    // 免费账户调订阅接口 404，保持只显示主区域
   }
 }
 
