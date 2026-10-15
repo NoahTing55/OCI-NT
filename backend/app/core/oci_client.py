@@ -759,25 +759,38 @@ class OciClient:
     # 注意：regionSubscriptions 是 Identity 20180419 API 的资源，
     # 20160918 版本没有这个路径（调它会 404，与账号权限无关）。
     # 创建订阅时 body 字段为 regionKey（如 IAD/PHX/FRA），不是 regionName。
-    async def list_region_subscriptions(self, tenancy_ocid: str) -> list[dict]:
-        """GET /20180419/regionSubscriptions：查租户已订阅区域（含 regionName、regionKey、status）。
+    def _get_identity_client(self):
+        """用官方 SDK 构建 IdentityClient（regionSubscriptions 走 SDK，避免手写签名 bug）。"""
+        import oci
+        cfg = {
+            "tenancy": self.tenancy_ocid,
+            "user": self.user_ocid,
+            "fingerprint": self.fingerprint,
+            "key_content": self._private_key_pem,
+            "region": self.region,
+        }
+        client = oci.identity.IdentityClient(cfg, retry_strategy=oci.retry.NoneRetryStrategy())
+        if self._proxy_url:
+            client.base_client.session.proxies = {"http": self._proxy_url, "https": self._proxy_url}
+        return client
 
-        优先走 home region，查不到时用当前 region 兜底。
-        """
-        orig_region = self.region
-        try:
-            try:
-                self.region = await self.get_home_region(tenancy_ocid)
-            except RuntimeError:
-                pass
-            resp = await self.request(
-                "GET", "identity", f"/20180419/regionSubscriptions?tenancyId={tenancy_ocid}"
-            )
-        finally:
-            self.region = orig_region
-        if resp.status_code != 200:
-            raise RuntimeError(f"查询区域订阅失败：HTTP {resp.status_code} {resp.text[:200]}")
-        return resp.json()
+    async def list_region_subscriptions(self, tenancy_ocid: str) -> list[dict]:
+        """查租户已订阅区域（走官方 SDK）。返回 dict 列表，含 region_name/region_key/status/is_home_region。"""
+        import asyncio
+        def _call():
+            client = self._get_identity_client()
+            rs = client.list_region_subscriptions(
+                tenancy_ocid, retry_strategy=__import__("oci").retry.NoneRetryStrategy()).data
+            return [
+                {
+                    "regionName": r.region_name,
+                    "regionKey": r.region_key,
+                    "status": str(r.status) if r.status else "",
+                    "isHomeRegion": bool(getattr(r, "is_home_region", False)),
+                }
+                for r in (rs or [])
+            ]
+        return await asyncio.to_thread(_call)
 
     async def resolve_region_key(self, region_name: str) -> str:
         """把区域名（us-ashburn-1）换成官方订阅接口要用的 regionKey（IAD）。
