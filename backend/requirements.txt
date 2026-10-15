@@ -6,6 +6,8 @@ psycopg2-binary==2.9.10
 pydantic==2.10.4
 pydantic-settings==2.7.0
 httpx[socks]==0.28.1
+# OCI SDK 底层走 requests，代理账号需要 SOCKS 支持
+PySocks==1.7.1
 cryptography==50.0.0
 celery==5.4.0
 redis==5.2.1
