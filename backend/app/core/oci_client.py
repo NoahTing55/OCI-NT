@@ -756,10 +756,21 @@ class OciClient:
     # 20160918 版本没有这个路径（调它会 404，与账号权限无关）。
     # 创建订阅时 body 字段为 regionKey（如 IAD/PHX/FRA），不是 regionName。
     async def list_region_subscriptions(self, tenancy_ocid: str) -> list[dict]:
-        """GET /20180419/regionSubscriptions：查租户已订阅区域（含 regionName、regionKey、status）。"""
-        resp = await self.request(
-            "GET", "identity", f"/20180419/regionSubscriptions?tenancyId={tenancy_ocid}"
-        )
+        """GET /20180419/regionSubscriptions：查租户已订阅区域（含 regionName、regionKey、status）。
+
+        优先走 home region，查不到时用当前 region 兜底。
+        """
+        orig_region = self.region
+        try:
+            try:
+                self.region = await self.get_home_region(tenancy_ocid)
+            except RuntimeError:
+                pass
+            resp = await self.request(
+                "GET", "identity", f"/20180419/regionSubscriptions?tenancyId={tenancy_ocid}"
+            )
+        finally:
+            self.region = orig_region
         if resp.status_code != 200:
             raise RuntimeError(f"查询区域订阅失败：HTTP {resp.status_code} {resp.text[:200]}")
         return resp.json()
