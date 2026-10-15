@@ -23,7 +23,10 @@
             <el-icon><DataBoard /></el-icon><span>总览</span>
           </el-menu-item>
           <el-menu-item index="/accounts">
-            <el-icon><User /></el-icon><span>账号管理</span>
+            <el-icon><Box /></el-icon><span>OCI管理</span>
+          </el-menu-item>
+          <el-menu-item index="/azure">
+            <el-icon><Cloudy /></el-icon><span>AZ管理</span>
           </el-menu-item>
           <el-menu-item index="/proxies">
             <el-icon><Connection /></el-icon><span>代理管理</span>
@@ -43,9 +46,6 @@
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon><span>系统设置</span>
           </el-menu-item>
-<el-menu-item index="/azure">
-            <el-icon><Cloudy /></el-icon><span>Azure 管理</span>
-          </el-menu-item>
           <el-menu-item index="/system-logs">
             <el-icon><Setting /></el-icon><span>系统日志</span>
           </el-menu-item>
@@ -62,7 +62,7 @@
 // 主布局：侧边栏图标 + 渐变 header
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Cloudy, DataBoard, User, Connection, Monitor, Link, Aim, Lock, Setting, Fold, Expand } from '@element-plus/icons-vue'
+import { Cloudy, DataBoard, Box, Connection, Monitor, Link, Aim, Lock, Setting, Fold, Expand } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const username = computed(() => localStorage.getItem('oci_user') || '')
