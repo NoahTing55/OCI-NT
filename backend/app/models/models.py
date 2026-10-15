@@ -268,5 +268,8 @@ class AzureAccount(Base):
     client_secret_enc = Column(Text, nullable=False)
     remark = Column(String(255), default="")
     proxy_id = Column(Integer, ForeignKey("proxies.id", ondelete="SET NULL"), unique=True, nullable=True)
+    # 缓存的订阅/Tier/消费（JSON 数组），查一次后存库，前端直接展示
+    cached_subscriptions = Column(Text, default="")
+    cached_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
