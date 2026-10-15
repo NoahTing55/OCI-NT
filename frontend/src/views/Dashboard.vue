@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard">
     <!-- 顶部 4 张统计卡片 -->
-    <el-row :gutter="16" style="margin-bottom: 16px" v-loading="cardsLoading">
-      <el-col :span="6" v-for="card in statCards" :key="card.label">
+    <el-row :gutter="16" style="margin-bottom: 16px; display: flex" v-loading="cardsLoading">
+      <el-col v-for="card in statCards" :key="card.label" style="flex: 1; max-width: 20%">
         <el-card class="stat-card stat-clickable" shadow="hover" :body-style="{ padding: '20px' }" @click="$router.push(card.route)">
           <div class="stat-top">
             <div>
@@ -97,11 +97,12 @@
 <script setup>
 // 总览页：统计卡片 + 配额预警 + 最近动态（只读聚合，不改业务逻辑）
 import { ref, onMounted } from 'vue'
-import { User, Monitor, Aim, CircleCheck } from '@element-plus/icons-vue'
-import { listAccounts, listInstances, listSnipeTasks, getAccountSummary } from '../api/client'
+import { User, Monitor, Aim, CircleCheck, Cloudy } from '@element-plus/icons-vue'
+import { listAccounts, listInstances, listSnipeTasks, getAccountSummary, listAzureAccounts } from '../api/client'
 
 const statCards = ref([
   { label: '账号总数', value: '-', icon: User, bg: 'linear-gradient(135deg,#409eff,#66b1ff)', trend: '', trendColor: '#8c8c8c', route: '/accounts' },
+  { label: 'AZ 账号', value: '-', icon: Cloudy, bg: 'linear-gradient(135deg,#0078d4,#4cc2ff)', trend: '', trendColor: '#8c8c8c', route: '/azure' },
   { label: '实例总数', value: '-', icon: Monitor, bg: 'linear-gradient(135deg,#722ed1,#b37feb)', trend: '', trendColor: '#389e0d', route: '/instances' },
   { label: '运行中开机', value: '-', icon: Aim, bg: 'linear-gradient(135deg,#fa8c16,#ffc53d)', trend: '', trendColor: '#fa8c16', route: '/sniper' },
   { label: '今日开机成功', value: '-', icon: CircleCheck, bg: 'linear-gradient(135deg,#52c41a,#95de64)', trend: '', trendColor: '#8c8c8c', route: '/sniper' },
@@ -127,11 +128,12 @@ onMounted(async () => {
   cardsLoading.value = true
   try {
     // 并发拉取聚合数据
-    const [accounts, instRes, taskList, summary] = await Promise.all([
+    const [accounts, instRes, taskList, summary, azureAccs] = await Promise.all([
       listAccounts().catch(() => []),
       listInstances({}).catch(() => ({ items: [] })),
       listSnipeTasks().catch(() => []),
       getAccountSummary().catch(() => []),
+      listAzureAccounts().catch(() => []),
     ])
 
     const items = instRes.items || instRes || []
@@ -148,25 +150,27 @@ onMounted(async () => {
     }).length
 
     statCards.value[0].value = accs.length
-    statCards.value[1].value = Array.isArray(items) ? items.length : 0
+    statCards.value[1].value = (azureAccs || []).length
+    statCards.value[2].value = Array.isArray(items) ? items.length : 0
     const now = new Date()
-    statCards.value[1].dataTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    statCards.value[2].value = runningTasks.length
-    statCards.value[3].value = todaySuccess
+    statCards.value[2].dataTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    statCards.value[3].value = runningTasks.length
+    statCards.value[4].value = todaySuccess
 
     // 趋势文字
     const upgraded = accs.filter((a) => ['upgraded', 'paid'].includes(a.account_type)).length
     const free = accs.filter((a) => ['free', 'trial'].includes(a.account_type)).length
     statCards.value[0].trend = accs.length ? `升级 ${upgraded} · 免费 ${free}` : ''
+    statCards.value[1].trend = (azureAccs || []).length ? `点击查看 Tier` : ''
     const runningInst = Array.isArray(items) ? items.filter((i) => i.lifecycle_state === 'RUNNING').length : 0
-    statCards.value[1].trend = items.length ? `运行中 ${runningInst} 台` : ''
-    statCards.value[2].trend = runningTasks.length
+    statCards.value[2].trend = items.length ? `运行中 ${runningInst} 台` : ''
+    statCards.value[3].trend = runningTasks.length
       ? `${runningTasks[0].account_name || '某账号'} 进行中`
       : '暂无进行中任务'
     const totalSuccess = tasks
       .filter((t) => t.status === 'success')
       .reduce((s, t) => s + (t.success_count || 0), 0)
-    statCards.value[3].trend = `累计成功 ${totalSuccess} 台`
+    statCards.value[4].trend = `累计成功 ${totalSuccess} 台`
 
     // 配额预警：E2/A1/E5 使用率，取最高的列出
     const warnings = []
