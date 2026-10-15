@@ -422,3 +422,40 @@ class SnipeLogOut(BaseModel):
     level: str
     message: str
     created_at: datetime | None = None
+
+
+# ---------------- Azure 账号管理 ----------------
+class AzureAccountCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+    tenant_id: str = Field(..., max_length=64)
+    client_id: str = Field(..., max_length=64)
+    client_secret: str = Field(default="", description="留空则不修改（更新时）")
+    remark: str = ""
+
+
+class AzureAccountOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    tenant_id: str
+    client_id: str
+    remark: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    # 密钥是否已设置（永不返回明文）
+    has_secret: bool = False
+
+
+class AzureSubscriptionOut(BaseModel):
+    subscription_id: str
+    display_name: str
+    state: str
+    tier: str = ""
+    cost: float | None = None
+    currency: str = ""
+
+
+class AzureAccountDetailOut(AzureAccountOut):
+    subscriptions: list[AzureSubscriptionOut] = []
+    error: str = ""

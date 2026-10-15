@@ -113,6 +113,15 @@ export const totpSetup = () => api.post('/auth/totp/setup').then((r) => r.data)
 export const totpEnable = (code) => api.post('/auth/totp/enable', { totp_code: code }).then((r) => r.data)
 export const totpDisable = (password) => api.post('/auth/totp/disable', { password }).then((r) => r.data)
 
+
+// Azure 账号管理
+export const listAzureAccounts = () => api.get('/azure').then((r) => r.data)
+export const createAzureAccount = (data) => api.post('/azure', data).then((r) => r.data)
+export const updateAzureAccount = (id, data) => api.put(`/azure/${id}`, data).then((r) => r.data)
+export const deleteAzureAccount = (id) => api.delete(`/azure/${id}`).then((r) => r.data)
+export const refreshAzureAccount = (id) => api.post(`/azure/${id}/refresh`, null, { timeout: 90000 }).then((r) => r.data)
+export const refreshAllAzureAccounts = () => api.post('/azure/refresh-all', null, { timeout: 300000 }).then((r) => r.data)
+
 // 请求拦截器：自动带上 JWT
 api.interceptors.request.use((cfg) => {
   const t = localStorage.getItem('oci_token')

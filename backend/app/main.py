@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import accounts, account_summary, auth, batch, cloudflare, health, instances, network, oci_options, proxies, region_subscription, sniper, terminal
+from app.api import accounts, account_summary, auth, azure, batch, cloudflare, health, instances, network, oci_options, proxies, region_subscription, sniper, terminal
 from app.api import settings as settings_api
 from app.api import system_logs
 from app.core.audit import AuditMiddleware
@@ -84,6 +84,7 @@ app.include_router(accounts.router, prefix="/api/accounts", tags=["账号管理"
 app.include_router(region_subscription.router, prefix="/api", tags=["区域订阅"], dependencies=auth_dep)
 app.include_router(account_summary.router, prefix="/api/account-summary", tags=["账户摘要"], dependencies=auth_dep)
 app.include_router(proxies.router, prefix="/api/proxies", tags=["代理管理"], dependencies=auth_dep)
+app.include_router(azure.router, prefix="/api/azure", tags=["Azure 管理"], dependencies=auth_dep)
 app.include_router(health.router, prefix="/api/health", tags=["存活检查"], dependencies=auth_dep)
 app.include_router(batch.router, prefix="/api/batch", tags=["批量任务"], dependencies=auth_dep)
 app.include_router(network.router, prefix="/api/network", tags=["网络/换IP"], dependencies=auth_dep)

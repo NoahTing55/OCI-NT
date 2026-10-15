@@ -249,3 +249,23 @@ class SystemSetting(Base):
     value_encrypted = Column(Text, default="")
     is_secret = Column(Boolean, default=False)
     updated_at = Column(DateTime, default=_now, onupdate=_now)
+
+
+class AzureAccount(Base):
+    """Azure 账号（服务主体认证）。
+
+    - tenant_id / client_id：明文；
+    - client_secret_enc：Fernet 加密后的客户端密钥，永不返回给前端；
+    - 用途：查订阅状态、AI 配额 Tier、消费金额（只读）。
+    """
+
+    __tablename__ = "azure_accounts"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    tenant_id = Column(String(64), nullable=False)
+    client_id = Column(String(64), nullable=False)
+    client_secret_enc = Column(Text, nullable=False)
+    remark = Column(String(255), default="")
+    created_at = Column(DateTime, default=_now)
+    updated_at = Column(DateTime, default=_now, onupdate=_now)

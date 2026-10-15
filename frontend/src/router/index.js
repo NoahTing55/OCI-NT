@@ -10,6 +10,7 @@ import Login from '../views/Login.vue'
 import Security from '../views/Security.vue'
 import Settings from '../views/Settings.vue'
 import SystemLogs from '../views/SystemLogs.vue'
+import Azure from '../views/Azure.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -26,6 +27,7 @@ const router = createRouter({
     { path: '/security', component: Security },
     { path: '/settings', component: Settings },
     { path: '/system-logs', component: SystemLogs },
+    { path: '/azure', component: Azure },
   ],
 })
 
