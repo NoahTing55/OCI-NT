@@ -835,32 +835,44 @@ class OciClient:
         raise RuntimeError("无法确定 home region")
 
     async def create_region_subscription(self, tenancy_ocid: str, region_name: str) -> dict:
-        """POST /20180419/regionSubscriptions：订阅新区域（仅升级账户可用）。
+        """订阅新区域（走官方 SDK）。region_name 如 sa-vinhedo-1，会先换成 regionKey。
 
-        优先调用 home region 的 identity 接口（跨 region 调订阅可能返回 404）；
-        查不到 home region 时用当前 region 兜底。
+        对照 OCI-START 的 subscribeToRegion：先查已订阅列表，已订阅则直接返回
+        成功，不调创建 API（避免重复订阅触发 404）。
         """
-        import logging
-        logger = logging.getLogger(__name__)
+        import asyncio
         region_key = await self.resolve_region_key(region_name)
+        # 1. 先查是否已订阅（对照 OCI-START）
         try:
-            home_region = await self.get_home_region(tenancy_ocid)
-        except RuntimeError as e:
-            logger.warning("无法确定 home region（%s），用当前 region %s 重试", e, self.region)
-            home_region = self.region
-        # 临时切到 home region 发请求
-        orig_region = self.region
-        self.region = home_region
+            subs = await self.list_region_subscriptions(tenancy_ocid)
+            for sub in subs:
+                if sub.get("regionKey") == region_key:
+                    return {
+                        "regionKey": region_key,
+                        "regionName": sub.get("regionName", region_name),
+                        "status": sub.get("status", ""),
+                        "alreadySubscribed": True,
+                    }
+        except Exception:
+            pass
+        def _call():
+            import oci
+            from oci.identity.models import CreateRegionSubscriptionDetails
+            client = self._get_identity_client()
+            details = CreateRegionSubscriptionDetails(region_key=region_key)
+            resp = client.create_region_subscription(
+                tenancy_ocid, details,
+                retry_strategy=oci.retry.NoneRetryStrategy())
+            sub = resp.data
+            return {
+                "regionKey": getattr(sub, "region_key", region_key),
+                "regionName": getattr(sub, "region_name", region_name),
+                "status": str(getattr(sub, "status", "")),
+            }
         try:
-            resp = await self.request(
-                "POST", "identity", "/20180419/regionSubscriptions",
-                json_body={"regionKey": region_key},
-            )
-        finally:
-            self.region = orig_region
-        if resp.status_code not in (200, 201):
-            raise RuntimeError(f"订阅区域失败：HTTP {resp.status_code} {resp.text[:200]}")
-        return resp.json() if resp.text else {}
+            return await asyncio.to_thread(_call)
+        except Exception as e:
+            raise RuntimeError(f"订阅区域失败：{str(e)[:500]}")
 
     async def list_all_regions(self) -> list[dict]:
         """GET /20160918/regions：查全部可用区域（含 regionName、regionKey）。"""
