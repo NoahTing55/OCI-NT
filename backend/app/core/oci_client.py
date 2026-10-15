@@ -42,22 +42,31 @@ logger = logging.getLogger(__name__)
 
 # 区域名 → 官方 regionKey 映射（创建区域订阅接口要求 regionKey，如 IAD/PHX/FRA）。
 # 仅在 /regions 实时列表不可用时兜底；能查到实时列表时以实时为准。
+# 官方 regionKey（2026-10-14 从 Oracle 文档抓取，45 个商业区域）
+# 实时 /regions 接口优先；失败时用此表兜底
 _REGION_NAME_TO_KEY_FALLBACK = {
     "us-ashburn-1": "IAD", "us-phoenix-1": "PHX", "us-sanjose-1": "SJC",
     "us-chicago-1": "ORD",
     "eu-frankfurt-1": "FRA", "eu-amsterdam-1": "AMS", "eu-paris-1": "CDG",
-    "eu-milan-1": "MXP", "eu-zurich-1": "ZRH", "eu-stockholm-1": "ARN",
-    "eu-madrid-1": "MAD",
+    "eu-marseille-1": "MRS", "eu-milan-1": "LIN", "eu-turin-1": "NRQ",
+    "eu-zurich-1": "ZRH", "eu-stockholm-1": "ARN",
+    "eu-madrid-1": "MAD", "eu-madrid-3": "ORF",
+    "eu-jovanovac-1": "BEG",
     "uk-london-1": "LHR", "uk-cardiff-1": "CWL",
     "ap-tokyo-1": "NRT", "ap-osaka-1": "KIX", "ap-seoul-1": "ICN",
-    "ap-singapore-1": "SIN", "ap-mumbai-1": "BOM", "ap-hyderabad-1": "HYD",
+    "ap-chuncheon-1": "YNY",
+    "ap-singapore-1": "SIN", "ap-singapore-2": "XSP",
+    "ap-mumbai-1": "BOM", "ap-hyderabad-1": "HYD",
     "ap-sydney-1": "SYD", "ap-melbourne-1": "MEL",
+    "ap-batam-1": "HSG", "ap-kulai-2": "JBP",
     "me-dubai-1": "DXB", "me-abudhabi-1": "AUH", "me-jeddah-1": "JED",
     "me-riyadh-1": "RUH",
-    "sa-saopaulo-1": "GRU",
+    "sa-saopaulo-1": "GRU", "sa-vinhedo-1": "VCP",
+    "sa-santiago-1": "SCL", "sa-valparaiso-1": "VAP", "sa-bogota-1": "BOG",
     "ca-toronto-1": "YYZ", "ca-montreal-1": "YUL",
-    "il-jerusalem-1": "MTV",
-    "af-johannesburg-1": "JNB",
+    "mx-monterrey-1": "MTY", "mx-queretaro-1": "QRO",
+    "il-jerusalem-1": "MTZ",
+    "af-casablanca-1": "LEJ", "af-johannesburg-1": "JNB",
 }
 
 
