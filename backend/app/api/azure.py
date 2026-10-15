@@ -43,9 +43,21 @@ def _proxy_name_for(acc: AzureAccount, db) -> str | None:
     return p.name if p else None
 
 
+def _parse_cached(a: AzureAccount) -> list:
+    if not a.cached_subscriptions:
+        return []
+    try:
+        import json
+        v = json.loads(a.cached_subscriptions)
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
 def _to_out(a: AzureAccount, db=None) -> AzureAccountOut:
     out = AzureAccountOut.model_validate(a)
     out.has_secret = bool(a.client_secret_enc)
+    out.cached_subscriptions = _parse_cached(a)
     if db is not None:
         out.proxy_id = a.proxy_id
         out.proxy_name = _proxy_name_for(a, db)
@@ -217,6 +229,15 @@ def _query_account_detail(acc: AzureAccount, db) -> AzureAccountDetailOut:
             cost=cost_info["cost"],
             currency=cost_info["currency"],
         ))
+    # 写缓存：下次打开直接展示
+    try:
+        import json
+        from datetime import datetime
+        acc.cached_subscriptions = json.dumps([x.model_dump() for x in out.subscriptions])
+        acc.cached_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        logger.warning("Azure 缓存写入失败 %s：%s", acc.name, e)
     return out
 
 

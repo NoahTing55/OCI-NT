@@ -450,6 +450,9 @@ class AzureAccountOut(BaseModel):
     has_secret: bool = False
     proxy_id: int | None = None
     proxy_name: str | None = None
+    # 缓存的订阅列表（查一次后存库）
+    cached_subscriptions: list = []
+    cached_at: datetime | None = None
 
 
 class AzureSubscriptionOut(BaseModel):

@@ -5,7 +5,7 @@
       {{ refreshingAll ? '查询中…' : '全部查询 Tier' }}
     </el-button>
     <span style="margin-left: 8px; font-size: 12px; color: #909399">
-      Tier 取自 CognitiveServices quotaTiers（currentTierName）
+      Tier 取自 CognitiveServices quotaTiers（currentTierName）；查一次后缓存展示
     </span>
 
     <el-table :data="flatRows" v-loading="loading" style="margin-top: 12px" row-key="_key">
@@ -131,16 +131,17 @@ const formRules = {
 }
 
 // 拍平：每行 = 一个订阅；未查询的账号占一行
+const fmtCachedAt = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : '')
 const flatRows = computed(() => {
   const rows = []
   for (const acc of accounts.value) {
-    const subs = acc._subs || []
+    const subs = acc._subs || acc.cached_subscriptions || []
     if (!subs.length) {
       rows.push({
         _key: `acc-${acc.id}`,
         _account: acc,
         account_name: acc.name,
-        display_name: acc._detailError ? `查询失败：${acc._detailError}` : '未查询',
+        display_name: acc._detailError ? `查询失败：${acc._detailError}` : '未查询', 
         subscription_id: '',
         state: '',
         tier: '',
@@ -199,6 +200,7 @@ const load = async () => {
 
 const applyDetail = (acc, detail) => {
   acc._subs = detail.subscriptions || []
+  acc.cached_subscriptions = detail.subscriptions || []
   acc._detailError = detail.error || ''
   acc.proxy_name = detail.proxy_name ?? acc.proxy_name
 }
