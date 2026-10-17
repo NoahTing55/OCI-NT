@@ -343,6 +343,10 @@ class SniperManager:
                 "root_password": task.root_password or "",
             }
             client = build_client_for_account(account)
+            # 关键：任务区域可能与账号主区域不同（跨区开机，如圣保罗），client 必须切到
+            # 任务区域；否则 launch 等请求会打到主区域 endpoint，body 里跨区 OCID 引用
+            #（AD/子网/镜像）主区域解析不了，直接回 400 CannotParseRequest
+            client.region = (cfg["region"] or "").strip() or client.region
         except ValueError as e:
             # 私钥解密失败（MASTER_KEY 不对或数据损坏）
             self._log(task_id, "error", "构建 OCI 客户端失败：%s" % e)

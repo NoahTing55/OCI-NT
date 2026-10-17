@@ -75,6 +75,12 @@ async def _run_async(task_id: int):
                 task.fail_count += 1
                 continue
             client = build_client_for_account(account)
+            # 同类问题：实例可能在账号主区域之外（如圣保罗/维涅杜实例），
+            # 实例 OCID 自带区域（ocid1.instance.oc1.<region>.…），按实例 OCID 切区域，
+            # 否则 terminate/action 打到主区域 endpoint
+            _ocid_parts = (it.get("instance_id") or "").split(".")
+            if len(_ocid_parts) > 3 and _ocid_parts[3]:
+                client.region = _ocid_parts[3]
             try:
                 if task.task_type == "terminate":
                     resp = await client.terminate_instance(it["instance_id"])
