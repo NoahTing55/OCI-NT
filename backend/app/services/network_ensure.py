@@ -113,17 +113,32 @@ async def _ensure_network(
     comp = (compartment_id or "").strip() or tenancy_ocid
     created = {"vcn": False, "ig": False, "subnet": False}
 
-    # 1. 可用域：没传就取该区域第一个
-    ad = (availability_domain or "").strip()
+    # 1. 可用域：以该账号该区域的实时 AD 列表为准，解析出本账号的规范名称。
+    #    AD 名称前缀是租户相关的（如 wCqw:PHX-AD-3），批量建任务时会把 A 账号的
+    #    AD 名带到 B 账号的任务里，直接拿去建子网会被 OCI 判 "invalid for this
+    #    request type"。这里按归一化名（去前缀小写）匹配，取本账号自己的规范名称。
+    resp = await client.request(
+        "GET", "identity", f"/20160918/availabilityDomains?compartmentId={tenancy_ocid}"
+    )
+    _check_ok(resp, "查询可用域")
+    ads = resp.json() or []
+    ad_req_norm = normalize_ad(availability_domain)
+    ad = ""
+    for a in ads:
+        name = (a.get("name") or "").strip()
+        if ad_req_norm and name and normalize_ad(name) == ad_req_norm:
+            ad = name
+            break
     if not ad:
-        resp = await client.request(
-            "GET", "identity", f"/20160918/availabilityDomains?compartmentId={tenancy_ocid}"
-        )
-        _check_ok(resp, "查询可用域")
-        ads = resp.json()
-        if not ads or not ads[0].get("name"):
+        if ad_req_norm:
+            raise HTTPException(
+                status_code=400,
+                detail="可用域 %s 在该账号（%s）不存在，请检查任务配置"
+                % (availability_domain, getattr(client, "region", "")),
+            )
+        if not ads or not (ads[0].get("name") or "").strip():
             raise HTTPException(status_code=400, detail="该区域未返回可用域")
-        ad = ads[0]["name"]
+        ad = ads[0]["name"].strip()
 
     # 2. VCN：优先复用我们建过的，其次复用用户已有的，最后才创建
     try:

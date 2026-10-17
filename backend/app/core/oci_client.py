@@ -778,9 +778,20 @@ class OciClient:
         """查租户已订阅区域（走官方 SDK）。返回 dict 列表，含 region_name/region_key/status/is_home_region。"""
         import asyncio
         def _call():
+            import oci
             client = self._get_identity_client()
-            rs = client.list_region_subscriptions(
-                tenancy_ocid, retry_strategy=__import__("oci").retry.NoneRetryStrategy()).data
+            try:
+                rs = client.list_region_subscriptions(
+                    tenancy_ocid, retry_strategy=oci.retry.NoneRetryStrategy()).data
+            except oci.exceptions.ServiceError as e:
+                # SDK 的 ServiceError 不是 RuntimeError，上层 except RuntimeError 接不住
+                # （曾导致 401 穿透中间件形成 ASGI ExceptionGroup）。这里统一转成中文
+                # RuntimeError，各调用方（API 层/实例聚合/tg_bot/订阅预检）已有相应处理。
+                if e.status == 401:
+                    raise RuntimeError(
+                        "账号凭证失效（OCI 401 NotAuthenticated）：请检查 API 密钥指纹/私钥是否匹配")
+                raise RuntimeError(
+                    f"查询区域订阅失败（OCI {e.status} {e.code}）：{(e.message or '')[:200]}")
             return [
                 {
                     "regionName": r.region_name,

@@ -186,6 +186,32 @@ try:
 except HTTPException as e:
     check("无可用域：抛 400", e.status_code == 400, e.status_code)
 
+# ---------- 7. 跨租户 AD 名：按归一化名匹配本账号规范名 ----------
+# 批量建任务会把 A 账号的 AD 名（如 wCqw:PHX-AD-3）带到 B 账号，
+# AD 前缀是租户相关的，直接用会报 invalid for this request type。
+c7 = FakeClient(
+    ads=[{"name": "AbCd:PHX-AD-1"}, {"name": "AbCd:PHX-AD-2"}, {"name": "AbCd:PHX-AD-3"}],
+    rts=[{"id": "ocid1.rt.7", "lifecycleState": "AVAILABLE", "routeRules": []}],
+)
+r7 = run(_ensure_network(c7, TENANCY, availability_domain="wCqw:PHX-AD-3"))
+check("跨租户 AD：解析为本账号规范名",
+      r7["availability_domain"] == "AbCd:PHX-AD-3", r7["availability_domain"])
+created_subnet = [s for s in c7.subnets if s["displayName"] == "oci-panel-subnet"]
+check("跨租户 AD：建子网用规范名",
+      created_subnet and created_subnet[0]["availabilityDomain"] == "AbCd:PHX-AD-3",
+      created_subnet)
+
+# ---------- 8. AD 在本账号不存在：400 中文错 ----------
+c8 = FakeClient(
+    ads=[{"name": "AbCd:PHX-AD-1"}],
+    rts=[{"id": "ocid1.rt.8", "lifecycleState": "AVAILABLE", "routeRules": []}],
+)
+try:
+    run(_ensure_network(c8, TENANCY, availability_domain="wCqw:PHX-AD-9"))
+    check("AD 不存在：抛 400", False, "未抛异常")
+except HTTPException as e:
+    check("AD 不存在：抛 400", e.status_code == 400, e.status_code)
+
 print(f"\n共 {len(PASS)} 通过，{len(FAIL)} 失败")
 if FAIL:
     print("失败项：", FAIL)

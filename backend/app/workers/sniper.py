@@ -382,10 +382,17 @@ class SniperManager:
                     account, cfg["region"], cfg["ad"], strict_ad=ad_changed)
                 cfg["subnet_ocid"] = subnet_ocid
                 # 关键：复用其他 AD 的子网时 AD 会切换，必须用实际 AD 建实例，
-                # 否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter
+                # 否则 VNIC 和子网不在同一 AD 会报 400 InvalidParameter。
+                # 另：AD 名称前缀是租户相关的，批量任务可能把 A 账号的 AD 名带到
+                # B 账号，ensure_subnet 已按本账号解析出规范名，这里一并接过来，
+                # 保证 launch 用的也是本账号的有效 AD 名。
                 ad_switched = False
-                if real_ad and normalize_ad(real_ad) != normalize_ad(cfg["ad"]):
-                    self._log(task_id, "info", "子网在 %s，自动切换可用域" % real_ad)
+                if real_ad and real_ad != cfg["ad"]:
+                    if normalize_ad(real_ad) != normalize_ad(cfg["ad"]):
+                        self._log(task_id, "info", "子网在 %s，自动切换可用域" % real_ad)
+                    else:
+                        self._log(task_id, "info",
+                                  "可用域名称按本账号修正：%s → %s" % (cfg["ad"], real_ad))
                     cfg["ad"] = real_ad
                     ad_switched = True
             except Exception as e:
