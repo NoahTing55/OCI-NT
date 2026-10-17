@@ -350,7 +350,7 @@ class SnipeTaskCreate(BaseModel):
     memory_gb: float = Field(default=24, gt=0)
     image_ocid: str = Field(..., description="sourceDetails.imageId")
     subnet_ocid: str = Field(default="", description="createVnicDetails.subnetId；为空则任务启动时自动建网")
-    availability_domain: str
+    availability_domain: str = Field(default="", description="为空则取该账号该区域第一个可用域")
     display_name: str = Field(default="", max_length=128)
     root_password: str = Field(default="", max_length=128, description="root 密码；为空则 worker 自动生成随机密码")
     target_count: int = Field(default=1, ge=1, le=100, description="目标开机台数，一次开 N 台")

@@ -121,13 +121,13 @@
           </div>
           <template #extra><span style="color:#909399;font-size:12px">按 shape 架构自动拉取：先选操作系统，再选版本</span></template>
         </el-form-item>
-        <el-form-item label="可用域" required>
+        <el-form-item label="可用域">
           <div style="display: flex; gap: 8px; width: 100%">
             <el-select v-if="adOptions.length" v-model="form.availability_domain" filterable allow-create
-              placeholder="选择或手动输入可用域" style="flex: 1">
+              placeholder="不填则自动用该账号第一个可用域" style="flex: 1">
               <el-option v-for="o in adOptions" :key="o.name" :value="o.name" :label="o.name" />
             </el-select>
-            <el-input v-else v-model="form.availability_domain" placeholder="如 Uocm:AP-SEOUL-1-AD-1" style="flex: 1" />
+            <el-input v-else v-model="form.availability_domain" placeholder="不填则自动用该账号第一个可用域，如 Uocm:AP-SEOUL-1-AD-1" style="flex: 1" />
             <el-button :loading="fetching.ad" @click="fetchAds">获取</el-button>
           </div>
         </el-form-item>
@@ -655,7 +655,7 @@ const submitCreate = async () => {
   // 新建多选模式：至少选一个账号；编辑模式：form.account_id 必填
   const accountIds = isEdit.value ? [form.value.account_id].filter(Boolean) : selectedAccountIds.value
   if (!accountIds.length || !form.value.region || !form.value.shape ||
-      !form.value.image_ocid || !form.value.availability_domain) {
+      !form.value.image_ocid) {
     ElMessage.warning('请填写必填项')
     return
   }

@@ -126,9 +126,9 @@ def _do_create_task(db: Session, data: SnipeTaskCreate) -> SnipeTask:
     account = db.get(Account, data.account_id)
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
-    for field in ("image_ocid", "availability_domain"):
+    for field in ("image_ocid",):
         if not getattr(data, field):
-            raise HTTPException(status_code=400, detail="镜像 / 可用域不能为空（配错会导致 400 空转）；子网可留空，任务启动时自动建网")
+            raise HTTPException(status_code=400, detail="镜像不能为空（配错会导致 400 空转）；可用域可留空，留空则自动用该账号该区域第一个可用域；子网可留空，任务启动时自动建网")
     # 同一账号同一 shape 同时只允许一个 running/paused 任务
     dup = (
         db.query(SnipeTask)
