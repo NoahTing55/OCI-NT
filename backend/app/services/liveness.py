@@ -8,6 +8,7 @@
 - network_error：超时 / 连接失败 / 代理故障
 - unknown_error：其他异常
 """
+import asyncio
 import logging
 from datetime import datetime
 
@@ -83,30 +84,54 @@ async def check_account_liveness(db: Session, account_id: int) -> dict:
     status_code = None
     err = None
     acct_info = {"account_type": None, "registered_at": None, "tenancy_name": None}
-    try:
-        resp = await client.get_user()
-        status_code = resp.status_code
-        # 存活检查顺带识别账号信息（类型+注册时间+租户名，失败不影响主流程）
-        # 账号类型：区域订阅接口探测优先（200 → upgraded，404/403 → free），异常回退 shapes 逻辑
-        if status_code == 200:
-            try:
-                logger.info("账号 %s 开始识别账号信息", account.name)
-                acct_info = await client.get_account_info()
-                # 租户名：调 tenancies 接口取 name，失败不影响
+
+    async def _probe_once() -> bool:
+        """单次探测。拿到 OCI 的明确 HTTP 答复（2xx/4xx 均算，不重试）返回 True；
+        网络层失败（超时/代理故障）返回 False，可重试。"""
+        nonlocal status_code, err, acct_info
+        try:
+            resp = await client.get_user()
+            status_code = resp.status_code
+            err = None
+            # 存活检查顺带识别账号信息（类型+注册时间+租户名，失败不影响主流程）
+            # 账号类型：区域订阅接口探测优先（200 → upgraded，404/403 → free），异常回退 shapes 逻辑
+            if status_code == 200:
                 try:
-                    acct_info["tenancy_name"] = await client.get_tenancy_name()
+                    logger.info("账号 %s 开始识别账号信息", account.name)
+                    acct_info = await client.get_account_info()
+                    # 租户名：调 tenancies 接口取 name，失败不影响
+                    try:
+                        acct_info["tenancy_name"] = await client.get_tenancy_name()
+                    except Exception:
+                        pass
+                    logger.info("账号 %s 账号信息：%s", account.name, acct_info)
                 except Exception:
-                    pass
-                logger.info("账号 %s 账号信息：%s", account.name, acct_info)
-            except Exception:
-                logger.warning("账号 %s 识别账号信息异常", account.name, exc_info=True)
-    except httpx.TimeoutException:
-        err = "timeout"
-    except (httpx.ConnectError, httpx.ProxyError):
-        err = "connect"
-    except Exception as e:
-        err = "exception:" + type(e).__name__
-        logger.exception("账号 %s 检查异常", account.name)
+                    logger.warning("账号 %s 识别账号信息异常", account.name, exc_info=True)
+            return True
+        except httpx.TimeoutException:
+            err = "timeout"
+        except (httpx.ConnectError, httpx.ProxyError):
+            err = "connect"
+        except Exception as e:
+            err = "exception:" + type(e).__name__
+            logger.exception("账号 %s 检查异常", account.name)
+        return False
+
+    try:
+        answered = await _probe_once()
+        if not answered:
+            # 网络/代理异常时等 5 秒重试一次：代理偶发抽风不应直接标 ❌
+            # 并触发 TG 状态变更通知（401/403/404 是明确答复，不重试）
+            first_err = err
+            await asyncio.sleep(5)
+            answered = await _probe_once()
+            if answered:
+                logger.info("账号 %s 首次探测失败（%s），重试后拿到答复", account.name, first_err)
+            else:
+                logger.info(
+                    "账号 %s 两次探测均失败（%s / %s），按网络异常定性",
+                    account.name, first_err, err,
+                )
     finally:
         await client.aclose()
 
