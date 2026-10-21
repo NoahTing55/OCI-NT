@@ -14,11 +14,11 @@ redis==5.2.1
 apscheduler==3.10.4
 alembic==1.13.3
 # M4：登录鉴权 + TOTP 双因素
-PyJWT==2.12.0
+PyJWT==2.15.1
 pyotp==2.9.0
 qrcode==7.4.2
 Pillow==11.0.0
 # 账号类型识别：官方 SDK 调 osp-gateway（照搬 OCI-Noah）
-oci==2.188.0
+oci==2.189.0
 asyncssh==2.21.0
 paramiko==3.4.0
