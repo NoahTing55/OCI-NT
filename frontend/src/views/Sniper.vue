@@ -143,7 +143,7 @@
 
         <!-- 分组4：高级（默认折叠） -->
         <el-collapse style="margin-top: 8px">
-          <el-collapse-item title="高级选项（Compartment / 子网 / 显示名 / Root 密码）" name="advanced">
+          <el-collapse-item title="高级选项（Compartment / 子网）" name="advanced">
             <el-form-item label="Compartment">
               <div style="display: flex; gap: 8px; width: 100%">
                 <el-select v-if="compOptions.length" v-model="form.compartment_ocid" filterable allow-create
@@ -165,14 +165,6 @@
                 <el-button :loading="fetching.subnet" @click="fetchSubnets">获取</el-button>
               </div>
               <template #extra><span style="color:#909399;font-size:12px">留空则任务启动时自动创建网络（有则复用、无则创建）</span></template>
-            </el-form-item>
-            <el-form-item label="实例显示名"><el-input v-model="form.display_name" placeholder="空则自动生成 Oracle-{id}-时间（多台自动加序号）" /></el-form-item>
-            <el-form-item label="Root 密码">
-              <div style="display: flex; gap: 8px; width: 100%">
-                <el-input v-model="form.root_password" placeholder="留空则自动生成随机密码" style="flex: 1" show-password />
-                <el-button @click="form.root_password = randomPassword()">随机</el-button>
-              </div>
-              <template #extra><span style="color:#909399;font-size:12px">通过 cloud-init 在开机时设置，TG 通知会带上</span></template>
             </el-form-item>
           </el-collapse-item>
         </el-collapse>
@@ -327,14 +319,6 @@ const form = ref({
   availability_domain: '', display_name: '', compartment_ocid: '', root_password: '',
   target_count: 1, interval_seconds: 60, open_all_ports: true, boot_volume_gb: 50,
 })
-
-// 随机密码：去掉易混淆字符（0/O、1/l/I），12 位
-const randomPassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
-  const arr = new Uint32Array(12)
-  crypto.getRandomValues(arr)
-  return Array.from(arr, (x) => chars[x % chars.length]).join('')
-}
 
 // OCI 级联选项：点"获取"后从 OCI 实时查询填充；镜像为「操作系统→版本」两级下拉
 const adOptions = ref([])
